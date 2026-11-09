@@ -408,6 +408,7 @@ export function ServiceTemplateNavigation(props: {
     <div class="service-template-collections" role="group" aria-label={i18n.t('webServices.market.sourceVersion')}>
       <For each={['discover', 'official', 'community', 'library'] as const}>{collection =>
         <Button size="md" variant={props.collection === collection ? 'secondary' : 'ghost'}
+          data-testid={`market-collection-${collection}`}
           aria-pressed={props.collection === collection} onClick={() => props.onChange(collection)}>
           {i18n.t(`webServices.market.${collection}`)}
         </Button>
@@ -787,6 +788,7 @@ export function ServiceTemplateDetailsPane(props: {
           variant="default"
           class="service-template-primary"
           data-testid="service-template-primary"
+          loading={false}
           onClick={props.onDeploy}
           disabled={!props.template.available || props.template.installed || !props.canManage}
         >

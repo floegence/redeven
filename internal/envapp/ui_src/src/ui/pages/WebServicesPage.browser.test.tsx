@@ -93,7 +93,7 @@ describe('Web Services product interaction', () => {
   }
   function installFixture(requiredNotice = false) {
     const template = {
-      template_id: 'compact-harness', service_family_id: 'compact-harness', name: 'Example Harness', description: 'Run Example Harness directly in this Environment.', source: 'builtin', deployment: 'host', revision: 1,
+      template_id: 'compact-harness', service_family_id: 'compact-harness', name: 'Example Harness', description: 'Run Example Harness directly in this Environment.', source: 'custom', deployment: 'host', revision: 1,
       duplicateable: true, editable: false, available: true, developer_preview: true, deployments: [{deployment: 'host', available: true}],
       recommended_release: {schema_version: 1, kind: 'npm', source: '@example/harness', version: '0.2.0-rc.2'},
       default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-harness-host', workspace_roots: [{id: 'home', label: 'Home', path: '/Users/demo'}],
@@ -104,6 +104,7 @@ describe('Web Services product interaction', () => {
     };
     const normalFetch = api.fetch.getMockImplementation()!;
     api.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url.endsWith('/market-catalog')) return {items: [], stale: false, generation: 1, checked_at: Date.now()};
       if (url.endsWith('/catalog')) return {templates: [template]};
       if (url.endsWith('/install-plans')) {
         const request = JSON.parse(String(options?.body));
@@ -116,6 +117,7 @@ describe('Web Services product interaction', () => {
   }
   async function openInstall() {
     await userEvent.click(page.getByTestId('service-templates-button'));
+    await userEvent.click(page.getByTestId('market-collection-library'));
     await expect.poll(() => document.querySelector('[data-testid="service-template-primary"]')).toBeTruthy();
     await userEvent.click(page.getByTestId('service-template-primary'));
     await expect.poll(() => document.querySelector('[data-testid="managed-install-form"]')).toBeTruthy();
@@ -129,6 +131,7 @@ describe('Web Services product interaction', () => {
     await mount(Math.min(width, 1120));
     await page.viewport(width, 960);
     await userEvent.click(page.getByTestId('service-templates-button'));
+    await userEvent.click(page.getByTestId('market-collection-library'));
     const catalogDeploy = page.getByTestId('service-template-primary');
     await expect.element(catalogDeploy).toBeVisible();
     const catalogButton = document.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!;
@@ -164,6 +167,7 @@ describe('Web Services product interaction', () => {
     api.fetch.mockImplementation((url: string, options?: RequestInit) => url.endsWith('/catalog') ? Promise.resolve({templates: [first, second]}) : normalFetch(url, options));
     await mount();
     await userEvent.click(page.getByTestId('service-templates-button'));
+    await userEvent.click(page.getByTestId('market-collection-library'));
     await userEvent.click(page.getByRole('option', {name: /Second Harness/}));
     await userEvent.click(page.getByTestId('service-template-primary'));
     await expect.element(page.getByTestId('managed-install-submit')).toBeEnabled();
@@ -293,7 +297,90 @@ describe('Web Services product interaction', () => {
     expect(requests).toHaveLength(1);
     expect(JSON.parse(String(requests[0][1]?.body))).toMatchObject({access_mode: 'unified_proxy', accepted_notice_revisions: {'trusted-workspace': 1}, plan_digest: 'compact-reviewed'});
   });
-  it('shows failed preparation inline and retries without deploying or moving the footer', async () => {
+  for (const kind of ['host', 'container', 'compose'] as const) for (const width of [1120, 390]) {
+    it(`deploys a discovered ${kind} directly with stable preparation and retry at ${width}px`, async () => {
+      const seed = installFixture();
+      const template = {...seed, source: 'git', deployment: kind, service_family_id: 'market-' + kind, template_id: 'market-' + kind,
+        default_workspace_path: '/Users/demo/Services/market-' + kind,
+        deployments: [{deployment: kind, available: true}],
+        recommended_release: kind === 'host' ? seed.recommended_release : undefined,
+        spec: kind === 'host' ? seed.spec : {schema_version: 7, kind, endpoint: {scheme: 'http', container_port: 8080},
+          ...(kind === 'container' ? {container: {image: 'example/service:1'}} : {compose: {main_service: 'web', yaml: 'services:\n  web:\n    image: example/service:1\n'}})},
+      };
+      const source = {repository: 'owner/services', repository_id: 123, ref: 'main', path: 'templates/' + kind, commit_sha: 'a'.repeat(40)};
+      const preview = {candidate_id: 'review-' + kind, sha256: 'b'.repeat(64), expected_sha256: '', template: {...template, git_source: source}, files: [], affected_service_ids: [], source_document_version: 4, source_spec_version: 7};
+      const item = {template_id: template.template_id, document_template_id: kind, service_family_id: template.service_family_id, revision: 1, source, sha256: preview.sha256, deployment: kind, default_locale: 'en-US', localizations: {'en-US': {name: 'Market ' + kind, description: 'Discovered deployment'}}, classification: 'official', status: 'available'};
+      const normalFetch = api.fetch.getMockImplementation()!;
+      let rejectSource!: (reason: unknown) => void;
+      let resolveSource!: (value: unknown) => void;
+      let attempts = 0;
+      let resolveReceipt!: (value: unknown) => void;
+      let requests = 0;
+      const receipt = new Promise(resolve => { resolveReceipt = resolve; });
+      api.fetch.mockImplementation((url: string, options?: RequestInit) => {
+        if (url.endsWith('/market-catalog')) return Promise.resolve({items: [item], stale: false, generation: 1, checked_at: Date.now()});
+        if (url.endsWith('/catalog')) return Promise.resolve({templates: []});
+        if (url.endsWith('/source-previews')) {
+          attempts++;
+          return new Promise((resolve, reject) => {resolveSource = resolve; rejectSource = reject;});
+        }
+        if (url.endsWith('/managed-web-services') && options?.method === 'POST') { requests++; return receipt; }
+        return normalFetch(url, options);
+      });
+      await mount(width, 'porcelain-dark'); await page.viewport(width, 800);
+      await userEvent.click(page.getByTestId('service-templates-button'));
+      await userEvent.click(page.getByTestId('service-template-primary'));
+      await expect.element(page.getByTestId('managed-install-preparing')).toBeVisible();
+      const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+      await Promise.allSettled(panel.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
+      const submit = document.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')!;
+      const bounds = submit.getBoundingClientRect();
+      expect(submit.textContent).toBe('Deploy'); expect(submit.disabled).toBe(true);
+      expect(panel.innerText).not.toContain('Review template'); expect(panel.innerText).not.toContain('Continue to deployment');
+      expect(panel.innerText).not.toContain('Loading');
+      rejectSource(new TypeError('offline'));
+      await expect.element(page.getByTestId('managed-install-blocker')).toBeVisible();
+      const blocker = document.querySelector<HTMLElement>('[data-testid="managed-install-blocker"]')!;
+      const rect = blocker.getBoundingClientRect();
+      expect(rect.bottom).toBeLessThan(submit.getBoundingClientRect().top);
+      expect(rect.top).toBeGreaterThan(panel.getBoundingClientRect().top);
+      expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(width);
+      expect(blocker.scrollWidth).toBeLessThanOrEqual(blocker.clientWidth + 1);
+      const retry = blocker.querySelector<HTMLButtonElement>('button')!;
+      const retryRect = retry.getBoundingClientRect();
+      expect(document.elementFromPoint(retryRect.x + retryRect.width / 2, retryRect.y + retryRect.height / 2)?.closest('button')).toBe(retry);
+      const evidence = import.meta.env.VITE_REDEVEN_MANAGEMENT_EVIDENCE_DIR;
+      if (evidence) await page.screenshot({path: `${evidence}/market-${kind}-${width}-source-failed.png`});
+      await userEvent.click(page.elementLocator(retry));
+      expect(submit.getBoundingClientRect().bottom).toBe(bounds.bottom);
+      expect(submit.getBoundingClientRect().width).toBe(bounds.width);
+      resolveSource(preview);
+      await expect.element(page.getByTestId('managed-install-submit')).toBeEnabled();
+      expect(attempts).toBe(2); expect(requests).toBe(0);
+      expect(submit.getBoundingClientRect().bottom).toBe(bounds.bottom);
+      expect(submit.getBoundingClientRect().width).toBe(bounds.width);
+      expect(document.querySelector('[data-testid="managed-install-blocker"]')).toBeNull();
+      const sourceDetails = document.querySelector<HTMLDetailsElement>('[data-testid="managed-install-source"]')!;
+      await userEvent.click(page.elementLocator(sourceDetails.querySelector('summary')!));
+      expect(sourceDetails.open).toBe(true); expect(sourceDetails.textContent).toContain(source.commit_sha);
+      expect((await axe.run(panel)).violations.filter(v => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
+      if (evidence) await page.screenshot({path: `${evidence}/market-${kind}-${width}-prepared.png`});
+      await userEvent.click(page.elementLocator(submit));
+      await expect.element(page.getByTestId('managed-install-submission')).toBeVisible();
+      expect(document.querySelector('[data-testid="managed-install-form"]')).toBeNull();
+      expect(requests).toBe(1);
+      const operation = {operation_id: 'market-operation', service_id: 'compact-install', action: 'install', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7};
+      const service = {...base, ...template, service_id: 'compact-install'};
+      records = [service];
+      api.stream.mockResolvedValue(new Response(`event: snapshot\ndata: ${JSON.stringify(operation)}\n\n`, {headers: {'Content-Type': 'text/event-stream'}}));
+      resolveReceipt({service, operation});
+      await expect.poll(() => document.querySelector('[data-testid="managed-service-row"][data-managed-service-id="compact-install"]')).toBeTruthy();
+      await expect.poll(() => document.querySelector('[data-testid="managed-install-submission"]')).toBeNull();
+      expect(requests).toBe(1);
+    });
+  }
+
+  it('shows failed preparation without deploying or moving the footer', async () => {
     installFixture();
     const normalFetch = api.fetch.getMockImplementation()!;
     let attempts = 0;
@@ -305,13 +392,13 @@ describe('Web Services product interaction', () => {
     await page.viewport(390, 720);
     const panel = await openInstall();
     const submit = panel.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')!;
-    const feedback = panel.querySelector<HTMLElement>('.service-install-feedback')!;
+    const feedback = panel.querySelector<HTMLElement>('[data-testid="managed-install-blocker"]')!;
     expect(submit.disabled).toBe(true);
     expect(feedback.textContent).toContain('Could not check this deployment. Try again.');
     const before = submit.getBoundingClientRect();
     await userEvent.click(page.elementLocator(feedback.querySelector<HTMLButtonElement>('button')!));
     await expect.poll(() => submit.disabled).toBe(false);
-    expect(feedback.textContent).toBe('');
+    expect(panel.querySelector('[data-testid="managed-install-blocker"]')).toBeNull();
     expect(submit.getBoundingClientRect().bottom).toBe(before.bottom);
     expect(submit.getBoundingClientRect().width).toBe(before.width);
     expect(attempts).toBe(2);
@@ -352,6 +439,7 @@ describe('Web Services product interaction', () => {
     const search = host.querySelector<HTMLInputElement>('[data-testid="web-services-search"] input');
     if (search) { search.value = 'unrelated filter'; search.dispatchEvent(new Event('input', {bubbles: true})); }
     await userEvent.click(page.getByTestId('service-templates-button'));
+    await userEvent.click(page.getByTestId('market-collection-library'));
     await expect.poll(() => document.querySelector('[data-testid="service-template-primary"]')).toBeTruthy();
     await userEvent.click(page.getByTestId('service-template-primary'));
     const submit = document.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]');

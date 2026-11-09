@@ -1909,6 +1909,155 @@ describe('EnvPortForwardsPage', () => {
     return {template, receipt, response, open, submit, findButton, setReject: (error: unknown) => { reject = error; }, setLookup: (value: typeof receipt | null) => { lookup = value; }, lookupCalls: () => lookupCalls, posts: () => localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url, init]) => String(url).endsWith('/managed-web-services') && init?.method === 'POST')};
   }
 
+  it('keeps deployment visible when source inspection finds Docker unavailable', async () => {
+    const fixture = installHandoffFixture();
+    const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    const source = {repository: 'owner/templates', repository_id: 123, ref: 'main', path: 'templates/container', commit_sha: 'a'.repeat(40)};
+    const candidate = {candidate_id: 'unavailable-container', sha256: 'b'.repeat(64), expected_sha256: '', changed: true, template: {...fixture.template, source: 'git', deployment: 'container', available: false, reason_code: 'DOCKER_UNAVAILABLE', git_source: source}, files: [], affected_service_ids: [], source_document_version: 4, source_spec_version: 7};
+    const item = {template_id: fixture.template.template_id, document_template_id: 'container', service_family_id: 'container', revision: 1, source, sha256: candidate.sha256, deployment: 'container', default_locale: 'en-US', localizations: {'en-US': {name: 'Remote container', description: 'Container service'}}, classification: 'official', status: 'available'};
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/market-catalog')) return Promise.resolve({items: [item], stale: false, generation: 1, checked_at: Date.now()});
+      if (url.endsWith('/source-previews')) return Promise.resolve(candidate);
+      if (url.endsWith('/catalog')) return Promise.resolve({templates: []});
+      return normalFetch(url, init);
+    });
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage();
+      host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
+      await flushPage();
+      host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!.click();
+      await flushPage();
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-install-form"]')).not.toBeNull());
+      expect(host.querySelector('[data-testid="managed-install-form"]')).not.toBeNull();
+      expect(host.textContent).toContain('Docker');
+      expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')?.disabled).toBe(true);
+      expect(fixture.posts()).toHaveLength(0);
+    } finally { dispose(); }
+  });
+
+  function marketHandoffFixture() {
+    const fixture = installHandoffFixture();
+    const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    const source = {repository: 'owner/templates', repository_id: 123, ref: 'main', path: 'templates/handoff', commit_sha: 'a'.repeat(40)};
+    const candidate = {candidate_id: 'source-first', sha256: 'b'.repeat(64), expected_sha256: '', changed: true, template: {...fixture.template, source: 'git', git_source: source}, files: [], affected_service_ids: [], source_document_version: 4, source_spec_version: 7};
+    const item = {template_id: fixture.template.template_id, document_template_id: 'handoff', service_family_id: fixture.template.service_family_id, revision: 1, source, sha256: candidate.sha256, deployment: 'host', default_locale: 'en-US', localizations: {'en-US': {name: 'Market service', description: 'Discovered service'}}, classification: 'official', status: 'available'};
+    const acquire = vi.fn().mockResolvedValue(candidate);
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/market-catalog')) return Promise.resolve({items: [item], stale: false, generation: 1, checked_at: Date.now()});
+      if (url.endsWith('/source-previews') && init?.method === 'POST') return acquire(init);
+      if (url.includes('/source-previews/') && init?.method === 'DELETE') return Promise.resolve({});
+      if (url.endsWith('/catalog')) return Promise.resolve({templates: []});
+      return normalFetch(url, init);
+    });
+    const open = async () => {
+      host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
+      await flushPage();
+      host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!.click();
+      await flushPage();
+    };
+    return {...fixture, candidate, item, acquire, open};
+  }
+
+  it('keeps source failure actionable and retries without a second review or premature deployment', async () => {
+    const fixture = marketHandoffFixture();
+    fixture.acquire.mockRejectedValueOnce(new LocalApiError({code: 'TEMPLATE_SOURCE_RATE_LIMITED', status: 429, message: ''}));
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage(); await fixture.open();
+      expect(host.querySelector('[data-testid="managed-install-preparing"]')).not.toBeNull();
+      expect(host.querySelector('[data-testid="managed-install-blocker"]')?.textContent).toContain('TEMPLATE_SOURCE_RATE_LIMITED');
+      expect(fixture.posts()).toHaveLength(0);
+      fixture.findButton('Retry').click(); await flushPage();
+      await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')?.disabled).toBe(false));
+      expect(fixture.acquire).toHaveBeenCalledTimes(2);
+      expect(host.querySelector('[data-testid="managed-install-blocker"]')).toBeNull();
+      expect(fixture.posts()).toHaveLength(0);
+      await fixture.submit();
+      expect(fixture.posts()).toHaveLength(1);
+    } finally { dispose(); }
+  });
+
+  it('shows an existing-instance blocker when the market does not know the installed source yet', async () => {
+    const fixture = marketHandoffFixture();
+    const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/managed-web-services') && init?.method !== 'POST') return Promise.resolve({services: [{...fixture.receipt.service, status: 'running', management_state: 'active', deployment: 'host'}]});
+      return normalFetch(url, init);
+    });
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage(); await fixture.open();
+      expect(host.querySelector('[data-testid="managed-install-form"]')).not.toBeNull();
+      expect(host.querySelector('[data-testid="managed-install-blocker"]')?.textContent).toContain('installed');
+      expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')?.disabled).toBe(true);
+      expect(localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url]) => String(url).endsWith('/install-plans'))).toHaveLength(0);
+      expect(fixture.posts()).toHaveLength(0);
+    } finally { dispose(); }
+  });
+
+  it('cancels pending acquisition and fences its late result when reopening', async () => {
+    const fixture = marketHandoffFixture();
+    const old = deferred<typeof fixture.candidate>();
+    fixture.acquire.mockReturnValueOnce(old.promise);
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage(); await fixture.open();
+      const signal = fixture.acquire.mock.calls[0][0].signal as AbortSignal;
+      fixture.findButton('Back to templates').click(); await flushPage();
+      expect(signal.aborted).toBe(true);
+      host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!.click(); await flushPage();
+      await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')?.disabled).toBe(false));
+      old.resolve({...fixture.candidate, candidate_id: 'stale-candidate'}); await flushPage();
+      await fixture.submit();
+      expect(JSON.parse(String(fixture.posts()[0][1]?.body)).source.candidate_id).toBe('source-first');
+    } finally { dispose(); }
+  });
+
+  it.each(['DOCKER_UNAVAILABLE', 'COMPOSE_UNAVAILABLE'])('recovers %s through explicit retry in the same deployment', async reason => {
+    const fixture = marketHandoffFixture();
+    fixture.acquire.mockResolvedValueOnce({...fixture.candidate, template: {...fixture.candidate.template, available: false, reason_code: reason}});
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage(); await fixture.open();
+      expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')?.disabled).toBe(true);
+      expect(localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url]) => String(url).endsWith('/install-plans'))).toHaveLength(0);
+      fixture.findButton('Retry').click(); await flushPage();
+      await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')?.disabled).toBe(false));
+      expect(fixture.acquire).toHaveBeenCalledTimes(2);
+      expect(fixture.posts()).toHaveLength(0);
+    } finally { dispose(); }
+  });
+
+  it('reacquires an expired candidate after a rejected submission and preserves the reviewed draft', async () => {
+    const fixture = marketHandoffFixture();
+    fixture.setReject(new LocalApiError({code: 'TEMPLATE_SOURCE_REVIEW_STALE', status: 409, message: ''}));
+    const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    let expired = false;
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/install-plans') && expired) return Promise.reject(new LocalApiError({code: 'TEMPLATE_SOURCE_REVIEW_STALE', status: 409, message: ''}));
+      return normalFetch(url, init);
+    });
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage(); await fixture.open(); await fixture.submit();
+      expect(fixture.posts()).toHaveLength(1);
+      expired = true;
+      fixture.findButton('Review installation').click(); await flushPage();
+      const before = host.querySelector('[data-testid="managed-workspace-path"]')?.getAttribute('data-path');
+      fixture.acquire.mockResolvedValue({...fixture.candidate, candidate_id: 'renewed-candidate'});
+      expired = false;
+      fixture.findButton('Retry').click(); await flushPage();
+      await waitForAssertion(() => expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-install-submit"]')?.disabled).toBe(false));
+      expect(host.querySelector('[data-testid="managed-workspace-path"]')?.getAttribute('data-path')).toBe(before);
+      expect(fixture.acquire).toHaveBeenCalledTimes(2);
+      expect(fixture.posts()).toHaveLength(1);
+      fixture.setReject(undefined);
+      await fixture.submit();
+      expect(JSON.parse(String(fixture.posts()[1][1]?.body)).source.candidate_id).toBe('renewed-candidate');
+    } finally { dispose(); }
+  });
+
   it('prepares the final workspace automatically and deploys with one confirmation', async () => {
     const fixture = installHandoffFixture();
     const dispose = render(() => <EnvPortForwardsPage />, host);
@@ -1928,17 +2077,19 @@ describe('EnvPortForwardsPage', () => {
     } finally { dispose(); }
   });
 
-  it.each(['official', 'community'].flatMap(classification => ['submit', 'source-review', 'deployment-review'].map(phase => ({classification, phase}))))('preserves $classification market candidate ownership through $phase', async ({classification, phase}) => {
+  it.each(['official', 'community'].flatMap(classification => ['host', 'container', 'compose'].flatMap(kind => ['submit', 'source-review', 'deployment-review'].map(phase => ({classification, kind, phase})))))('preserves $classification $kind market candidate ownership through $phase', async ({classification, kind, phase}) => {
     const [access, setAccess] = createSignal({phase: 'ready' as const, generation: 0, scope: ''});
     envContextMocks.resourceCacheAccess = access;
     const fixture = installHandoffFixture();
+    Object.assign(fixture.template, {deployment: kind, spec: {schema_version: 7, kind, endpoint: {scheme: 'http'}, ...(kind === 'host' ? {host: {start_script: 'exec true'}} : kind === 'container' ? {container: {image: 'example/service:1'}} : {compose: {main_service: 'web', yaml: 'services:\n  web:\n    image: example/service:1\n'}})}});
     const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
     const source = {repository:'owner/templates',repository_id:123,ref:'main',path:'templates/handoff',commit_sha:'a'.repeat(40)};
     const candidate = {candidate_id:'source_candidate_market',sha256:'b'.repeat(64),expected_sha256:'',changed:true,template:{...fixture.template,source:'git',git_source:source,source_sha256:'b'.repeat(64)},files:[],affected_service_ids:[],source_document_version:4,source_spec_version:7};
-    const item = {template_id:fixture.template.template_id,document_template_id:'handoff',service_family_id:'handoff',revision:1,source,sha256:candidate.sha256,deployment:'host',default_locale:'en-US',localizations:{'en-US':{name:'Discovered handoff',description:'Discovered service'}},classification,status:'available'};
+    const item = {template_id:fixture.template.template_id,document_template_id:'handoff',service_family_id:'handoff',revision:1,source,sha256:candidate.sha256,deployment:kind,default_locale:'en-US',localizations:{'en-US':{name:'Discovered handoff',description:'Discovered service'}},classification,status:'available'};
+    const acquisition = deferred<typeof candidate>();
     localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
       if (url.endsWith('/market-catalog')) return Promise.resolve({items:[item],stale:false,generation:1,checked_at:Date.now()});
-      if (url.endsWith('/source-previews')) return Promise.resolve(candidate);
+      if (url.endsWith('/source-previews')) return phase === 'source-review' ? acquisition.promise : Promise.resolve(candidate);
       if (url.endsWith('/catalog')) return Promise.resolve({templates:[]});
       return normalFetch(url,init);
     });
@@ -1951,18 +2102,19 @@ describe('EnvPortForwardsPage', () => {
       await waitForAssertion(() => expect(host.textContent).toContain('Discovered handoff'));
       host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!.click();
       await flushPage();
-      fixture.findButton('Review template').click();
-      await waitForAssertion(() => expect(fixture.findButton('Continue to deployment')).toBeDefined());
+      expect(fixture.findButton('Review template')).toBeUndefined();
+      expect(fixture.findButton('Continue to deployment')).toBeUndefined();
       if (phase === 'source-review') {
+        expect(host.querySelector('[data-testid="managed-install-preparing"]')).not.toBeNull();
         setAccess({phase:'ready',generation:1,scope:''});
+        acquisition.resolve(candidate);
         await flushPage();
-        expect(fixture.findButton('Continue to deployment')).toBeUndefined();
+        expect(host.querySelector('[data-testid="managed-install-form"]')).toBeNull();
         expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
         expect(fixture.posts()).toHaveLength(0);
         return;
       }
-      fixture.findButton('Continue to deployment').click();
-      await flushPage();
+      await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-install-form"]')).not.toBeNull());
       if (phase === 'deployment-review') {
         setAccess({phase:'ready',generation:1,scope:''});
         await flushPage();

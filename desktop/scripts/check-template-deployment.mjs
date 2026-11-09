@@ -17,6 +17,8 @@ await session.run(async () => {
   const { _electron } = createRequire(path.join(desktop, '../internal/envapp/ui_src/package.json'))('playwright');
   const bundle = process.env.REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT;
   const sourceEvidence = process.env.REDEVEN_OFFICIAL_TEMPLATE_EVIDENCE;
+  const kind = process.env.REDEVEN_TEMPLATE_DEPLOYMENT_KIND || 'container';
+  assert.ok(['host', 'container', 'compose'].includes(kind));
   assert.ok(bundle && sourceEvidence && path.isAbsolute(bundle) && path.isAbsolute(sourceEvidence));
   const evidence = path.join(sourceEvidence, 'product-' + randomUUID());
   await mkdir(evidence);
@@ -47,7 +49,7 @@ await session.run(async () => {
   const context = application.context();
   await context.addInitScript(() => localStorage.setItem('redeven_ui_language_preference', 'en-US'));
   let page, welcome, opened, serviceID;
-  const report = { status: 'running', manifest, token: false, steps: [] };
+  const report = { status: 'running', kind, manifest, token: false, steps: [] };
   const api = async (suffix, method = 'GET', body) => page.evaluate(async ({ suffix, method, body }) => {
     const response = await fetch('/_redeven_proxy/api/managed-web-services' + suffix, { method, credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(15000), headers: { 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const data = await response.json();
@@ -73,37 +75,69 @@ await session.run(async () => {
     await page.getByRole('tab', { name: 'Activity', exact: true }).click();
     await page.getByRole('button', { name: 'Web Services', exact: true }).click();
     await page.getByRole('button', { name: 'Service templates', exact: true }).click();
-    const catalog = JSON.parse(await readFile(path.join(sourceEvidence, 'desktop-catalog.json'), 'utf8'));
-    const item = catalog.data.find(item => item.document_template_id === 'deepseek-harness-container');
-    assert.ok(item);
-    const row = page.locator(`[data-template-id="${item.template_id}"]`);
-    await row.waitFor(); await row.click();
+    if (kind === 'compose') {
+      const image = process.env.REDEVEN_TEMPLATE_MARKET_IMAGE;
+      assert.match(image || '', /^busybox:1\.36\.1@sha256:[a-f0-9]{64}$/);
+      await page.getByRole('button', {name: 'New service template', exact: true}).click();
+      await page.getByRole('menuitem', {name: 'New Compose template', exact: true}).click();
+      await page.locator('#template-editor-name').fill('Acceptance Compose');
+      await page.locator('#template-editor-compose-port').fill('8080');
+      await page.locator('#template-editor-compose-yaml').fill(`services:
+  web:
+    image: ${image}
+    command: [sh, -c, 'mkdir -p /www; echo compose-product-verified > /www/index.html; exec httpd -f -p 8080 -h /www']
+`);
+      await page.getByRole('button', {name: 'Save template', exact: true}).click();
+      await page.getByRole('option', {name: /Acceptance Compose/}).click();
+      report.steps.push('create and save independent Compose template through the real editor');
+    } else {
+      const catalog = JSON.parse(await readFile(path.join(sourceEvidence, 'desktop-catalog.json'), 'utf8'));
+      const item = catalog.data.find(item => item.document_template_id === `deepseek-harness-${kind}`);
+      assert.ok(item);
+      const row = page.locator(`[data-testid="service-template-row"][data-template-id="${item.template_id}"]`);
+      await row.waitFor(); await row.click();
+    }
+    const sourceTransfers = [];
+    page.on('request', request => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/source-previews')) {
+        const body = request.postDataJSON();
+        sourceTransfers.push({snapshot: Boolean(body.snapshot), token: Boolean(body.token), commit_sha: body.source?.commit_sha});
+      }
+    });
     await page.getByTestId('service-template-primary').click();
-    const dialog = page.getByRole('dialog', { name: 'Review template', exact: true });
-    await dialog.waitFor();
-    assert.equal(await dialog.locator('input[value="desktop_transfer"]').isChecked(), true);
-    assert.equal(await dialog.locator('input[type="password"]').inputValue(), '');
-    await dialog.getByRole('button', { name: 'Review template', exact: true }).click();
-    await dialog.getByRole('button', { name: 'Continue to deployment', exact: true }).waitFor({ timeout: 60000 });
-    assert.equal(await dialog.getByRole('alert').count(), 0);
-    await page.screenshot({ path: path.join(evidence, 'product-reviewed.png') });
-    report.steps.push('production catalog -> default anonymous Desktop source review');
-    await dialog.getByRole('button', { name: 'Continue to deployment', exact: true }).click();
-    const form = page.getByTestId('managed-install-form'); await form.waitFor();
+    const form = page.getByTestId('managed-install-form'); await form.waitFor({timeout: 60000});
+    assert.equal(await page.getByRole('dialog', {name: 'Review template', exact: true}).count(), 0);
+    assert.equal(await page.getByRole('button', {name: 'Continue to deployment', exact: true}).count(), 0);
+    if (kind !== 'compose') {
+      assert.equal(sourceTransfers.length, 1);
+      assert.equal(sourceTransfers[0].snapshot, true);
+      assert.equal(sourceTransfers[0].token, false);
+      report.sourceTransfers = sourceTransfers;
+      report.steps.push('production catalog -> automatic anonymous Desktop acquisition -> configuration');
+    }
+    await page.screenshot({path: path.join(evidence, 'product-prepared.png')});
     for (const checkbox of await form.getByRole('checkbox').all()) await checkbox.check();
     const submit = page.getByTestId('managed-install-submit');
     await waitFor(() => submit.isEnabled(), 60000, 'real install preflight');
     const createdResponse = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/api/managed-web-services'));
+    await page.evaluate(() => {
+      window.__deploymentRows = {pending: false};
+      const observer = new MutationObserver(() => {
+        if (document.querySelector('[data-testid="managed-install-submission"]')) {window.__deploymentRows.pending = true; observer.disconnect();}
+      });
+      observer.observe(document.body, {childList: true, subtree: true});
+    });
     await submit.click();
+    assert.equal(await page.evaluate(() => window.__deploymentRows.pending), true, 'a visible pending row must precede reconciliation');
     const response = await createdResponse; const envelope = await response.json();
     assert.ok(response.ok(), JSON.stringify(envelope));
     serviceID = (envelope.data ?? envelope).service.service_id; assert.ok(serviceID);
     report.service_id = serviceID;
     report.receipt = envelope.data ?? envelope;
     console.log('Created owned service', serviceID);
-    await waitFor(async () => { const inspected = await api(`/${serviceID}/inspection`); report.last_inspection = inspected; return inspected.status === 'running' || Boolean(inspected.last_failure); }, 180000, 'real container installation');
+    await waitFor(async () => { const inspected = await api(`/${serviceID}/inspection`); report.last_inspection = inspected; return inspected.status === 'running' || Boolean(inspected.last_failure); }, 180000, `real ${kind} installation`);
     assert.equal(report.last_inspection.status, 'running', JSON.stringify(report.last_inspection.last_failure));
-    report.steps.push('install form -> preflight -> container running');
+    report.steps.push(`install form -> preflight -> pending row -> ${kind} running`);
     await page.screenshot({ path: path.join(evidence, 'product-running.png') });
     const service = page.locator(`[data-testid="managed-service-row"][data-managed-service-id="${serviceID}"]`);
     await page.getByRole('button', { name: 'Web Services', exact: true }).click();
@@ -113,27 +147,30 @@ await session.run(async () => {
     opened = await waitFor(() => context.pages().find(candidate => candidate !== page && candidate !== welcome && /^https?:/.test(candidate.url())), 30000, 'actual service browser');
     await opened.waitForFunction(() => Boolean(document.body?.innerText.trim()));
     await opened.reload(); await opened.waitForFunction(() => Boolean(document.body?.innerText.trim()));
-    await opened.getByRole('button', { name: 'Continue', exact: true }).click();
-    await opened.getByRole('button', { name: 'Continue', exact: true }).waitFor({ state: 'hidden' });
-    await opened.getByText('Get started', { exact: true }).waitFor();
-    await opened.keyboard.press('Escape');
-    await opened.getByText('Get started', { exact: true }).waitFor({ state: 'hidden' });
-    report.defaultWorkspaceNotice = await opened.getByText('Unable to create default workspace. Use Choose workspace to select a folder.', { exact: true }).count() > 0;
-    await opened.getByRole('button', { name: 'Add workspace', exact: true }).click();
-    const directoryPicker = opened.getByRole('dialog', { name: 'Select Workspace Directory', exact: true });
-    await directoryPicker.waitFor();
-    await directoryPicker.getByRole('button', { name: 'New folder', exact: true }).click();
-    const folderDialog = opened.getByRole('dialog', { name: 'New folder', exact: true });
-    await folderDialog.getByRole('textbox', { name: 'Folder name', exact: true }).fill('acceptance-workspace');
-    await folderDialog.getByRole('button', { name: 'Create', exact: true }).click();
-    await folderDialog.waitFor({ state: 'hidden' });
-    await directoryPicker.getByRole('button', { name: 'Open', exact: true }).click();
-    await directoryPicker.waitFor({ state: 'hidden' });
-    await opened.getByText('acceptance-workspace', { exact: true }).first().waitFor();
-    assert.ok((await stat(path.join(report.receipt.service.workspace_path, 'acceptance-workspace'))).isDirectory());
-    report.steps.push('application onboarding -> select workspace -> create folder on the managed mount');
-    await opened.reload();
-    await opened.getByText('acceptance-workspace', { exact: true }).first().waitFor();
+    if (kind === 'container') {
+      await opened.getByRole('button', { name: 'Continue', exact: true }).click();
+      await opened.getByRole('button', { name: 'Continue', exact: true }).waitFor({ state: 'hidden' });
+      await opened.getByText('Get started', { exact: true }).waitFor();
+      await opened.keyboard.press('Escape');
+      await opened.getByText('Get started', { exact: true }).waitFor({ state: 'hidden' });
+      report.defaultWorkspaceNotice = await opened.getByText('Unable to create default workspace. Use Choose workspace to select a folder.', { exact: true }).count() > 0;
+      await opened.getByRole('button', { name: 'Add workspace', exact: true }).click();
+      const directoryPicker = opened.getByRole('dialog', { name: 'Select Workspace Directory', exact: true });
+      await directoryPicker.waitFor();
+      await directoryPicker.getByRole('button', { name: 'New folder', exact: true }).click();
+      const folderDialog = opened.getByRole('dialog', { name: 'New folder', exact: true });
+      await folderDialog.getByRole('textbox', { name: 'Folder name', exact: true }).fill('acceptance-workspace');
+      await folderDialog.getByRole('button', { name: 'Create', exact: true }).click();
+      await folderDialog.waitFor({ state: 'hidden' });
+      await directoryPicker.getByRole('button', { name: 'Open', exact: true }).click();
+      await directoryPicker.waitFor({ state: 'hidden' });
+      await opened.getByText('acceptance-workspace', { exact: true }).first().waitFor();
+      assert.ok((await stat(path.join(report.receipt.service.workspace_path, 'acceptance-workspace'))).isDirectory());
+      report.steps.push('application onboarding -> select workspace -> create folder on the managed mount');
+      await opened.reload();
+      await opened.getByText('acceptance-workspace', { exact: true }).first().waitFor();
+    }
+    if (kind === 'compose') assert.ok((await opened.locator('body').innerText()).includes('compose-product-verified'));
     await opened.screenshot({ path: path.join(evidence, 'product-service-open.png') });
     await opened.close();
     report.steps.push('actual Desktop service window open and reload');
@@ -158,5 +195,5 @@ await session.run(async () => {
     await session.closeElectron(application);
   }
   assert.equal(report.status, 'passed', report.cleanup_error);
-  console.log('Assertions complete: actual Desktop template review, deploy, open and cleanup');
+  console.log('Assertions complete: actual Desktop template preparation, deploy, open and cleanup');
 });

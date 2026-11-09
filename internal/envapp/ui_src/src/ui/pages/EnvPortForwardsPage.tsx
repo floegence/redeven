@@ -33,6 +33,7 @@ import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { createManagedServiceUpdatePreparation } from './managedServiceUpdatePreparation';
 import { createManagedServiceInstallPreparation } from './managedServiceInstallPreparation';
 import { GitTemplateImport, type SourcePreview } from './GitTemplateImport';
+import { inspectTemplateSource, type TemplateSourceTransferMode } from './templateSourceAcquisition';
 import type { ManagedWebEntranceContext } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
 import type { ResolvedSource } from '@floegence/redeven-service-templates';
 import { For, Show, batch, createEffect, createMemo, createSignal, createUniqueId, untrack, on, onCleanup, onMount, type JSX } from 'solid-js';
@@ -365,6 +366,7 @@ type ManagedInstallReceipt = Readonly<{
 }>;
 type ManagedInstallSubmission = Readonly<{
   sourcePreview?: SourcePreview;
+  marketItem?: MarketTemplate;
   requestID: string;
   serviceID: string;
   template: ManagedCatalogTemplate;
@@ -2392,6 +2394,21 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
   const cancelTemplateDuplicate = () => {setTemplateDuplicate(null); clearCopySource();};
   const [installSourcePreview, setInstallSourcePreview] = createSignal<SourcePreview>();
+  const [deploymentMarketItem, setDeploymentMarketItem] = createSignal<MarketTemplate>();
+  const [deploymentSourceLoading, setDeploymentSourceLoading] = createSignal(false);
+  const [deploymentSourceError, setDeploymentSourceError] = createSignal('');
+  const [deploymentSourceMode, setDeploymentSourceMode] = createSignal<TemplateSourceTransferMode>('remote_download');
+  const [deploymentSourceToken, setDeploymentSourceToken] = createSignal('');
+  let deploymentSourceController: AbortController | undefined;
+  const cancelDeploymentSource = () => {
+    deploymentSourceController?.abort();
+    deploymentSourceController = undefined;
+    setDeploymentSourceLoading(false);
+    setDeploymentSourceError('');
+    setDeploymentSourceToken('');
+    setDeploymentMarketItem(undefined);
+  };
+  onCleanup(cancelDeploymentSource);
   const clearInstallSource = () => {
     const previous = installSourcePreview(); setInstallSourcePreview(undefined);
     if (previous) void fetchLocalApiJSON(`/_redeven_proxy/api/managed-web-service-templates/source-previews/${encodeURIComponent(previous.candidate_id)}`, {method:'DELETE'}).catch(() => undefined);
@@ -2610,6 +2627,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   const [installReviewSession, setInstallReviewSession] = createSignal(0);
   const closeTemplateDrawer = () => {
+    cancelDeploymentSource();
     clearInstallSource();
     cancelTemplateDuplicate();
     setInstallReviewSession(value => value + 1);
@@ -2668,6 +2686,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   const reviewInstallSubmission = (submission: ManagedInstallSubmission) => {
     if (submission.phase !== 'failed') return;
+    cancelDeploymentSource();
+    clearInstallSource();
+    setDeploymentMarketItem(submission.marketItem);
+    setDeploymentSourceMode(window.redevenDesktopTemplateSources ? 'desktop_transfer' : 'remote_download');
     if (submission.sourcePreview) setInstallSourcePreview(submission.sourcePreview);
     beginTemplateInstall(submission.template);
     setWorkspacePath(submission.workspace);
@@ -2693,6 +2715,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     const release = selectedTemplateRelease();
     const submission: ManagedInstallSubmission = {
       sourcePreview: installSourcePreview(),
+      marketItem: deploymentMarketItem(),
       requestID, serviceID: review.service_id, template, presentation: templatePresentation(template), workspace: review.workspace_path, accessMode: managedAccessMode(),
       parameters: Object.fromEntries(Object.entries(request.parameters).filter(([name]) => !secretNames.has(name))), notices: {...installNoticeAcceptances()},
       release: release ? {candidate: release.candidate, parameters: {}} : null, phase: 'submitting',
@@ -2924,7 +2947,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   });
   const installSelection = createMemo(() => {
     const template = selectedTemplate();
-    if (!templateDrawerOpen() || templateDrawerView() !== 'install' || !template?.available || !canManageManagedService() || templateRecommendationUnavailable() || !workspacePath().trim() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances())) return null;
+    if (!templateDrawerOpen() || templateDrawerView() !== 'install' || deploymentSourceLoading() || deploymentSourceError() || !template?.available || installedServiceForTemplate(template) || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed') || !canManageManagedService() || templateRecommendationUnavailable() || !workspacePath().trim() || !requiredNoticesAccepted(template.notices, installNoticeAcceptances())) return null;
     const parameters = {...selectedTemplateRelease()?.parameters, ...installParameters()};
     if ((template.effective_spec?.parameters ?? template.spec?.parameters ?? []).some(parameter => parameter.required && !(parameters[parameter.name] ?? parameter.default ?? '').trim())) return null;
     return {
@@ -2937,6 +2960,20 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const installPreparationError = () => {
     const error = installPreparation.error();
     return error instanceof LocalApiError ? managedFailureMessage(error.code, i18n) : error ? i18n.t('webServices.managed.installPreparationFailed') : '';
+  };
+  const deploymentBlocker = () => {
+    const code = deploymentSourceError();
+    if (code) return i18n.t(code === 'TEMPLATE_SOURCE_RATE_LIMITED' ? 'webServices.sources.rateLimited' : code === 'TEMPLATE_SCHEMA_UNSUPPORTED' ? 'webServices.sources.upgradeRequired' : 'webServices.sources.failed');
+    const template = selectedTemplate();
+    if (template && !template.available) return templateUnavailableReason(template) || i18n.t('webServices.managed.unavailableToDeploy');
+    if (template && installedServiceForTemplate(template)) return i18n.t('webServices.managed.templateInstalled');
+    if (template && installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed')) return i18n.t('webServices.managed.openUnavailableOperation');
+    return installPreparationError();
+  };
+  const retryDeployment = () => {
+    const error = installPreparation.error();
+    if (deploymentMarketItem() && (deploymentSourceError() || !selectedTemplate()?.available || error instanceof LocalApiError && error.code === 'TEMPLATE_SOURCE_REVIEW_STALE')) void prepareMarketDeployment();
+    else installPreparation.refresh();
   };
   const workspaceUsesRecommendedPath = createMemo(() => {
     const template = selectedTemplate();
@@ -3237,6 +3274,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
 
   const returnToTemplateCatalog = () => {
+    cancelDeploymentSource();
     clearInstallSource();
     setInstallReviewSession(value => value + 1);
     setTemplateDrawerView('catalog');
@@ -3249,7 +3287,6 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   };
 
 	const beginTemplateInstall = (template: ManagedCatalogTemplate, preserveRelease = false) => {
-    if (!template.available || installedServiceForTemplate(template) || installSubmissions().some(item => item.template.service_family_id === template.service_family_id && item.phase !== 'failed')) return;
     setInstallReviewSession(value => value + 1);
     setManagedInstallSubmitting(false);
 		if (!preserveRelease) {
@@ -3263,6 +3300,47 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     setManagedAccessMode(template.default_access_mode || 'unified_proxy');
     setInstallNoticeAcceptances({});
     setTemplateDrawerView('install');
+    setTemplateDrawerOpen(true);
+  };
+
+  const prepareMarketDeployment = async () => {
+    const item = deploymentMarketItem();
+    if (!item || deploymentSourceLoading() || !canManageManagedService()) return;
+    const authority = managedResource.captureAuthority();
+    const controller = new AbortController();
+    deploymentSourceController?.abort();
+    deploymentSourceController = controller;
+    const hadPreview = Boolean(installSourcePreview());
+    batch(() => { setDeploymentSourceLoading(true); setDeploymentSourceError(''); });
+    try {
+      const preview = await inspectTemplateSource({source: item.source, expected: {repository_id: item.source.repository_id, commit_sha: item.source.commit_sha, sha256: item.sha256}, mode: deploymentSourceMode(), token: deploymentSourceToken()}, controller.signal);
+      if (controller.signal.aborted || deploymentSourceController !== controller || !authority() || disposed) return;
+      const draft = {workspace: workspacePath(), parameters: installParameters(), notices: installNoticeAcceptances(), access: managedAccessMode()};
+      batch(() => {
+        clearInstallSource();
+        setInstallSourcePreview(preview);
+        beginTemplateInstall(preview.template, hadPreview);
+        if (hadPreview) { setWorkspacePath(draft.workspace); setInstallParameters(draft.parameters); setInstallNoticeAcceptances(draft.notices); setManagedAccessMode(draft.access); }
+        setDeploymentSourceToken('');
+      });
+    } catch (error) {
+      if (!controller.signal.aborted && authority() && !disposed) setDeploymentSourceError(error instanceof LocalApiError ? error.code : 'TEMPLATE_SOURCE_UNAVAILABLE');
+    } finally {
+      if (deploymentSourceController === controller) { deploymentSourceController = undefined; setDeploymentSourceLoading(false); }
+    }
+  };
+
+  const beginMarketDeployment = (item: MarketTemplate) => {
+    cancelDeploymentSource();
+    clearInstallSource();
+    batch(() => {
+      setDeploymentMarketItem(item);
+      setDeploymentSourceMode(window.redevenDesktopTemplateSources ? 'desktop_transfer' : 'remote_download');
+      setSelectedTemplateID(null);
+      setTemplateDrawerView('install');
+      setTemplateDrawerOpen(true);
+    });
+    void prepareMarketDeployment();
   };
 
 	const confirmReleaseSelection = () => {
@@ -4131,12 +4209,28 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         }}
         title={templateDrawerView() === 'catalog' ? i18n.t('webServices.managed.serviceTemplates') : templateDrawerView() === 'install' ? i18n.t('webServices.managed.deployTemplate') : templateDraft()?.templateID ? i18n.t('webServices.managed.editTemplate') : i18n.t('webServices.managed.newTemplate')}
         footer={templateDrawerView() === 'catalog' ? undefined : (
-          <ServiceTemplateActions class={templateDrawerView() === 'install' ? 'service-install-footer' : undefined} secondary={<>
+          <ServiceTemplateActions class={templateDrawerView() === 'install' ? 'service-install-footer relative' : undefined} secondary={<>
             <Button size="lg" variant="ghost" icon={ArrowLeft} onClick={returnToTemplateCatalog} disabled={templateSaving()}>{i18n.t('webServices.managed.backToTemplates')}</Button>
             <Show when={templateDrawerView() !== 'install'}><Button size="lg" variant="outline" onClick={closeTemplateDrawer} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button></Show>
           </>}>
             <Show when={templateDrawerView() === 'install'}>
-              <Button data-testid="managed-install-submit" size="lg" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || !installPreparation.current()} aria-busy={installPreparation.loading()}>{i18n.t('webServices.managed.deploy')}</Button>
+              <Show when={deploymentBlocker()}><div class="service-install-blocker" role="alert" data-testid="managed-install-blocker">
+                <div class="flex items-start gap-2"><AlertTriangle class="mt-0.5 size-4 shrink-0" /><span>{deploymentBlocker()}</span></div>
+                <Show when={deploymentSourceError()}><code class="text-[10px]">{deploymentSourceError()}</code></Show>
+                <Show when={deploymentSourceError()}><details class="service-install-options">
+                  <summary>{i18n.t('webServices.sources.downloadMode')}</summary>
+                  <div class="grid gap-3 pt-3">
+                    <Show when={window.redevenDesktopTemplateSources}><RadioGroup value={deploymentSourceMode()} onChange={(value) => setDeploymentSourceMode(value as TemplateSourceTransferMode)} aria-label={i18n.t('webServices.sources.downloadMode')}>
+                      <RadioOption value="desktop_transfer" label={i18n.t('webServices.sources.desktop_transfer')} />
+                      <RadioOption value="remote_download" label={i18n.t('webServices.sources.remote_download')} />
+                    </RadioGroup></Show>
+                    <label class="grid gap-1">{i18n.t('webServices.sources.token')}<Input type="password" autocomplete="off" value={deploymentSourceToken()} onInput={event => setDeploymentSourceToken(event.currentTarget.value)} /></label>
+                    <p>{i18n.t(deploymentSourceMode() === 'desktop_transfer' ? 'webServices.sources.desktopCredential' : 'webServices.sources.remoteCredential')}</p>
+                  </div>
+                </details></Show>
+                <Show when={!selectedTemplate() || (!installedServiceForTemplate(selectedTemplate()!) && !installSubmissions().some(item => item.template.service_family_id === selectedTemplate()!.service_family_id && item.phase !== 'failed'))}><Button size="sm" variant="outline" onClick={retryDeployment} disabled={deploymentSourceLoading()}>{i18n.t('webServices.managed.retry')}</Button></Show>
+              </div></Show>
+              <Button data-testid="managed-install-submit" size="lg" variant="default" onClick={() => void installManaged()} disabled={managedInstallSubmitting() || deploymentSourceLoading() || Boolean(deploymentBlocker()) || !installPreparation.current()} loading={deploymentSourceLoading() || installPreparation.loading()} aria-busy={deploymentSourceLoading() || installPreparation.loading()}>{i18n.t('webServices.managed.deploy')}</Button>
             </Show>
             <Show when={templateDrawerView() === 'editor'}>
               <Button size="lg" variant="default" onClick={() => void saveTemplate()} disabled={templateSaving() || !canManageManagedService()}><StableText reserve={[i18n.t('webServices.managed.savingTemplate'), i18n.t('webServices.managed.saveTemplate')]}>{templateSaving() ? i18n.t('webServices.managed.savingTemplate') : i18n.t('webServices.managed.saveTemplate')}</StableText></Button>
@@ -4168,7 +4262,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
               onDeploy={(templateID) => {
                 setSourceReviewPurpose('deploy');
                 const item = templateCollection() !== 'library' ? marketItems().find(item => item.template_id === templateID) : undefined;
-                if (item) { setGitImportTemplate(undefined); setMarketSource({source:item.source,expected:{repository_id:item.source.repository_id,commit_sha:item.source.commit_sha,sha256:item.sha256}});setGitImportOpen(true); }
+                if (item) beginMarketDeployment(item);
                 else { const template = templateByID(templateID); if (template) beginTemplateInstall(template); }
               }}
               onOpen={openInstalledTemplate}
@@ -4183,6 +4277,16 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
             />
           </Show>
 
+          <Show when={templateDrawerView() === 'install' && !selectedTemplate() && deploymentMarketItem()}>{item => (
+            <div class="service-install" data-testid="managed-install-preparing" aria-busy={deploymentSourceLoading()}>
+              <header class="service-install-identity"><h3 class="text-base font-semibold">{item().localizations[i18n.locale()]?.name ?? item().localizations[item().default_locale]?.name ?? item().document_template_id}</h3><div class="service-install-context">{managedDeploymentLabel(item().deployment as ManagedDeployment, i18n)}<span aria-hidden="true">·</span>{ctx.env()?.name || ctx.env_id()}</div></header>
+              <div class="service-install-fields" aria-hidden="true">
+                <div class="service-install-field"><h3 class="mb-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.versions')}</h3><div class="h-5 w-40 rounded bg-muted/60" /></div>
+                <div class="service-install-field"><h3 class="mb-3 text-xs text-muted-foreground">{i18n.t('webServices.managed.workspaceSection')}</h3><div class="h-5 w-3/4 rounded bg-muted/60" /></div>
+              </div>
+              <p class="break-all text-xs text-muted-foreground">{item().source.repository} · {item().source.path}</p>
+            </div>
+          )}</Show>
           <Show when={templateDrawerView() === 'install' && selectedTemplate()} keyed>{(template) => (
             <div class="service-install" data-testid="managed-install-form">
               <Show when={selectedTemplatePresentation()}>{presentation => (
@@ -4241,6 +4345,14 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                   <Show when={template.source_url}><a class="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={template.source_url} target="_blank" rel="noreferrer">{i18n.t('webServices.managed.sourceCode')}<ExternalLink class="h-3 w-3" /></a></Show>
                 </div>
               </details>
+              <Show when={installSourcePreview()}>{source => <details class="service-install-options" data-testid="managed-install-source">
+                <summary><ChevronRight class="h-3.5 w-3.5 shrink-0" /><span>{i18n.t('webServices.sources.sourceDetails')}</span></summary>
+                <div class="service-install-options__body">
+                  <dl><div><dt>{i18n.t('webServices.sources.commit')}</dt><dd class="break-all font-mono">{template.git_source?.commit_sha}</dd></div><div><dt>SHA-256</dt><dd class="break-all font-mono">{source().sha256}</dd></div></dl>
+                  <Show when={template.git_source}><a href={`https://github.com/${template.git_source!.repository}/tree/${template.git_source!.commit_sha}/${template.git_source!.path}`} target="_blank" rel="noreferrer" class="text-xs text-primary hover:underline">{i18n.t('webServices.managed.sourceCode')}</a></Show>
+                  <details><summary class="cursor-pointer text-xs">{i18n.t('webServices.sources.executionChanges')}</summary><pre class="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-all text-[11px]">{JSON.stringify(template.effective_spec ?? template.spec, null, 2)}</pre></details>
+                </div>
+              </details>}</Show>
 
               <Show when={installReleaseRiskHints().length > 0 || (template.notices?.length ?? 0) > 0}>
                 <div class="service-install-notices">
@@ -4248,10 +4360,6 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                   <Show when={(template.notices?.length ?? 0) > 0}><ManagedTemplateNotices presentation="inline" notices={localizedManagedNotices(template.notices, template.localizations, i18n.locale(), template.default_locale)} accepted={installNoticeAcceptances()} disabled={managedInstallSubmitting()} onAcceptedChange={(noticeID, accepted) => setInstallNoticeAcceptances(current => ({...current, [noticeID]: accepted}))} /></Show>
                 </div>
               </Show>
-              <div class="service-install-feedback" aria-live="polite">
-                <Show when={installPreparation.loading()}><p role="status" class="text-xs text-muted-foreground">{i18n.t('webServices.managed.installPreparing')}</p></Show>
-                <Show when={installPreparationError()}><div role="alert" class="flex items-start justify-between gap-3 text-xs leading-5 text-destructive"><span>{installPreparationError()}</span><button type="button" class="shrink-0 cursor-pointer underline underline-offset-4" onClick={() => installPreparation.refresh()}>{i18n.t('webServices.managed.retry')}</button></div></Show>
-              </div>
             </div>
           )}</Show>
 

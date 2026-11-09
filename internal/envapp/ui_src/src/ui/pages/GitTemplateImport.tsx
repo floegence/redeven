@@ -21,6 +21,7 @@ import { useI18n } from '../i18n';
 import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
 import { ServiceTemplateActions } from './ServiceTemplateActions';
 import type { ManagedCatalogTemplate } from './EnvPortForwardsPage';
+import { inspectTemplateSource } from './templateSourceAcquisition';
 
 export type SourcePreview = {
   candidate_id: string;
@@ -166,7 +167,7 @@ export function GitTemplateImport(props: {
     discard();
     const activeController = new AbortController();
     controller = activeController;
-    operationID = secureRandomUUID();
+    operationID = action === 'discover' ? secureRandomUUID() : '';
     const signal = activeController.signal;
     const source: GitSource = chosen ?? {
       repository: repository().trim(),
@@ -174,60 +175,39 @@ export function GitTemplateImport(props: {
       path: path().trim(),
     };
     try {
-      let snapshot: Snapshot | undefined;
+      if (action === 'inspect') {
+        const result = await inspectTemplateSource({source, expected: props.marketSource?.expected, templateID: props.template?.template_id, mode: mode(), token: token()}, signal, () => setPhase('transferring'));
+        if (signal.aborted) return;
+        setPreview(result);
+        setToken('');
+        confirmationID = secureRandomUUID();
+        return;
+      }
       if (mode() === 'desktop_transfer' && desktop()) {
         const response = await desktop()!.acquire({
           operation_id: operationID,
-          action: action === 'discover' ? 'discover' : 'capture',
+          action: 'discover',
           source,
           token: token(),
           expected: props.marketSource?.expected,
         });
         if (signal.aborted) return;
         if (!response.ok) throw new LocalApiError({ message: '', code: response.error_code });
-        if (action === 'discover') {
-          if (!response.catalog)
-            throw new LocalApiError({
-              message: '',
-              code: 'TEMPLATE_SOURCE_RESPONSE_INVALID',
-            });
-          setSelectedPath(response.catalog.templates[0]?.path);
-          setCatalog(response.catalog);
-          return;
-        }
-        snapshot = response.snapshot;
-        if (!snapshot)
+        if (!response.catalog)
           throw new LocalApiError({
             message: '',
             code: 'TEMPLATE_SOURCE_RESPONSE_INVALID',
           });
-        setPhase('transferring');
+        setSelectedPath(response.catalog.templates[0]?.path);
+        setCatalog(response.catalog);
+        return;
       }
-      if (action === 'discover') {
-        const result = await fetchLocalApiJSON<SourceCatalog>(`${base}/source-discovery`, {
-          method: 'POST',
-          body: JSON.stringify({ source, token: token() }),
-          signal,
-        });
-        if (signal.aborted) return;
-        setSelectedPath(result.templates[0]?.path);
-        setCatalog(result);
-      } else {
-        const result = await fetchLocalApiJSON<SourcePreview>(`${base}/source-previews`, {
-          method: 'POST',
-          body: JSON.stringify({
-            template_id: props.template?.template_id,
-            source,
-            expected: props.marketSource?.expected,
-            ...(snapshot ? { snapshot } : { token: token() }),
-          }),
-          signal,
-        });
-        if (signal.aborted) return;
-        setPreview(result);
-        setToken('');
-        confirmationID = secureRandomUUID();
-      }
+      const result = await fetchLocalApiJSON<SourceCatalog>(`${base}/source-discovery`, {
+        method: 'POST', body: JSON.stringify({ source, token: token() }), signal,
+      });
+      if (signal.aborted) return;
+      setSelectedPath(result.templates[0]?.path);
+      setCatalog(result);
     } catch (failure) {
       if (!signal.aborted) setError(failure instanceof LocalApiError ? failure.code : 'TEMPLATE_SOURCE_UNAVAILABLE');
     } finally {
