@@ -2103,7 +2103,8 @@
       "discardFileDescription": "「{path}」を最後の Git 状態に復元し、ステージングされていない編集を削除しますか?このファイルのステージングされたスナップショットはそのまま残ります。",
       "filterPlaceholder": "ファイルをフィルターします...",
       "filterActive": "フィルターされた",
-      "showingFiltered": "{total} ファイル中 {visible} を表示しています"
+      "showingFiltered": "{total} ファイル中 {visible} を表示しています",
+      "unstageFolder": "フォルダーのステージを解除"
     },
     "commitDialog": {
       "title": "ステージ済みの変更をコミット",
@@ -2184,7 +2185,11 @@
       "branchNameCopied": "ブランチ名をコピー",
       "copyBranchNameValue": "ブランチ名をコピー {name} 強制削除を確認する",
       "confirmForceDeleteSuffix": "（強制削除）",
-      "exactMatchHint": "ブランチ名は正確に一致する必要があります。"
+      "exactMatchHint": "ブランチ名は正確に一致する必要があります。",
+      "primaryWorktree": "このブランチはメインのワークツリーで使用中です。そのディレクトリを別のブランチに切り替えてから削除してください。",
+      "lockedWorktree": "このワークツリーはロックされています。ブランチとワークツリーを削除する前に、明示的にロックを解除してください。",
+      "nestedWorktree": "このワークツリー内に別の登録済みワークツリーがあります。先に入れ子のワークツリーを移動または削除してください。",
+      "ignoredFilesRemoved": "このワークツリー内で Git に無視されているファイルも完全に削除されます。"
     },
     "notifications": {
       "unavailableTitle": "Git は利用できません",
@@ -2313,6 +2318,13 @@
       "checkoutRemoteFirst": "先にこのブランチをローカルにチェックアウトしてください。",
       "openBranchInWorktreeFirst": "先にこのブランチをワークツリーで開いてください。",
       "unableToVerify": "ブランチを検証できません"
+    },
+    "errors": {
+      "permissionDenied": "この Git 操作を実行する権限がありません。",
+      "scopeChanged": "リポジトリの状態が変わりました。更新して選択内容を再確認してください。",
+      "resourceLimit": "この Git リクエストは利用可能なリソースを超えています。範囲を狭めるか、他の操作が完了してから再試行してください。",
+      "outcomeUnknown": "操作結果を確認できませんでした。再試行する前にリポジトリを更新してください。",
+      "requestRejected": "Git がリクエストを拒否しました。リポジトリの状態と選択した操作を確認してください。"
     }
   },
   "terminal": {

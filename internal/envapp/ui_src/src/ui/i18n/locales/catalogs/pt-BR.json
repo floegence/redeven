@@ -2103,7 +2103,8 @@
       "discardFileDescription": "Restaurar \"{path}\" para o último estado Git e eliminar suas edições não preparadas? Qualquer instantâneo preparado para este arquivo permanecerá intacto.",
       "filterPlaceholder": "Filtrar arquivos...",
       "filterActive": "Filtrado",
-      "showingFiltered": "Mostrando {visible} de arquivos {total}"
+      "showingFiltered": "Mostrando {visible} de arquivos {total}",
+      "unstageFolder": "Retirar pasta da preparação"
     },
     "commitDialog": {
       "title": "Criar commit das alterações preparadas",
@@ -2184,7 +2185,11 @@
       "branchNameCopied": "Nome da filial copiado",
       "copyBranchNameValue": "Copie o nome da filial {name}",
       "confirmForceDeleteSuffix": "para confirmar a exclusão forçada",
-      "exactMatchHint": "O nome da filial deve corresponder exatamente."
+      "exactMatchHint": "O nome da filial deve corresponder exatamente.",
+      "primaryWorktree": "Esta branch está em uso no worktree principal. Mude esse diretório para outra branch antes de excluir esta branch.",
+      "lockedWorktree": "Este worktree está bloqueado. Desbloqueie-o explicitamente antes de excluir sua branch e seu worktree.",
+      "nestedWorktree": "Este worktree contém outro worktree registrado. Mova ou remova primeiro o worktree aninhado.",
+      "ignoredFilesRemoved": "Os arquivos ignorados pelo Git neste worktree também serão excluídos permanentemente."
     },
     "notifications": {
       "unavailableTitle": "Git indisponível",
@@ -2313,6 +2318,13 @@
       "checkoutRemoteFirst": "Faça primeiro o checkout local desta ramificação.",
       "openBranchInWorktreeFirst": "Abra primeiro esta ramificação em uma árvore de trabalho.",
       "unableToVerify": "Não foi possível verificar a ramificação"
+    },
+    "errors": {
+      "permissionDenied": "Você não tem permissão para executar esta operação do Git.",
+      "scopeChanged": "O estado do repositório mudou. Atualize e revise a seleção novamente.",
+      "resourceLimit": "Esta solicitação do Git excede os recursos disponíveis. Reduza a seleção ou aguarde a conclusão das outras operações.",
+      "outcomeUnknown": "Não foi possível confirmar o resultado da operação. Atualize o repositório antes de tentar novamente.",
+      "requestRejected": "O Git rejeitou esta solicitação. Verifique o estado do repositório e a operação selecionada."
     }
   },
   "terminal": {

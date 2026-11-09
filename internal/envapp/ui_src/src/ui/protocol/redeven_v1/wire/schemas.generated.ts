@@ -249,6 +249,10 @@ export const redevenWireSchemas = {
                   {
                     "kind": "literal",
                     "value": "max"
+                  },
+                  {
+                    "kind": "literal",
+                    "value": "ultra"
                   }
                 ]
               },
@@ -3150,6 +3154,9 @@ export const redevenWireSchemas = {
       "blocking_reason": {
         "kind": "string"
       },
+      "blocking_code": {
+        "kind": "string"
+      },
       "plan_fingerprint": {
         "kind": "string"
       }
@@ -4559,7 +4566,7 @@ export const redevenWireSchemas = {
                               }
                             ]
                           },
-                          "member_id": {
+                          "attachment_id": {
                             "kind": "string"
                           }
                         },

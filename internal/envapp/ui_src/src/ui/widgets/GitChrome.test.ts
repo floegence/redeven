@@ -101,7 +101,7 @@ describe('GitChrome semantic tone helpers', () => {
 
   it('uses a quiet git browser row selection surface for selectable items', () => {
     expect(gitToneSelectableCardClass('brand', true)).toContain('git-browser-selection-row');
-    expect(gitToneSelectableCardClass('brand', true)).toContain('border-l-[2px]');
+    expect(gitToneSelectableCardClass('brand', true)).not.toContain('border-l-');
     expect(gitToneSelectableCardClass('brand', true)).not.toContain('git-browser-selection-surface');
     expect(gitToneSelectableCardClass('brand', true)).toContain('cursor-pointer');
     expect(gitToneSelectableCardClass('brand', true)).toContain('git-browser-interactive');
@@ -120,7 +120,7 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitSelectedChipClass(false)).toBe('');
 
     expect(gitNavigationItemClass(true)).toContain('git-browser-selection-row');
-    expect(gitNavigationItemClass(true)).toContain('border-l-2');
+    expect(gitNavigationItemClass(true)).not.toContain('border-l-');
     expect(gitNavigationItemClass(true)).toContain('border border-transparent');
     expect(gitNavigationItemClass(true)).not.toContain('git-browser-selection-nav');
     expect(gitNavigationItemClass(false)).toContain('git-browser-interactive');

@@ -110,7 +110,7 @@ function itemDirectorySummary(item: GitSeededWorkspaceChange, i18n: I18nHelpers)
 }
 
 function isDiscardableWorkspaceItem(item: GitSeededWorkspaceChange | null | undefined): boolean {
-  if (isGitWorkspaceDirectoryEntry(item)) return true;
+  if (item && isGitWorkspaceDirectoryEntry(item)) return item.section === 'changes' || item.section === 'unstaged' || item.section === 'untracked';
   return item?.section === 'unstaged' || item?.section === 'untracked';
 }
 
@@ -471,13 +471,15 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
       : workspaceViewSectionCount(summary(), selectedSection())
   );
   const visibleCount = () => (
-    selectedSection() === 'changes' && selectedPageState().initialized
+    selectedPageState().initialized
       ? Number(selectedPageState().scopeFileCount ?? selectedPageState().totalCount ?? 0)
       : visibleItemCount()
   );
   const stagedCount = () => (
     stagedPageState().initialized
-      ? stagedPageState().totalCount
+      ? Number(stagedPageState().directoryPath
+        ? summary()?.stagedCount ?? stagedPageState().scopeFileCount ?? stagedPageState().totalCount
+        : stagedPageState().scopeFileCount ?? stagedPageState().totalCount)
       : workspaceViewSectionCount(summary(), 'staged')
   );
   const selectedLoadingMode = () => {
@@ -502,8 +504,8 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const visibleError = () => String(props.error ?? '').trim() || (!selectedPageState().initialized ? selectedPageState().error : '');
   const visibleLoadingMore = () => Boolean(selectedPageState().loading && selectedPageState().initialized && selectedLoadingMode() === 'append');
   const stagedLoadingItems = () => Boolean(stagedPageState().loading && !props.commitBusy);
-  const activeDirectoryPath = () => selectedSection() === 'changes' ? exactGitPath(selectedPageState().directoryPath) : '';
-  const activeBreadcrumbs = () => selectedSection() === 'changes' ? selectedPageState().breadcrumbs ?? [] : [];
+  const activeDirectoryPath = () => exactGitPath(selectedPageState().directoryPath);
+  const activeBreadcrumbs = () => selectedPageState().breadcrumbs ?? [];
   const repoRootPath = () => exactGitPath(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath);
   const effectiveRootPath = () => exactGitPath(props.repoSummary?.worktreePath ?? repoRootPath());
   const repoShortcutRequest = (directoryPath = activeDirectoryPath()): GitDirectoryShortcutRequest | null => (
@@ -521,8 +523,8 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const selectedKey = () => workspaceEntryKey(diffItem());
   const canCommit = () => stagedCount() > 0 && String(props.commitMessage ?? '').trim().length > 0 && !props.commitBusy;
   const bulkActionLabel = () => (
-    selectedSection() === 'changes' && activeDirectoryPath()
-      ? i18n.t('git.changes.stageFolder')
+    activeDirectoryPath()
+      ? i18n.t(selectedSection() === 'staged' ? 'git.changes.unstageFolder' : 'git.changes.stageFolder')
       : selectedSection() === 'staged'
         ? i18n.t('git.changes.unstageAll')
         : selectedSection() === 'conflicted'
@@ -583,8 +585,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   })));
   const showActionRow = () => headerPrimaryActions().length > 0 || headerUtilityActions().length > 0 || overflowItems().length > 0;
   const showBreadcrumbRail = () => (
-    selectedSection() === 'changes'
-    && Boolean(activeDirectoryPath())
+    Boolean(activeDirectoryPath())
     && breadcrumbSegments().length > 0
   );
   createEffect(() => {

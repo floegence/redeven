@@ -2,7 +2,7 @@ import { For, Show, createMemo } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { Dialog } from '../primitives/EnvAppModal';
 import type { GitWorkspaceChange } from '../protocol/redeven_v1';
-import { exactGitPath } from '../utils/gitWorkbench';
+import { exactGitPath, isGitWorkspaceDirectoryEntry } from '../utils/gitWorkbench';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangePathClass } from './GitChrome';
 import { useI18n } from '../i18n';
@@ -42,7 +42,8 @@ function itemPath(item: GitWorkspaceChange): string {
 
 export function GitCommitDialog(props: GitCommitDialogProps) {
   const i18n = useI18n();
-  const loadedCount = createMemo(() => props.stagedItems.length);
+  const loadedCount = createMemo(() => props.stagedItems.reduce((sum, item) => sum + (isGitWorkspaceDirectoryEntry(item) ? Number(item.descendantFileCount ?? 0) : 1), 0));
+  const completeMetrics = createMemo(() => !props.hasMore && !props.loadingItems && props.stagedItems.every(item => !isGitWorkspaceDirectoryEntry(item) && typeof item.additions === 'number' && typeof item.deletions === 'number'));
   const fileCount = createMemo(() => Math.max(loadedCount(), Number(props.totalCount ?? 0)));
   const partial = createMemo(() => fileCount() > loadedCount());
   const additions = createMemo(() => props.stagedItems.reduce((sum, item) => sum + Number(item.additions ?? 0), 0));
@@ -75,8 +76,8 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
           columnsClass="grid-cols-1 gap-1 sm:grid-cols-3"
           items={[
             { label: i18n.t('git.commitDialog.filesReady'), value: i18n.tn('git.common.fileCount', fileCount()) },
-            { label: i18n.t('git.commitDialog.addedLines'), value: <span class="text-success">+{additions()}</span> },
-            { label: i18n.t('git.commitDialog.removedLines'), value: <span class="text-error">-{deletions()}</span> },
+            { label: i18n.t('git.commitDialog.addedLines'), value: completeMetrics() ? <span class="text-success">+{additions()}</span> : '—' },
+            { label: i18n.t('git.commitDialog.removedLines'), value: completeMetrics() ? <span class="text-error">-{deletions()}</span> : '—' },
           ]}
         />
 
@@ -107,8 +108,8 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
                         <td class={GIT_CHANGED_FILES_CELL_CLASS}>
                           <div class={`truncate whitespace-pre text-[11px] font-medium ${gitChangePathClass(item.changeType)}`} title={itemPath(item)}>{itemPath(item)}</div>
                         </td>
-                        <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={item.changeType} /></td>
-                        <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
+                        <td class={GIT_CHANGED_FILES_CELL_CLASS}><Show when={isGitWorkspaceDirectoryEntry(item)} fallback={<GitChangeStatusPill change={item.changeType} />}>{i18n.t('git.common.folder')}</Show></td>
+                        <td class={GIT_CHANGED_FILES_CELL_CLASS}><Show when={isGitWorkspaceDirectoryEntry(item)} fallback={<GitChangeMetrics additions={item.additions} deletions={item.deletions} />}>{i18n.tn('git.common.fileCount', Number(item.descendantFileCount ?? 0))}</Show></td>
                       </tr>
                     )}
                   </For>

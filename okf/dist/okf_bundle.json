@@ -10927,7 +10927,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "architecture",
           "filesystem",
@@ -10938,15 +10938,15 @@
         "title": "Git workspace inventory lifecycle",
         "type": "Runtime Contract"
       },
-      "body_length": 1665,
+      "body_length": 3444,
       "summary": "Git queries expose bounded immutable snapshots with revision-bound paging. Git/Files mutations coordinate topology and invalidate snapshots around effects; display grants no authority. Oversized/stale/malformed/exhausted reads return bounded typed errors without losing Flowersec session.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "- Incrementally read NUL-delimited porcelain v2 and reserve token/record/path/heap/process/capture/cache capacity before growth. Filesystem identity prevents recreated paths inheriting old coordination or revisions.\n- `git.getCapabilities` advertises revisioned pages, path/directory status and stash-section diff. `git.listWorkspacePathStatuses` accepts bounded known paths and returns rows or directory counts without descendant arrays.\n- One Agent Git runtime coordinates cancellable topology, active worktrees, canonical lock order, fair per-repository reads/writes, epochs, process admission, snapshots and destructive scans. Escaped process-group descendants never justify unbounded handlers/pipes.\n- Linked-worktree previews expose summaries. Exclude the root Git control entry only after verifying type, applicable exact content, canonical target and filesystem identity against the resolved Git directory.",
-          "char_count": 914
+          "body": "- Incrementally read NUL-delimited porcelain v2 and reserve token/record/path/heap/process/capture/cache capacity before growth. Filesystem identity prevents recreated paths inheriting old coordination or revisions.\n- `git.getCapabilities` advertises revisioned pages, path/directory status and stash-section diff. `git.listWorkspacePathStatuses` accepts bounded known paths and returns rows or directory counts without descendant arrays.\n- One Agent Git runtime coordinates cancellable topology, active worktrees, canonical lock order, fair per-repository reads/writes, epochs, process admission, snapshots and destructive scans. Escaped process-group descendants never justify unbounded handlers/pipes.\n- Linked-worktree previews expose summaries. Exclude the root Git control entry only after verifying type, applicable exact content, canonical target and filesystem identity against the resolved Git directory.\n\n## Mutation scope and branch removal\n\n- Stage/unstage resolve the requested section, directory and literal paths first. Execute only those resolved paths through a private NUL-delimited pathspec file; a changes action cannot stage conflicts, and unstaging cannot clear conflict stages outside its selection.\n- Branch origin and the directory where `git worktree add` ran do not decide removability. A linked worktree created from the primary `main` directory, including below that directory, can be removed with its branch after review. The primary worktree remains non-removable even after switching it to a feature branch; switch that directory to another branch before deleting its old branch.\n- Delete review rejects inaccessible or changed repository identity, primary worktrees, locked worktrees, and targets containing another registered worktree (including detached worktrees). Block both safe and force actions and return a stable `blocking_code` for localized UI. Lock/topology changes invalidate the reviewed fingerprint.\n- Worktree removal and discarding local content are separate authorizations. Both safe and force modes require explicit discard consent for tracked, untracked or ignored files. Force branch deletion only relaxes the merged-commit check; it does not imply permission to discard local work. Never unlock worktrees automatically.",
+          "char_count": 2275
         },
         {
           "id": "boundaries",
@@ -10959,15 +10959,15 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/gitrepo/workspace.go` - Source.",
-          "char_count": 51
+          "body": "- `redeven:internal/gitrepo/workspace.go`, `mutations.go`, `delete_branch_review.go` - Inventory and mutation implementation.\n- `redeven:internal/gitrepo/workspace_mutation_scope_test.go`, `delete_branch_topology_test.go` - Real Git section isolation, primary/linked/locked/nested topology, stale reviews and discard consent.\n- `redeven:internal/gitrepo/service_e2e_test.go` - Encrypted RPC deletion from the primary directory and rejection of primary-worktree removal.",
+          "char_count": 469
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/gitrepo/workspace.go:0:source.",
-          "source": "redeven:internal/gitrepo/workspace.go",
-          "description": "Source."
+          "id": "redeven:internal/gitrepo/service_e2e_test.go:0:encrypted rpc deletion from the primary directory and rejection of primary-worktree removal.",
+          "source": "redeven:internal/gitrepo/service_e2e_test.go",
+          "description": "Encrypted RPC deletion from the primary directory and rejection of primary-worktree removal."
         }
       ],
       "snippet": "Git queries expose bounded immutable snapshots with revision-bound paging. Git/Files mutations coordinate topology and invalidate snapshots around effects; display grants no authority. Oversized/stale/malformed/exhausted reads return bounde",
@@ -23423,7 +23423,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-08",
         "tags": [
           "files",
           "git",
@@ -23434,15 +23434,15 @@
         "title": "Git workspace generations, diffs and visual state",
         "type": "UI Contract"
       },
-      "body_length": 3196,
+      "body_length": 5257,
       "summary": "Exact client capabilities and monotonic generations fence Git inventory, diffs and filesystem decoration. Keep Git shell/navigation mounted with local panel loading/errors, no second curtain. Diff requests/nested file references obey JSON-only transport. Filesystem navigation never waits for Git.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Workspace generations\nUse workspace-v1 only after the exact client confirms revision/path-status/directory-scope/stash-section capabilities. Client replacement retires old capabilities/generations and late replies. Files never uses unbounded legacy reads; Files→Workspace opens a fresh generation before section/scope.\n\nOne monotonic protocol `GitWorkspaceInvalidationBus` invalidates every dispatched effect in `finally`: success, application failure or unknown transport outcome; preview/validation cannot invalidate.\n\nCommitted path/repository identity fences detection; old directories cannot leak facts. Bound replacement generations while preserving committed decoration. Section identity distinguishes staged/unstaged/untracked/conflicted and stash rows.\n\n## Diff requests\nInline/Activity/Workbench/dialog share one owner. Caller patch snapshots are previews; refresh or authoritative empty/failure cannot revive them. Runtime owns first-parent meaning.\n\nPersisted Workbench widgets store placement targets, never Git summaries. Equal target fields preserve in-flight work, patches/full context, expansion and both scroll axes across unrelated snapshots. Other inspections retain same-path fresh-summary behavior. Connection absence is not missing-file failure; successful no-file settles empty without old patches/perpetual overlay, failures retain recovery.\n\n## Visual state\nNavigation/branches/history/summaries/files use `ring`-derived interaction tokens independent of text selection. Neutral hover cannot override selection; success/warning/danger/info/remote-violet describe facts, never selection/focus.\n\nOne measured owner lays out graph rails/connectors/nodes/columns within available width without moving summaries or changing actions/selection. Workspace/commit/branch status/history/comparison reuse retained file/diff navigation; filtering/removal/section/commit changes retire stale selections. Narrow/Workbench views remain contained with independent scrolling.\n\nEvery preset has complete interaction roles. Forced colors expose selection/focus/Current-chip boundaries through system colors.",
-          "char_count": 2117
+          "body": "## Workspace generations\nUse workspace-v1 only after the exact client confirms revision/path-status/directory-scope/stash-section capabilities. Client replacement retires old capabilities/generations and late replies. Files never uses unbounded legacy reads; Files→Workspace opens a fresh generation before section/scope.\n\nOne monotonic protocol `GitWorkspaceInvalidationBus` invalidates every dispatched effect in `finally`: success, application failure or unknown transport outcome; preview/validation cannot invalidate.\n\nCommitted path/repository identity fences detection; old directories cannot leak facts. Bound replacement generations while preserving committed decoration. Section identity distinguishes staged/unstaged/untracked/conflicted and stash rows.\n\n## Git action requests and review\nEvery Git encoder omits absent optional fields before calling the published JSON-only Flowersec API. Preserve explicit `false`, empty strings and literal file paths; serializing an object with `undefined` later is not a valid boundary. Redeven owns this adapter; do not relax upstream validation.\n\nDirectory navigation and bulk actions retain changes/staged/conflicted section identity. Counts describe descendant files in the current scope. Opening commit review loads the staged root because committing covers the whole index; directory summaries show folder counts, and incomplete line totals are not presented as zero.\n\nDeletion uses the authoritative preview for every consequence, even when entered through a branch-only action. Any worktree blocker disables both safe and force confirmation before merged status is considered. Primary, locked and nested-worktree blockers are localized from structured codes. Show the reviewed removal/discard effects and carry both authorizations; an ignored-only worktree still requires discard review.\n\nStable public error codes produce localized permission, stale-state, resource, request-rejection or unknown-outcome guidance without private Git/transport diagnostics. Unknown outcomes require refresh and review; never automatically replay a mutation.\n\n## Diff requests\nInline/Activity/Workbench/dialog share one owner. Caller patch snapshots are previews; refresh or authoritative empty/failure cannot revive them. Runtime owns first-parent meaning.\n\nPersisted Workbench widgets store placement targets, never Git summaries. Equal target fields preserve in-flight work, patches/full context, expansion and both scroll axes across unrelated snapshots. Other inspections retain same-path fresh-summary behavior. Connection absence is not missing-file failure; successful no-file settles empty without old patches/perpetual overlay, failures retain recovery.\n\n## Visual state\nNavigation/branches/history/summaries/files use `ring`-derived interaction tokens independent of text selection. Neutral hover cannot override selection; success/warning/danger/info/remote-violet describe facts, never selection/focus.\n\nOne measured owner lays out graph rails/connectors/nodes/columns within available width without moving summaries or changing actions/selection. Workspace/commit/branch status/history/comparison reuse retained file/diff navigation; filtering/removal/section/commit changes retire stale selections. Narrow/Workbench views remain contained with independent scrolling.\n\nEvery preset has complete interaction roles. Forced colors expose selection/focus/Current-chip boundaries through system colors. Selected navigation, branches, stashes and file rows use a complete surface without a colored left stripe; keyboard focus and forced-color selection retain an inset whole-row outline.",
+          "char_count": 3634
         },
         {
           "id": "boundaries",
@@ -23455,8 +23455,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts` - Source.\n\n- `redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx` - Tests.",
-          "char_count": 164
+          "body": "- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts` - Source.\n\n- `redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx` - Diff tests.\n- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/gitRequests.test.ts` - All 31 Git methods at the public RPC adapter boundary.\n- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx`, `GitChangesPanel.e2e.test.tsx`, `GitDeleteBranchConfirmDialog.test.tsx` - Scoped interactions and reviewed deletion consequences.\n- `redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx` - Chromium selection across 28 themes and standard/soft material, with real branch sidebar widths.",
+          "char_count": 708
         }
       ],
       "evidence": [
@@ -23466,9 +23466,19 @@
           "description": "Source."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx:0:tests.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx:0:diff tests.",
           "source": "redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx",
-          "description": "Tests."
+          "description": "Diff tests."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/gitRequests.test.ts:0:all 31 git methods at the public rpc adapter boundary.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/gitRequests.test.ts",
+          "description": "All 31 Git methods at the public RPC adapter boundary."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx:0:chromium selection across 28 themes and standard/soft material, with real branch sidebar widths.",
+          "source": "redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx",
+          "description": "Chromium selection across 28 themes and standard/soft material, with real branch sidebar widths."
         }
       ],
       "snippet": "Exact client capabilities and monotonic generations fence Git inventory, diffs and filesystem decoration. Keep Git shell/navigation mounted with local panel loading/errors, no second curtain. Diff requests/nested file references obey JSON-o",
@@ -24832,5 +24842,5 @@
       ]
     }
   ],
-  "source_sha256": "09736ec541074235f3180d90b40e7d7d0a12adb3c9c1a1410b7c369fa6c976d7"
+  "source_sha256": "490444d7cb4625c310ac7858cab1d821fe6486f5a2b0d631f59f3d52b094ab83"
 }

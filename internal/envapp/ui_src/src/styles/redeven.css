@@ -275,7 +275,6 @@
   --git-browser-hover-bg: color-mix(in srgb, var(--foreground) 5%, var(--redeven-surface-panel));
   --git-browser-selection-bg: color-mix(in srgb, var(--git-browser-selection-source) 10%, var(--redeven-surface-panel));
   --git-browser-selection-border: color-mix(in srgb, var(--git-browser-selection-source) 32%, var(--redeven-stroke-divider));
-  --git-browser-selection-indicator: var(--git-browser-selection-accent);
   --git-browser-focus-ring: var(--git-browser-selection-accent);
   --git-browser-selection-fg: var(--foreground);
   --git-browser-selection-secondary-fg: color-mix(in srgb, var(--muted-foreground) 72%, var(--foreground) 28%);
@@ -689,14 +688,9 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
 }
 
 .git-browser-selection-row {
-  border-left-color: var(--git-browser-selection-indicator);
   background: var(--git-browser-selection-bg);
   color: var(--git-browser-selection-fg);
   box-shadow: var(--git-browser-selection-shadow);
-}
-
-.git-browser-selection-nav {
-  border-left-color: var(--git-browser-selection-indicator);
 }
 
 .git-browser-interactive:hover:not(:disabled):not([aria-disabled='true']):not([aria-selected='true']):not([aria-pressed='true']):not(.git-browser-selection-row):not(.git-browser-selection-surface) {
@@ -731,9 +725,9 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
     border-color: Highlight;
   }
 
-  .git-browser-selection-row,
-  .git-browser-selection-nav {
-    border-left-color: Highlight;
+  .git-browser-selection-row {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
   }
 
   .git-browser-interactive:focus-visible {

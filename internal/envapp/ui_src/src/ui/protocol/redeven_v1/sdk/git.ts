@@ -399,6 +399,7 @@ export type GitPreviewDeleteBranchResponse = {
   forceDeleteRequiresConfirm: boolean;
   forceDeleteReason?: string;
   blockingReason?: string;
+  blockingCode?: string;
   planFingerprint?: string;
 };
 

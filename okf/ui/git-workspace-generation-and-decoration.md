@@ -3,7 +3,7 @@ type: UI Contract
 title: Git workspace generations, diffs and visual state
 tags: [ui, git, files, state, interaction]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -18,6 +18,15 @@ One monotonic protocol `GitWorkspaceInvalidationBus` invalidates every dispatche
 
 Committed path/repository identity fences detection; old directories cannot leak facts. Bound replacement generations while preserving committed decoration. Section identity distinguishes staged/unstaged/untracked/conflicted and stash rows.
 
+## Git action requests and review
+Every Git encoder omits absent optional fields before calling the published JSON-only Flowersec API. Preserve explicit `false`, empty strings and literal file paths; serializing an object with `undefined` later is not a valid boundary. Redeven owns this adapter; do not relax upstream validation.
+
+Directory navigation and bulk actions retain changes/staged/conflicted section identity. Counts describe descendant files in the current scope. Opening commit review loads the staged root because committing covers the whole index; directory summaries show folder counts, and incomplete line totals are not presented as zero.
+
+Deletion uses the authoritative preview for every consequence, even when entered through a branch-only action. Any worktree blocker disables both safe and force confirmation before merged status is considered. Primary, locked and nested-worktree blockers are localized from structured codes. Show the reviewed removal/discard effects and carry both authorizations; an ignored-only worktree still requires discard review.
+
+Stable public error codes produce localized permission, stale-state, resource, request-rejection or unknown-outcome guidance without private Git/transport diagnostics. Unknown outcomes require refresh and review; never automatically replay a mutation.
+
 ## Diff requests
 Inline/Activity/Workbench/dialog share one owner. Caller patch snapshots are previews; refresh or authoritative empty/failure cannot revive them. Runtime owns first-parent meaning.
 
@@ -28,7 +37,7 @@ Navigation/branches/history/summaries/files use `ring`-derived interaction token
 
 One measured owner lays out graph rails/connectors/nodes/columns within available width without moving summaries or changing actions/selection. Workspace/commit/branch status/history/comparison reuse retained file/diff navigation; filtering/removal/section/commit changes retire stale selections. Narrow/Workbench views remain contained with independent scrolling.
 
-Every preset has complete interaction roles. Forced colors expose selection/focus/Current-chip boundaries through system colors.
+Every preset has complete interaction roles. Forced colors expose selection/focus/Current-chip boundaries through system colors. Selected navigation, branches, stashes and file rows use a complete surface without a colored left stripe; keyboard focus and forced-color selection retain an inset whole-row outline.
 
 # Boundaries
 
@@ -40,4 +49,7 @@ Layout persistence proves no content freshness. Workbench target stability canno
 
 - `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts` - Source.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx` - Tests.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx` - Diff tests.
+- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/gitRequests.test.ts` - All 31 Git methods at the public RPC adapter boundary.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx`, `GitChangesPanel.e2e.test.tsx`, `GitDeleteBranchConfirmDialog.test.tsx` - Scoped interactions and reviewed deletion consequences.
+- `redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx` - Chromium selection across 28 themes and standard/soft material, with real branch sidebar widths.

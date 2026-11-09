@@ -110,24 +110,24 @@ export function resolveDeleteBranchReview(options: ResolveDeleteBranchReviewOpti
     ? isExactDeleteBranchNameMatch(expectedBranchNameValue, options.confirmBranchName ?? '')
     : true;
 
-  if (preview.safeDeleteAllowed) {
-    return {
-      canConfirm: true,
-      confirmMode: 'safe',
-      disabledReason: '',
-      forceDeleteAllowed: Boolean(preview.forceDeleteAllowed),
-      forceDeleteRequiresConfirm,
-      expectedBranchName: expectedBranchNameValue,
-      confirmBranchNameMatches,
-    };
-  }
-
   if (blockingReason) {
     return {
       canConfirm: false,
       confirmMode: 'force',
       disabledReason: blockingReason,
       forceDeleteAllowed: false,
+      forceDeleteRequiresConfirm,
+      expectedBranchName: expectedBranchNameValue,
+      confirmBranchNameMatches,
+    };
+  }
+
+  if (preview.safeDeleteAllowed) {
+    return {
+      canConfirm: true,
+      confirmMode: 'safe',
+      disabledReason: '',
+      forceDeleteAllowed: Boolean(preview.forceDeleteAllowed),
       forceDeleteRequiresConfirm,
       expectedBranchName: expectedBranchNameValue,
       confirmBranchNameMatches,

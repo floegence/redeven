@@ -809,6 +809,28 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('shows directory aggregates as folders in the commit review', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const directory = { section: 'staged', entryKind: 'directory', path: 'src', directoryPath: 'src', descendantFileCount: 12, stagedFileCount: 12 };
+    const dispose = renderChangesPanel(host, {
+      workspace: { repoRootPath: '/repo', summary: { stagedCount: 12 }, staged: [directory], unstaged: [], untracked: [], conflicted: [] },
+      workspacePages: { staged: { items: [directory], totalCount: 1, scopeFileCount: 12, nextOffset: 1, hasMore: false, loading: false, error: '', initialized: true } },
+      selectedSection: 'staged', commitMessage: 'fix: ship directory',
+    });
+    try {
+      const button = Array.from(host.querySelectorAll('button')).find(node => node.textContent?.includes('Commit...'))!;
+      button.click();
+      await flush();
+      const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+      expect(dialog.textContent).toContain('12 files');
+      const row = dialog.querySelector('tbody tr')!;
+      expect(row.textContent).toContain('12 files');
+      expect(row.textContent).not.toContain('Unknown');
+      expect(dialog.textContent).not.toContain('+0');
+    } finally { dispose(); }
+  });
+
   it('describes partially loaded staged snapshots in the commit dialog', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1164,6 +1186,25 @@ describe('GitChangesPanel interactions', () => {
     } finally {
       dispose();
     }
+  });
+
+  it.each(['staged', 'conflicted'] as const)('shows scoped file counts and breadcrumbs for %s folders', section => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onNavigateDirectory = vi.fn();
+    const dispose = renderChangesPanel(host, {
+      selectedSection: section,
+      workspacePages: { [section]: { initialized: true, loading: false, error: '', hasMore: false, nextOffset: 1, totalCount: 1, scopeFileCount: 3, directoryPath: 'src', breadcrumbs: [{ label: 'repo', path: '' }, { label: 'src', path: 'src' }], items: [{ section, entryKind: 'directory', directoryPath: 'src/nested', path: 'src/nested', descendantFileCount: 3 }] } },
+      onNavigateDirectory,
+      onBulkAction: vi.fn(),
+    });
+    try {
+      expect(host.textContent).toContain('3 files');
+      const root = Array.from(host.querySelectorAll('button')).find(node => node.textContent?.trim() === 'repo');
+      expect(root).toBeTruthy();
+      root!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(onNavigateDirectory).toHaveBeenCalledWith('');
+    } finally { dispose(); }
   });
 
   it('renders breadcrumbs for nested folders and navigates when a directory row is opened', () => {

@@ -2103,7 +2103,8 @@
       "discardFileDescription": "将“{path}”恢复到最后的 Git 状态并删除其未暂存的编辑？该文件的任何暂存快照都将保持不变。",
       "filterPlaceholder": "筛选文件...",
       "filterActive": "已筛选",
-      "showingFiltered": "显示 {visible} / {total} 个文件"
+      "showingFiltered": "显示 {visible} / {total} 个文件",
+      "unstageFolder": "取消暂存此文件夹"
     },
     "commitDialog": {
       "title": "提交已暂存的更改",
@@ -2184,7 +2185,11 @@
       "branchNameCopied": "分支名称已复制",
       "copyBranchNameValue": "复制分支名称 {name}",
       "confirmForceDeleteSuffix": "以确认强制删除",
-      "exactMatchHint": "分支名称必须完全匹配。"
+      "exactMatchHint": "分支名称必须完全匹配。",
+      "primaryWorktree": "此分支正在主工作区中使用。请先将该目录切换到其他分支，再删除此分支。",
+      "lockedWorktree": "此工作区已锁定。请先明确解除锁定，再删除其分支和工作区。",
+      "nestedWorktree": "此工作区内包含另一个已注册的工作区。请先移动或移除嵌套工作区。",
+      "ignoredFilesRemoved": "此工作区内被 Git 忽略的文件也将被永久删除。"
     },
     "notifications": {
       "unavailableTitle": "Git 不可用",
@@ -2313,6 +2318,13 @@
       "checkoutRemoteFirst": "请先在本地检出此分支。",
       "openBranchInWorktreeFirst": "请先在工作树中打开此分支。",
       "unableToVerify": "无法验证分支"
+    },
+    "errors": {
+      "permissionDenied": "你没有执行此 Git 操作的权限。",
+      "scopeChanged": "仓库状态已变化，请刷新并重新检查所选内容。",
+      "resourceLimit": "此 Git 请求超出可用资源，请缩小范围或等待其他操作完成后再试。",
+      "outcomeUnknown": "无法确认操作结果，请先刷新仓库，再决定是否重试。",
+      "requestRejected": "Git 拒绝了此请求，请检查仓库状态和所选操作。"
     }
   },
   "terminal": {

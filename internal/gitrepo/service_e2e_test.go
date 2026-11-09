@@ -1300,3 +1300,80 @@ func TestE2E_GitRepoRPC_MergeBranch(t *testing.T) {
 		t.Fatalf("HeadCommit=%q, want %q", mergeResp.HeadCommit, compare.Commit)
 	}
 }
+
+func TestE2E_GitRepoRPC_DeleteWorktreeCreatedInsideMainDirectory(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	runGitFixture(t, fixture.Root, "branch", "-m", "main")
+	worktree := filepath.Join(fixture.Root, ".worktrees", "feature")
+	runGitFixture(t, fixture.Root, "worktree", "add", "-b", "feature/from-main", worktree, "main")
+	writeFixtureFile(t, fixture.Root, "keep.txt", []byte("primary user data\n"))
+	svc := NewService(filepath.Dir(fixture.Root))
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+	payload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_PREVIEW_DELETE, mustMarshalJSON(t, previewDeleteBranchReq{RepoRootPath: fixture.Root, Name: "feature/from-main"}))
+	if err != nil || rpcErr != nil {
+		t.Fatalf("preview: %v %+v", err, rpcErr)
+	}
+	var preview previewDeleteBranchResp
+	if err := json.Unmarshal(payload, &preview); err != nil {
+		t.Fatal(err)
+	}
+	if !preview.SafeDeleteAllowed || !preview.RequiresWorktreeRemoval {
+		t.Fatalf("unexpected preview: %+v", preview)
+	}
+	payload, rpcErr, err = client.Call(context.Background(), TypeID_GIT_DELETE_BRANCH, mustMarshalJSON(t, deleteBranchReq{RepoRootPath: fixture.Root, Name: "feature/from-main", RemoveLinkedWorktree: true, PlanFingerprint: preview.PlanFingerprint}))
+	if err != nil || rpcErr != nil {
+		t.Fatalf("delete: %v %+v", err, rpcErr)
+	}
+	var result deleteBranchResp
+	if err := json.Unmarshal(payload, &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.LinkedWorktreeRemoved || result.HeadRef != "main" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if _, err := os.Lstat(worktree); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("worktree remains: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(fixture.Root, "keep.txt"))
+	if err != nil || string(data) != "primary user data\n" {
+		t.Fatalf("primary user data changed: %q %v", data, err)
+	}
+	if svc.gitRefExists(context.Background(), fixture.Root, "refs/heads/feature/from-main") {
+		t.Fatal("branch remains")
+	}
+}
+
+func TestE2E_GitRepoRPC_PrimaryWorktreeDeletionIsBlocked(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	runGitFixture(t, fixture.Root, "branch", "-m", "main")
+	runGitFixture(t, fixture.Root, "switch", "-c", "feature/primary")
+	worktree := filepath.Join(filepath.Dir(fixture.Root), "main")
+	runGitFixture(t, fixture.Root, "worktree", "add", worktree, "main")
+	svc := NewService(filepath.Dir(fixture.Root))
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+	payload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_PREVIEW_DELETE, mustMarshalJSON(t, previewDeleteBranchReq{RepoRootPath: worktree, Name: "feature/primary"}))
+	if err != nil || rpcErr != nil {
+		t.Fatalf("preview: %v %+v", err, rpcErr)
+	}
+	var preview previewDeleteBranchResp
+	if err := json.Unmarshal(payload, &preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview.BlockingCode != "primary_worktree" || preview.SafeDeleteAllowed || preview.ForceDeleteAllowed {
+		t.Fatalf("unexpected preview: %+v", preview)
+	}
+	_, rpcErr, err = client.Call(context.Background(), TypeID_GIT_DELETE_BRANCH, mustMarshalJSON(t, deleteBranchReq{RepoRootPath: worktree, Name: "feature/primary", DeleteMode: "force", ConfirmBranchName: "feature/primary", RemoveLinkedWorktree: true, DiscardLinkedWorktreeChanges: true, PlanFingerprint: preview.PlanFingerprint}))
+	if err != nil || rpcErr == nil {
+		t.Fatalf("delete should be blocked: %v %+v", err, rpcErr)
+	}
+	if _, err := os.Stat(fixture.Root); err != nil {
+		t.Fatal("primary worktree removed", err)
+	}
+	if !svc.gitRefExists(context.Background(), worktree, "refs/heads/feature/primary") {
+		t.Fatal("branch removed")
+	}
+}

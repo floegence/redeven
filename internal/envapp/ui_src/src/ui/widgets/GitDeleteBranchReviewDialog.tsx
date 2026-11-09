@@ -10,7 +10,15 @@ import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redev
 import { GitDeleteBranchConfirmButton } from './GitDeleteBranchConfirmButton';
 import { GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 import { expectedDeleteBranchName, resolveDeleteBranchReview, trimDeleteBranchReason, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchReviewModel';
-import { useI18n } from '../i18n';
+import { useI18n, type EnvAppTranslationKey } from '../i18n';
+
+const worktreeBlockingKeys: Record<string, EnvAppTranslationKey> = {
+  primary_worktree: 'git.deleteBranchReview.primaryWorktree',
+  locked_worktree: 'git.deleteBranchReview.lockedWorktree',
+  nested_worktree: 'git.deleteBranchReview.nestedWorktree',
+  inaccessible_worktree: 'git.deleteBranch.runtimeCannotInspectWorktree',
+  worktree_identity_changed: 'git.errors.scopeChanged',
+};
 
 export interface GitDeleteBranchReviewDialogProps {
   open: boolean;
@@ -45,8 +53,11 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
   const branchName = () => branchDisplayName(props.branch);
   const preview = () => props.preview ?? null;
   const requiredBranchName = () => expectedDeleteBranchName(props.branch, preview()) || branchName();
-  const blockingReason = () => trimDeleteBranchReason(preview()?.blockingReason);
-  const forceDeleteReason = () => trimDeleteBranchReason(preview()?.forceDeleteReason);
+  const blockingReason = () => {
+    const key = worktreeBlockingKeys[preview()?.blockingCode ?? ''];
+    return key ? i18n.t(key) : trimDeleteBranchReason(preview()?.blockingReason);
+  };
+  const forceDeleteReason = () => blockingReason() || trimDeleteBranchReason(preview()?.forceDeleteReason);
   const state = () => props.state ?? 'idle';
   const loading = () => state() === 'previewing';
   const deleting = () => state() === 'deleting';
@@ -180,11 +191,11 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
           <Show when={!props.previewError} fallback={<GitStatePane tone="error" message={props.previewError ?? i18n.t('git.deleteBranchReview.reviewFailed')} class="m-4" surface />}>
             <Show when={props.branch && preview()} fallback={<GitStatePane message={i18n.t('git.deleteBranchReview.chooseBranch')} class="m-4" surface />}>
               <div class="flex flex-col gap-3 px-4 pt-2 pb-4">
-                <GitSubtleNote class={props.summaryNoteClass}>
-                  {props.safeSummary}
-                </GitSubtleNote>
+                <Show when={!blockingReason()}>
+                  <GitSubtleNote class={props.summaryNoteClass}>{props.safeSummary}</GitSubtleNote>
+                </Show>
 
-                <Show when={!preview()?.safeDeleteAllowed}>
+                <Show when={!preview()?.safeDeleteAllowed && !blockingReason()}>
                   <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">
                     {preview()?.safeDeleteReason || i18n.t('git.deleteBranchReview.safeDeleteBlocked')}
                   </GitSubtleNote>

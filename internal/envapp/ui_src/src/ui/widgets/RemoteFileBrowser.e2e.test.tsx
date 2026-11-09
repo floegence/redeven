@@ -274,6 +274,8 @@ const mockRpc = vi.hoisted(() => ({
     applyStash: vi.fn(),
     previewDropStash: vi.fn(),
     dropStash: vi.fn(),
+    stageWorkspace: vi.fn(),
+    unstageWorkspace: vi.fn(),
     discardWorkspace: vi.fn(),
     fetchRepo: vi.fn(),
     pullRepo: vi.fn(),
@@ -960,6 +962,9 @@ vi.mock('./GitWorkspace', () => ({
     onSelectCurrentBranch?: () => void;
     onAskFlower?: (request: GitAskFlowerRequest, anchor?: { x: number; y: number }) => void;
     onOpenStash?: (request?: { tab?: 'save' | 'stashes'; repoRootPath?: string; source?: 'header' | 'changes' | 'branch_status' | 'merge_blocker' }) => void;
+    onStageWorkspaceItem?: (item: any) => void;
+    onUnstageWorkspaceItem?: (item: any) => void;
+    onNavigateWorkspaceDirectory?: (path: string) => void;
     onDiscardWorkspaceSection?: (section: 'changes' | 'staged' | 'conflicted') => void;
     onOpenInTerminal?: (request: { path: string; preferredName?: string }) => void;
     onBrowseFiles?: (request: { path: string; preferredName?: string; title?: string }) => void | Promise<void>;
@@ -1023,6 +1028,10 @@ vi.mock('./GitWorkspace', () => ({
         <button type="button" onClick={() => props.onSubviewChange?.('history')}>mock-to-history</button>
         <button type="button" onClick={() => props.onSelectWorkspaceSection?.('staged')}>mock-select-staged</button>
         <button type="button" onClick={() => props.onSelectWorkspaceSection?.('conflicted')}>mock-select-conflicted</button>
+        <button type="button" onClick={() => props.onNavigateWorkspaceDirectory?.('src')}>mock-open-git-directory</button>
+        <button type="button" onClick={() => props.onUnstageWorkspaceItem?.({ section: 'staged', entryKind: 'directory', directoryPath: 'src', path: 'src', descendantFileCount: 2 })}>mock-unstage-directory</button>
+        <button type="button" onClick={() => props.onStageWorkspaceItem?.({ section: 'conflicted', entryKind: 'directory', directoryPath: 'src', path: 'src', descendantFileCount: 2 })}>mock-stage-conflicted-directory</button>
+        <button type="button" onClick={() => props.onStageWorkspaceItem?.({ section: 'conflicted', path: 'src/conflict.txt' })}>mock-stage-conflicted-file</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
         <button type="button" onClick={() => props.onRefresh?.()}>mock-refresh</button>
         <button type="button" onClick={() => props.onDiscardWorkspaceSection?.('changes')}>mock-discard-changes</button>
@@ -1490,6 +1499,8 @@ beforeEach(() => {
     headRef: 'main',
     headCommit: 'abc1234',
   });
+  mockRpc.git.stageWorkspace.mockReset().mockResolvedValue({ repoRootPath: '/workspace/repo', result: { affectedCount: 1, remainingCount: 0 } });
+  mockRpc.git.unstageWorkspace.mockReset().mockResolvedValue({ repoRootPath: '/workspace/repo', result: { affectedCount: 1, remainingCount: 0 } });
   mockRpc.git.getCapabilities.mockReset();
   mockRpc.git.getCapabilities.mockRejectedValue(Object.assign(new Error('not found'), { code: 404 }));
   mockRpc.git.listWorkspacePathStatuses.mockReset();
@@ -5899,6 +5910,55 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it.each([
+    ['mock-unstage-directory', 'unstageWorkspace', { section: 'staged', directoryPath: 'src', paths: undefined }],
+    ['mock-stage-conflicted-directory', 'stageWorkspace', { section: 'conflicted', directoryPath: 'src', paths: undefined }],
+    ['mock-stage-conflicted-file', 'stageWorkspace', { section: 'conflicted', directoryPath: undefined, paths: ['src/conflict.txt'] }],
+  ] as const)('preserves the scope for %s', async (label, operation, expected) => {
+    widgetStateStore.values['widget-1'] = { ...widgetStateStore.values['widget-1'], gitSubviewByEnv: { 'env-1': 'changes' } };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}><RemoteFileBrowser widgetId="widget-1" /></EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush();
+      const button = Array.from(host.querySelectorAll('button')).find(node => node.textContent === label)!;
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      expect(mockRpc.git[operation]).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo', ...expected });
+    } finally { dispose(); }
+  });
+
+  it.each(['staged', 'conflicted'] as const)('keeps directory navigation in the %s section', async section => {
+    widgetStateStore.values['widget-1'] = { ...widgetStateStore.values['widget-1'], gitSubviewByEnv: { 'env-1': 'changes' } };
+    mockRpc.git.getRepoSummary.mockResolvedValue({ repoRootPath: '/workspace/repo', workspaceRevision: 'revision-workspace', workspaceSummary: { stagedCount: 2, conflictedCount: 2 } });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}><RemoteFileBrowser widgetId="widget-1" /></EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush();
+      Array.from(host.querySelectorAll('button')).find(node => node.textContent === `mock-select-${section}`)!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      mockRpc.git.listWorkspacePage.mockClear();
+      Array.from(host.querySelectorAll('button')).find(node => node.textContent === 'mock-open-git-directory')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledWith(expect.objectContaining({ section, directoryPath: 'src' }));
+    } finally { dispose(); }
+  });
+
+  it('explains denied Git operations without exposing raw server details', async () => {
+    mockRpc.git.fetchRepo.mockRejectedValueOnce(new RpcError({ typeId: 1113, code: 403, message: 'private server detail' }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}><RemoteFileBrowser widgetId="widget-1" /></EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush();
+      Array.from(host.querySelectorAll('button')).find(node => node.textContent === 'mock-fetch')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      expect(notificationStore.error).toContainEqual({ title: 'Fetch failed', message: 'You do not have permission to perform this Git operation.' });
+      expect(mockRpc.git.fetchRepo).toHaveBeenCalledTimes(1);
+    } finally { dispose(); }
+  });
+
   it('invalidates and reloads the committed workspace after a failed mutation', async () => {
     widgetStateStore.values['widget-1'] = {
       ...(widgetStateStore.values['widget-1'] ?? {}),
@@ -6489,7 +6549,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(gitWorkspaceRenderStore.snapshots.some((snapshot) => (
-        snapshot.mergePreviewError === 'Failed to review branch merge.'
+        snapshot.mergePreviewError === 'The repository state changed. Refresh and review the selection again.'
         && !snapshot.mergeActionError
       ))).toBe(true);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent === 'mock-confirm-merge-branch')).toBe(false);
@@ -6504,7 +6564,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(gitWorkspaceRenderStore.snapshots.some((snapshot) => (
-        snapshot.deletePreviewError === 'Failed to review branch deletion.'
+        snapshot.deletePreviewError === 'The repository state changed. Refresh and review the selection again.'
         && !snapshot.deleteActionError
       ))).toBe(true);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent === 'mock-confirm-delete-branch')).toBe(false);

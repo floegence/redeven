@@ -122,7 +122,7 @@ export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, act
     'git-browser-interactive cursor-pointer select-none border border-transparent transition-[background-color,border-color,color] duration-150 focus-visible:outline-none';
 
   if (active) {
-    return `${interactiveBase} border-l-[2px] git-browser-selection-row`;
+    return `${interactiveBase} git-browser-selection-row`;
   }
 
   return cn(
@@ -135,7 +135,7 @@ export function gitNavigationItemClass(active: boolean): string {
   const base =
     'git-browser-interactive border border-transparent focus-visible:outline-none';
   return active
-    ? `${base} border-l-2 git-browser-selection-row font-medium`
+    ? `${base} git-browser-selection-row font-medium`
     : `${base} bg-transparent text-muted-foreground hover:text-foreground`;
 }
 

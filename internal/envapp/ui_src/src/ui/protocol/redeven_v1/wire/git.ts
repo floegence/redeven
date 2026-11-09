@@ -396,6 +396,7 @@ export type wire_git_preview_delete_branch_resp = {
   force_delete_requires_confirm: boolean;
   force_delete_reason?: string;
   blocking_reason?: string;
+  blocking_code?: string;
   plan_fingerprint?: string;
 };
 

@@ -2736,13 +2736,14 @@ func TestDeleteBranch_ForceDeletesUnmergedDirtyLinkedWorktreeAndBranch(t *testin
 		context.Background(),
 		repo,
 		deleteBranchOptions{
-			Name:                 compare.Branch,
-			FullName:             "refs/heads/" + compare.Branch,
-			Kind:                 "local",
-			DeleteMode:           string(deleteBranchModeForce),
-			ConfirmBranchName:    compare.Branch,
-			RemoveLinkedWorktree: true,
-			PlanFingerprint:      preview.PlanFingerprint,
+			Name:                         compare.Branch,
+			FullName:                     "refs/heads/" + compare.Branch,
+			Kind:                         "local",
+			DeleteMode:                   string(deleteBranchModeForce),
+			ConfirmBranchName:            compare.Branch,
+			RemoveLinkedWorktree:         true,
+			DiscardLinkedWorktreeChanges: true,
+			PlanFingerprint:              preview.PlanFingerprint,
 		},
 	)
 	if err != nil {

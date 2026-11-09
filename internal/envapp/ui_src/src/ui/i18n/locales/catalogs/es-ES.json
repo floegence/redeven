@@ -2103,7 +2103,8 @@
       "discardFileDescription": "¿Restaurar \"{path}\" al último estado Git y eliminar sus ediciones no preparadas? Cualquier instantánea preparada para este archivo permanecerá intacta.",
       "filterPlaceholder": "Filtrar archivos...",
       "filterActive": "Filtrado",
-      "showingFiltered": "Mostrando {visible} de archivos {total}"
+      "showingFiltered": "Mostrando {visible} de archivos {total}",
+      "unstageFolder": "Quitar carpeta del área de preparación"
     },
     "commitDialog": {
       "title": "Confirmar cambios preparados",
@@ -2184,7 +2185,11 @@
       "branchNameCopied": "Nombre de rama copiado",
       "copyBranchNameValue": "Copie el nombre de la sucursal {name}",
       "confirmForceDeleteSuffix": "para confirmar la eliminación forzada",
-      "exactMatchHint": "El nombre de la sucursal debe coincidir exactamente."
+      "exactMatchHint": "El nombre de la sucursal debe coincidir exactamente.",
+      "primaryWorktree": "Esta rama está activa en el worktree principal. Cambie ese directorio a otra rama antes de eliminar esta rama.",
+      "lockedWorktree": "Este worktree está bloqueado. Desbloquéelo explícitamente antes de eliminar su rama y su worktree.",
+      "nestedWorktree": "Este worktree contiene otro worktree registrado. Primero mueva o elimine el worktree anidado.",
+      "ignoredFilesRemoved": "Los archivos que Git ignora en este worktree también se eliminarán permanentemente."
     },
     "notifications": {
       "unavailableTitle": "Git no disponible",
@@ -2313,6 +2318,13 @@
       "checkoutRemoteFirst": "Extrae primero esta rama localmente.",
       "openBranchInWorktreeFirst": "Abre primero esta rama en un árbol de trabajo.",
       "unableToVerify": "No se pudo verificar la rama"
+    },
+    "errors": {
+      "permissionDenied": "No tienes permiso para realizar esta operación de Git.",
+      "scopeChanged": "El estado del repositorio ha cambiado. Actualiza y vuelve a revisar la selección.",
+      "resourceLimit": "Esta solicitud de Git supera los recursos disponibles. Reduce la selección o espera a que terminen las demás operaciones.",
+      "outcomeUnknown": "No se pudo confirmar el resultado de la operación. Actualiza el repositorio antes de volver a intentarlo.",
+      "requestRejected": "Git ha rechazado esta solicitud. Revisa el estado del repositorio y la operación seleccionada."
     }
   },
   "terminal": {

@@ -24,6 +24,7 @@ type deleteBranchPlan struct {
 	ForceDeleteAllowed              bool
 	ForceDeleteRequiresConfirm      bool
 	ForceDeleteReason               string
+	BlockingCode                    string
 	BlockingReason                  string
 	TargetHeadCommit                string
 	SafeDeleteBaseCommit            string
@@ -44,6 +45,7 @@ type deleteBranchFingerprintPayload struct {
 	ForceDeleteRequiresConfirm  bool                                   `json:"force_delete_requires_confirm"`
 	ForceDeleteReason           string                                 `json:"force_delete_reason"`
 	BlockingReason              string                                 `json:"blocking_reason"`
+	BlockingCode                string                                 `json:"blocking_code"`
 	RequiresWorktreeRemoval     bool                                   `json:"requires_worktree_removal"`
 	RequiresDiscardConfirmation bool                                   `json:"requires_discard_confirmation"`
 	LinkedWorktree              *deleteBranchFingerprintLinkedWorktree `json:"linked_worktree,omitempty"`
@@ -129,6 +131,7 @@ func (s *Service) previewDeleteBranch(ctx context.Context, repo repoContext, nam
 		ForceDeleteRequiresConfirm:  plan.ForceDeleteRequiresConfirm,
 		ForceDeleteReason:           plan.ForceDeleteReason,
 		BlockingReason:              plan.BlockingReason,
+		BlockingCode:                plan.BlockingCode,
 		PlanFingerprint:             plan.PlanFingerprint,
 	}, nil
 }
@@ -167,12 +170,22 @@ func (s *Service) buildDeleteBranchPlan(ctx context.Context, repo repoContext, t
 		TargetHeadCommit:            targetHeadCommit,
 		SafeDeleteBaseCommit:        safeDeleteBaseCommit,
 	}
-	if linkedWorktree != nil && !linkedWorktree.Accessible {
-		plan.BlockingReason = fmt.Sprintf("Linked worktree %s is not accessible from this runtime host.", linkedWorktree.WorktreePath)
+	if linkedWorktree != nil && linkedWorktree.blockingCode != "" {
+		plan.BlockingCode = linkedWorktree.blockingCode
+		plan.BlockingReason = linkedWorktree.blockingReason
+		plan.SafeDeleteAllowed = false
+		plan.SafeDeleteReason = plan.BlockingReason
 		plan.ForceDeleteAllowed = false
 		plan.ForceDeleteReason = plan.BlockingReason
+		plan.RequiresWorktreeRemoval = false
+		plan.RequiresDiscardConfirmation = false
 	}
-	if linkedWorktree != nil && linkedWorktree.Accessible {
+	if linkedWorktree != nil && linkedWorktree.Accessible && plan.BlockingReason == "" {
+		ignored, ignoredErr := s.runtime.RunRead(ctx, linkedWorktree.WorktreePath, nil, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "--no-empty-directory", "-z")
+		if ignoredErr != nil {
+			return deleteBranchPlan{}, ignoredErr
+		}
+		plan.RequiresDiscardConfirmation = plan.RequiresDiscardConfirmation || len(ignored.Stdout) > 0
 		plan.DestructiveWorkspaceFingerprint, err = s.destructiveWorkspaceFingerprint(ctx, linkedWorktree.WorktreePath)
 		if err != nil {
 			return deleteBranchPlan{}, err
@@ -183,26 +196,45 @@ func (s *Service) buildDeleteBranchPlan(ctx context.Context, repo repoContext, t
 }
 
 func (s *Service) readDeleteLinkedWorktreePreview(ctx context.Context, repo repoContext, localRef string, directWorkspaceRead bool) (*gitDeleteLinkedWorktreePreview, error) {
-	bindings, err := s.readWorktreeBindings(ctx, repo.repoRootReal)
+	worktrees, err := s.readWorktrees(ctx, repo.repoRootReal)
 	if err != nil {
 		return nil, err
 	}
-	binding, ok := bindings[localRef]
-	if !ok {
+	var binding *worktreeBinding
+	for index := range worktrees {
+		if worktrees[index].Ref == localRef {
+			binding = &worktrees[index]
+			break
+		}
+	}
+	if binding == nil {
 		return nil, nil
 	}
 	worktreePath := filepath.Clean(binding.Path)
-	if worktreePath == "" || worktreePath == filepath.Clean(repo.repoRootReal) {
+	if worktreePath == filepath.Clean(repo.repoRootReal) {
 		return nil, nil
 	}
-
+	blocked := func(code, reason string, accessible bool) (*gitDeleteLinkedWorktreePreview, error) {
+		return &gitDeleteLinkedWorktreePreview{WorktreePath: worktreePath, Accessible: accessible, blockingCode: code, blockingReason: reason}, nil
+	}
 	identity, err := s.validateRepoRootIdentity(ctx, worktreePath)
 	if err != nil {
-		return &gitDeleteLinkedWorktreePreview{
-			WorktreePath: worktreePath,
-			Accessible:   false,
-			Summary:      gitWorkspaceSummary{},
-		}, nil
+		return blocked("inaccessible_worktree", fmt.Sprintf("Linked worktree %s is not accessible from this runtime host.", worktreePath), false)
+	}
+	if identity.CommonDir != repo.identity.CommonDir {
+		return blocked("worktree_identity_changed", "The worktree repository identity has changed. Review the branch again.", true)
+	}
+	if identity.GitDir == identity.CommonDir {
+		return blocked("primary_worktree", "This branch is checked out in the primary worktree. Switch that directory to another branch before deleting this branch.", true)
+	}
+	if binding.Locked {
+		return blocked("locked_worktree", "This worktree is locked. Unlock it explicitly before deleting its branch and worktree.", true)
+	}
+	for _, other := range worktrees {
+		relative, relErr := filepath.Rel(worktreePath, filepath.Clean(other.Path))
+		if relErr == nil && relative != "." && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative) {
+			return blocked("nested_worktree", "This worktree contains another registered worktree. Move or remove the nested worktree first.", true)
+		}
 	}
 	if directWorkspaceRead {
 		linkedRepo, loadErr := s.loadResolvedRepoContext(ctx, identity)
@@ -286,6 +318,7 @@ func buildDeleteBranchPlanFingerprint(repo repoContext, plan deleteBranchPlan) s
 		ForceDeleteRequiresConfirm:  plan.ForceDeleteRequiresConfirm,
 		ForceDeleteReason:           plan.ForceDeleteReason,
 		BlockingReason:              plan.BlockingReason,
+		BlockingCode:                plan.BlockingCode,
 		RequiresWorktreeRemoval:     plan.RequiresWorktreeRemoval,
 		RequiresDiscardConfirmation: plan.RequiresDiscardConfirmation,
 	}

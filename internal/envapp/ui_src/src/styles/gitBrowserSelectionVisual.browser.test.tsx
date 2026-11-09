@@ -80,7 +80,6 @@ function probe(parent: HTMLElement, className: string, text = 'Selection'): HTML
   Object.assign(element.style, {
     borderStyle: 'solid',
     borderWidth: '1px',
-    borderLeftWidth: '2px',
     padding: '8px',
   });
   parent.appendChild(element);
@@ -172,7 +171,8 @@ describe('Git browser rendered selection contract', () => {
       expect.soft(contrastRatio(getComputedStyle(secondary).color, selectedStyle.backgroundColor), `${preset.name} selected branch metadata`).toBeGreaterThanOrEqual(4.5);
       expect.soft(contrastRatio(getComputedStyle(tableHeader).color, panelBackground), `${preset.name} table header`).toBeGreaterThanOrEqual(4.5);
       expect.soft(contrastRatio(getComputedStyle(selectedTab).color, getComputedStyle(selectedTab).backgroundColor), `${preset.name} selected workspace tab`).toBeGreaterThanOrEqual(4.5);
-      expect.soft(contrastRatio(selectedStyle.borderLeftColor, panelBackground), `${preset.name} selection indicator`).toBeGreaterThanOrEqual(3);
+      expect.soft(selectedStyle.borderLeftColor, `${preset.name} balanced selection border`).toBe(selectedStyle.borderRightColor);
+      expect.soft(selectedStyle.borderLeftWidth, `${preset.name} balanced selection width`).toBe(selectedStyle.borderRightWidth);
       expect.soft(focusStyle.outlineStyle, `${preset.name} focus outline style`).toBe('solid');
       expect.soft(contrastRatio(focusStyle.outlineColor, panelBackground), `${preset.name} focus ring`).toBeGreaterThanOrEqual(3);
       expect.soft(deltaEOK(selectedStyle.backgroundColor, panelBackground), `${preset.name} selected/idle`).toBeGreaterThanOrEqual(0.025);
@@ -247,6 +247,12 @@ describe('Git browser rendered selection contract', () => {
           const selected = host.querySelector<HTMLElement>('[data-git-sidebar-branch-key="refs/heads/feature/git-selection"]');
           expect(current?.textContent, `${themeName} ${width}px current`).toBe('Current');
           expect(selected?.className, `${themeName} ${width}px selected`).toContain('git-browser-selection-row');
+          const selectedStyle = getComputedStyle(selected!);
+          expect(selectedStyle.borderLeftWidth).toBe(selectedStyle.borderRightWidth);
+          expect(selectedStyle.borderLeftColor).toBe(selectedStyle.borderRightColor);
+          if (themeName === 'porcelain-light' && width === 360) {
+            await page.screenshot({ element: host, path: '__screenshots__/git-selection-without-stripes.png' });
+          }
           expect(
             (await page.elementLocator(host).screenshot({ save: false })).length,
             `${themeName} ${width}px screenshot`,

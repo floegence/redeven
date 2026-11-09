@@ -2103,7 +2103,8 @@
       "discardFileDescription": "„{path}“ auf den letzten Git-Status zurücksetzen und die nicht bereitgestellten Änderungen löschen? Jeder bereitgestellte Snapshot für diese Datei bleibt erhalten.",
       "filterPlaceholder": "Dateien filtern...",
       "filterActive": "Gefiltert",
-      "showingFiltered": "Zeigt {visible} von {total}-Dateien an"
+      "showingFiltered": "Zeigt {visible} von {total}-Dateien an",
+      "unstageFolder": "Ordner aus Staging entfernen"
     },
     "commitDialog": {
       "title": "Gestagte Änderungen committen",
@@ -2184,7 +2185,11 @@
       "branchNameCopied": "Zweignamen kopiert",
       "copyBranchNameValue": "Zweignamen kopieren {name}",
       "confirmForceDeleteSuffix": "zum Bestätigen der erzwungenen Löschung",
-      "exactMatchHint": "Zweigname muss genau übereinstimmen."
+      "exactMatchHint": "Zweigname muss genau übereinstimmen.",
+      "primaryWorktree": "Dieser Branch ist im Haupt-Worktree ausgecheckt. Wechseln Sie dort zu einem anderen Branch, bevor Sie diesen Branch löschen.",
+      "lockedWorktree": "Dieser Worktree ist gesperrt. Entsperren Sie ihn ausdrücklich, bevor Sie seinen Branch und Worktree löschen.",
+      "nestedWorktree": "Dieser Worktree enthält einen weiteren registrierten Worktree. Verschieben oder entfernen Sie zuerst den verschachtelten Worktree.",
+      "ignoredFilesRemoved": "Von Git ignorierte Dateien in diesem Worktree werden ebenfalls dauerhaft gelöscht."
     },
     "notifications": {
       "unavailableTitle": "Git nicht verfügbar",
@@ -2313,6 +2318,13 @@
       "checkoutRemoteFirst": "Checken Sie diesen Branch zuerst lokal aus.",
       "openBranchInWorktreeFirst": "Öffnen Sie diesen Branch zuerst in einem Arbeitsbaum.",
       "unableToVerify": "Branch konnte nicht überprüft werden"
+    },
+    "errors": {
+      "permissionDenied": "Sie haben keine Berechtigung für diesen Git-Vorgang.",
+      "scopeChanged": "Der Repository-Zustand hat sich geändert. Aktualisieren Sie die Ansicht und prüfen Sie die Auswahl erneut.",
+      "resourceLimit": "Diese Git-Anfrage überschreitet die verfügbaren Ressourcen. Verkleinern Sie die Auswahl oder warten Sie, bis andere Vorgänge abgeschlossen sind.",
+      "outcomeUnknown": "Das Ergebnis konnte nicht bestätigt werden. Aktualisieren Sie das Repository vor einem erneuten Versuch.",
+      "requestRejected": "Git hat die Anfrage abgelehnt. Prüfen Sie den Repository-Zustand und den ausgewählten Vorgang."
     }
   },
   "terminal": {

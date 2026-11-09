@@ -513,9 +513,9 @@ export function fromWireGitGetStashDetailResponse(resp: wire_git_get_stash_detai
 export function toWireGitSaveStashRequest(req: GitSaveStashRequest): wire_git_save_stash_req {
   return {
     repo_root_path: req.repoRootPath,
-    message: typeof req.message === 'string' ? req.message : undefined,
-    include_untracked: typeof req.includeUntracked === 'boolean' ? req.includeUntracked : undefined,
-    keep_index: typeof req.keepIndex === 'boolean' ? req.keepIndex : undefined,
+    ...(typeof req.message === 'string' ? { message: req.message } : {}),
+    ...(typeof req.includeUntracked === 'boolean' ? { include_untracked: req.includeUntracked } : {}),
+    ...(typeof req.keepIndex === 'boolean' ? { keep_index: req.keepIndex } : {}),
   };
 }
 
@@ -532,7 +532,7 @@ export function toWireGitPreviewApplyStashRequest(req: GitPreviewApplyStashReque
   return {
     repo_root_path: req.repoRootPath,
     id: req.id,
-    remove_after_apply: typeof req.removeAfterApply === 'boolean' ? req.removeAfterApply : undefined,
+    ...(typeof req.removeAfterApply === 'boolean' ? { remove_after_apply: req.removeAfterApply } : {}),
   };
 }
 
@@ -553,8 +553,8 @@ export function toWireGitApplyStashRequest(req: GitApplyStashRequest): wire_git_
   return {
     repo_root_path: req.repoRootPath,
     id: req.id,
-    remove_after_apply: typeof req.removeAfterApply === 'boolean' ? req.removeAfterApply : undefined,
-    plan_fingerprint: typeof req.planFingerprint === 'string' ? req.planFingerprint : undefined,
+    ...(typeof req.removeAfterApply === 'boolean' ? { remove_after_apply: req.removeAfterApply } : {}),
+    ...(typeof req.planFingerprint === 'string' ? { plan_fingerprint: req.planFingerprint } : {}),
   };
 }
 
@@ -587,7 +587,7 @@ export function toWireGitDropStashRequest(req: GitDropStashRequest): wire_git_dr
   return {
     repo_root_path: req.repoRootPath,
     id: req.id,
-    plan_fingerprint: typeof req.planFingerprint === 'string' ? req.planFingerprint : undefined,
+    ...(typeof req.planFingerprint === 'string' ? { plan_fingerprint: req.planFingerprint } : {}),
   };
 }
 
@@ -602,9 +602,9 @@ export function fromWireGitDropStashResponse(resp: wire_git_drop_stash_resp): Gi
 export function toWireGitStageWorkspaceRequest(req: GitStageWorkspaceRequest): wire_git_stage_workspace_req {
   return {
     repo_root_path: req.repoRootPath,
-    section: typeof req.section === 'string' ? req.section : undefined,
-    directory_path: typeof req.directoryPath === 'string' ? req.directoryPath : undefined,
-    paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
+    ...(typeof req.section === 'string' ? { section: req.section } : {}),
+    ...(typeof req.directoryPath === 'string' ? { directory_path: req.directoryPath } : {}),
+    ...(Array.isArray(req.paths) ? { paths: req.paths.map((item) => String(item)) } : {}),
   };
 }
 
@@ -618,9 +618,9 @@ export function fromWireGitStageWorkspaceResponse(resp: wire_git_stage_workspace
 export function toWireGitUnstageWorkspaceRequest(req: GitUnstageWorkspaceRequest): wire_git_unstage_workspace_req {
   return {
     repo_root_path: req.repoRootPath,
-    section: typeof req.section === 'string' ? req.section : undefined,
-    directory_path: typeof req.directoryPath === 'string' ? req.directoryPath : undefined,
-    paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
+    ...(typeof req.section === 'string' ? { section: req.section } : {}),
+    ...(typeof req.directoryPath === 'string' ? { directory_path: req.directoryPath } : {}),
+    ...(Array.isArray(req.paths) ? { paths: req.paths.map((item) => String(item)) } : {}),
   };
 }
 
@@ -634,9 +634,9 @@ export function fromWireGitUnstageWorkspaceResponse(resp: wire_git_unstage_works
 export function toWireGitDiscardWorkspaceRequest(req: GitDiscardWorkspaceRequest): wire_git_discard_workspace_req {
   return {
     repo_root_path: req.repoRootPath,
-    section: typeof req.section === 'string' ? req.section : undefined,
-    directory_path: typeof req.directoryPath === 'string' ? req.directoryPath : undefined,
-    paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
+    ...(typeof req.section === 'string' ? { section: req.section } : {}),
+    ...(typeof req.directoryPath === 'string' ? { directory_path: req.directoryPath } : {}),
+    ...(Array.isArray(req.paths) ? { paths: req.paths.map((item) => String(item)) } : {}),
   };
 }
 
@@ -804,9 +804,9 @@ export function fromWireGitPushRepoResponse(resp: wire_git_push_repo_resp): GitP
 export function toWireGitCheckoutBranchRequest(req: GitCheckoutBranchRequest): wire_git_checkout_branch_req {
   return {
     repo_root_path: req.repoRootPath,
-    name: typeof req.name === 'string' ? req.name : undefined,
-    full_name: typeof req.fullName === 'string' ? req.fullName : undefined,
-    kind: typeof req.kind === 'string' ? req.kind : undefined,
+    ...(typeof req.name === 'string' ? { name: req.name } : {}),
+    ...(typeof req.fullName === 'string' ? { full_name: req.fullName } : {}),
+    ...(typeof req.kind === 'string' ? { kind: req.kind } : {}),
   };
 }
 
@@ -837,9 +837,9 @@ export function fromWireGitSwitchDetachedResponse(resp: wire_git_switch_detached
 export function toWireGitPreviewDeleteBranchRequest(req: GitPreviewDeleteBranchRequest): wire_git_preview_delete_branch_req {
   return {
     repo_root_path: req.repoRootPath,
-    name: typeof req.name === 'string' ? req.name : undefined,
-    full_name: typeof req.fullName === 'string' ? req.fullName : undefined,
-    kind: typeof req.kind === 'string' ? req.kind : undefined,
+    ...(typeof req.name === 'string' ? { name: req.name } : {}),
+    ...(typeof req.fullName === 'string' ? { full_name: req.fullName } : {}),
+    ...(typeof req.kind === 'string' ? { kind: req.kind } : {}),
   };
 }
 
@@ -858,6 +858,7 @@ export function fromWireGitPreviewDeleteBranchResponse(resp: wire_git_preview_de
     forceDeleteAllowed: Boolean(resp?.force_delete_allowed),
     forceDeleteRequiresConfirm: Boolean(resp?.force_delete_requires_confirm),
     forceDeleteReason: typeof resp?.force_delete_reason === 'string' ? resp.force_delete_reason : undefined,
+    blockingCode: typeof resp?.blocking_code === 'string' ? resp.blocking_code : undefined,
     blockingReason: typeof resp?.blocking_reason === 'string' ? resp.blocking_reason : undefined,
     planFingerprint: typeof resp?.plan_fingerprint === 'string' ? resp.plan_fingerprint : undefined,
   };
@@ -866,14 +867,14 @@ export function fromWireGitPreviewDeleteBranchResponse(resp: wire_git_preview_de
 export function toWireGitDeleteBranchRequest(req: GitDeleteBranchRequest): wire_git_delete_branch_req {
   return {
     repo_root_path: req.repoRootPath,
-    name: typeof req.name === 'string' ? req.name : undefined,
-    full_name: typeof req.fullName === 'string' ? req.fullName : undefined,
-    kind: typeof req.kind === 'string' ? req.kind : undefined,
-    delete_mode: typeof req.deleteMode === 'string' ? req.deleteMode : undefined,
-    confirm_branch_name: typeof req.confirmBranchName === 'string' ? req.confirmBranchName : undefined,
+    ...(typeof req.name === 'string' ? { name: req.name } : {}),
+    ...(typeof req.fullName === 'string' ? { full_name: req.fullName } : {}),
+    ...(typeof req.kind === 'string' ? { kind: req.kind } : {}),
+    ...(typeof req.deleteMode === 'string' ? { delete_mode: req.deleteMode } : {}),
+    ...(typeof req.confirmBranchName === 'string' ? { confirm_branch_name: req.confirmBranchName } : {}),
     remove_linked_worktree: Boolean(req.removeLinkedWorktree),
     discard_linked_worktree_changes: Boolean(req.discardLinkedWorktreeChanges),
-    plan_fingerprint: typeof req.planFingerprint === 'string' ? req.planFingerprint : undefined,
+    ...(typeof req.planFingerprint === 'string' ? { plan_fingerprint: req.planFingerprint } : {}),
   };
 }
 
@@ -890,9 +891,9 @@ export function fromWireGitDeleteBranchResponse(resp: wire_git_delete_branch_res
 export function toWireGitPreviewMergeBranchRequest(req: GitPreviewMergeBranchRequest): wire_git_preview_merge_branch_req {
   return {
     repo_root_path: req.repoRootPath,
-    name: typeof req.name === 'string' ? req.name : undefined,
-    full_name: typeof req.fullName === 'string' ? req.fullName : undefined,
-    kind: typeof req.kind === 'string' ? req.kind : undefined,
+    ...(typeof req.name === 'string' ? { name: req.name } : {}),
+    ...(typeof req.fullName === 'string' ? { full_name: req.fullName } : {}),
+    ...(typeof req.kind === 'string' ? { kind: req.kind } : {}),
   };
 }
 
@@ -920,10 +921,10 @@ export function fromWireGitPreviewMergeBranchResponse(resp: wire_git_preview_mer
 export function toWireGitMergeBranchRequest(req: GitMergeBranchRequest): wire_git_merge_branch_req {
   return {
     repo_root_path: req.repoRootPath,
-    name: typeof req.name === 'string' ? req.name : undefined,
-    full_name: typeof req.fullName === 'string' ? req.fullName : undefined,
-    kind: typeof req.kind === 'string' ? req.kind : undefined,
-    plan_fingerprint: typeof req.planFingerprint === 'string' ? req.planFingerprint : undefined,
+    ...(typeof req.name === 'string' ? { name: req.name } : {}),
+    ...(typeof req.fullName === 'string' ? { full_name: req.fullName } : {}),
+    ...(typeof req.kind === 'string' ? { kind: req.kind } : {}),
+    ...(typeof req.planFingerprint === 'string' ? { plan_fingerprint: req.planFingerprint } : {}),
   };
 }
 

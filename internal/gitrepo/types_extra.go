@@ -288,6 +288,8 @@ type previewDeleteBranchReq struct {
 }
 
 type gitDeleteLinkedWorktreePreview struct {
+	blockingCode      string
+	blockingReason    string
 	WorktreePath      string              `json:"worktree_path,omitempty"`
 	Accessible        bool                `json:"accessible"`
 	Summary           gitWorkspaceSummary `json:"summary"`
@@ -309,6 +311,7 @@ type previewDeleteBranchResp struct {
 	ForceDeleteRequiresConfirm  bool                            `json:"force_delete_requires_confirm"`
 	ForceDeleteReason           string                          `json:"force_delete_reason,omitempty"`
 	BlockingReason              string                          `json:"blocking_reason,omitempty"`
+	BlockingCode                string                          `json:"blocking_code,omitempty"`
 	PlanFingerprint             string                          `json:"plan_fingerprint,omitempty"`
 }
 

@@ -3,6 +3,7 @@ package gitrepo
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 )
 
@@ -35,7 +36,7 @@ func (s *Service) stageWorkspacePaths(ctx context.Context, repo repoContext, pat
 }
 
 func (s *Service) stageWorkspace(ctx context.Context, repo repoContext, selection workspaceMutationSelection) (gitWorkspaceMutationResult, error) {
-	selectedItems, normalizedPaths, normalizedDirectoryPath, err := s.resolveWorkspaceMutationScope(ctx, repo, selection, "stage")
+	selectedItems, _, _, err := s.resolveWorkspaceMutationScope(ctx, repo, selection, "stage")
 	if err != nil {
 		return gitWorkspaceMutationResult{}, err
 	}
@@ -43,15 +44,7 @@ func (s *Service) stageWorkspace(ctx context.Context, repo repoContext, selectio
 	if result.MatchedCount == 0 {
 		return result, nil
 	}
-	args := []string{"--literal-pathspecs", "add", "-A"}
-	switch {
-	case len(normalizedPaths) > 0:
-		args = append(args, "--")
-		args = append(args, normalizedPaths...)
-	case normalizedDirectoryPath != "":
-		args = append(args, "--", normalizedDirectoryPath)
-	}
-	if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, args...); err != nil {
+	if err := s.runWorkspacePathMutation(ctx, repo, selectedItems, "add", "-A"); err != nil {
 		return gitWorkspaceMutationResult{}, err
 	}
 	remainingItems, err := s.resolveWorkspaceMutationRemaining(ctx, repo, selection, "stage", selectedItems)
@@ -67,7 +60,7 @@ func (s *Service) unstageWorkspacePaths(ctx context.Context, repo repoContext, p
 }
 
 func (s *Service) unstageWorkspace(ctx context.Context, repo repoContext, selection workspaceMutationSelection) (gitWorkspaceMutationResult, error) {
-	selectedItems, normalizedPaths, normalizedDirectoryPath, err := s.resolveWorkspaceMutationScope(ctx, repo, selection, "unstage")
+	selectedItems, _, _, err := s.resolveWorkspaceMutationScope(ctx, repo, selection, "unstage")
 	if err != nil {
 		return gitWorkspaceMutationResult{}, err
 	}
@@ -75,16 +68,7 @@ func (s *Service) unstageWorkspace(ctx context.Context, repo repoContext, select
 	if result.MatchedCount == 0 {
 		return result, nil
 	}
-	args := []string{"--literal-pathspecs", "reset", "--quiet", "--"}
-	switch {
-	case len(normalizedPaths) > 0:
-		args = append(args, normalizedPaths...)
-	case normalizedDirectoryPath != "":
-		args = append(args, normalizedDirectoryPath)
-	default:
-		args = append(args, ".")
-	}
-	if _, err := s.runtime.RunMutation(ctx, repo.repoRootReal, nil, args...); err != nil {
+	if err := s.runWorkspacePathMutation(ctx, repo, selectedItems, "reset", "--quiet"); err != nil {
 		return gitWorkspaceMutationResult{}, err
 	}
 	remainingItems, err := s.resolveWorkspaceMutationRemaining(ctx, repo, selection, "unstage", selectedItems)
@@ -92,6 +76,34 @@ func (s *Service) unstageWorkspace(ctx context.Context, repo repoContext, select
 		return gitWorkspaceMutationResult{}, err
 	}
 	return buildWorkspaceMutationResult(selection, selectedItems, remainingItems), nil
+}
+
+// Use the resolved section's exact paths, never a broader directory or repository
+// pathspec. A private NUL-delimited file also avoids OS argument-size limits.
+func (s *Service) runWorkspacePathMutation(ctx context.Context, repo repoContext, items []gitWorkspaceChange, args ...string) error {
+	paths, err := normalizeGitPathspecs(workspaceSectionPathspecs(items))
+	if err != nil {
+		return err
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	file, err := os.CreateTemp("", "redeven-git-pathspec-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if _, err := file.WriteString(strings.Join(paths, "\x00") + "\x00"); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	command := append([]string{"--literal-pathspecs"}, args...)
+	command = append(command, "--pathspec-from-file="+file.Name(), "--pathspec-file-nul")
+	_, err = s.runtime.RunMutation(ctx, repo.repoRootReal, nil, command...)
+	return err
 }
 
 func workspaceChangeMatchesWanted(change gitWorkspaceChange, wanted map[string]struct{}) bool {
@@ -568,8 +580,8 @@ func (s *Service) deleteBranch(
 			return nil, errors.New("linked worktree removal must be confirmed before deleting this branch")
 		}
 		args := []string{"worktree", "remove"}
-		if deleteMode == deleteBranchModeForce || plan.RequiresDiscardConfirmation {
-			if deleteMode != deleteBranchModeForce && !req.DiscardLinkedWorktreeChanges {
+		if plan.RequiresDiscardConfirmation {
+			if !req.DiscardLinkedWorktreeChanges {
 				return nil, errors.New("discard confirmation is required for linked worktree changes")
 			}
 			args = append(args, "--force")

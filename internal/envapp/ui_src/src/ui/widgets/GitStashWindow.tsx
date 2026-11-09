@@ -43,7 +43,7 @@ import { stashReviewMatchesTarget, type GitStashReviewState } from '../utils/git
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
-import { gitChangePathClass } from './GitChrome';
+import { gitChangePathClass, gitToneSelectableCardClass, gitSelectedSecondaryTextClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitStashDeleteConfirmDialog } from './GitStashDeleteConfirmDialog';
 import { GitVirtualTable } from './GitVirtualTable';
@@ -231,12 +231,10 @@ function StashListItemCard(props: StashListItemCardProps) {
     <button
       type="button"
       data-git-stash-id={props.stash.id}
+      aria-pressed={props.active}
       class={cn(
         'flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2.5 text-left',
-        'transition-all duration-150 border-l-[3px]',
-        props.active
-          ? 'border-l-[var(--redeven-status-info)] bg-[var(--redeven-status-info-soft)] shadow-sm'
-          : 'border-l-transparent hover:bg-muted/[0.06]',
+        gitToneSelectableCardClass('neutral', props.active),
       )}
       onClick={props.onClick}
       onContextMenu={props.onContextMenu}
@@ -244,7 +242,7 @@ function StashListItemCard(props: StashListItemCardProps) {
     >
       <span class={cn(
         'shrink-0 text-[11px] font-mono font-semibold tabular-nums tracking-tight',
-        props.active ? 'text-[var(--redeven-status-info-foreground)]' : 'text-muted-foreground/60',
+        gitSelectedSecondaryTextClass(props.active),
       )}>
         {stashDisplayIndex(props.stash.id, props.stashes)}
       </span>
@@ -257,7 +255,7 @@ function StashListItemCard(props: StashListItemCardProps) {
         </div>
         <div class={cn(
           'mt-0.5 flex items-center gap-1.5 text-[10px]',
-          props.active ? 'text-muted-foreground/90' : 'text-muted-foreground/70',
+          gitSelectedSecondaryTextClass(props.active),
         )}>
           <GitBranch class="h-3 w-3 shrink-0" aria-hidden="true" />
           <span class="truncate">{props.stash.branchName || i18n.t('uiCopy.git.unknown')}</span>

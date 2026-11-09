@@ -61,7 +61,7 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
   const i18n = useI18n();
   const branchName = () => branchDisplayName(props.branch);
   const preview = () => props.preview ?? null;
-  const worktreeMode = () => props.worktreeMode ?? true;
+  const worktreeMode = () => Boolean(preview()?.requiresWorktreeRemoval) || (props.worktreeMode ?? true);
   const linkedWorktree = () => preview()?.linkedWorktree;
   const requiresWorktreeRemoval = () => Boolean(preview()?.requiresWorktreeRemoval);
   const linkedWorktreePath = () => linkedWorktree()?.worktreePath || i18n.t('git.deleteBranch.linkedWorktreePathFallback');
@@ -71,7 +71,7 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
   const changeImpact = () => {
     if (!requiresWorktreeRemoval()) return i18n.t('git.deleteBranch.noWorktreeOrUncommittedRemoved');
     if (!worktreeAccessible()) return i18n.t('git.deleteBranch.runtimeCannotInspectWorktree');
-    if (!pendingChangeSummary()) return i18n.t('git.deleteBranch.noUncommittedDetected');
+    if (!pendingChangeSummary()) return i18n.t(preview()?.requiresDiscardConfirmation ? 'git.deleteBranchReview.ignoredFilesRemoved' : 'git.deleteBranch.noUncommittedDetected');
     return i18n.t('git.deleteBranch.uncommittedDiscarded', { summary: pendingChangeSummary() });
   };
 

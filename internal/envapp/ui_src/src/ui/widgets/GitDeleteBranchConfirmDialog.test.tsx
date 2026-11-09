@@ -93,6 +93,61 @@ describe('GitDeleteBranchConfirmDialog', () => {
     document.body.innerHTML = '';
   });
 
+  it('honors worktree blockers and hides destructive promises', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onConfirm = vi.fn();
+    const dispose = render(() => (
+      <LayoutProvider><NotificationProvider>
+        <GitDeleteBranchConfirmDialog open
+          branch={{ name: 'feature', kind: 'local' }}
+          preview={{ repoRootPath: '/repo', name: 'feature', requiresWorktreeRemoval: false,
+            requiresDiscardConfirmation: false, safeDeleteAllowed: false,
+            forceDeleteAllowed: false, forceDeleteRequiresConfirm: true,
+            blockingCode: 'primary_worktree', blockingReason: 'private server detail', planFingerprint: 'blocked' }}
+          onClose={() => {}} onConfirm={onConfirm} />
+      </NotificationProvider></LayoutProvider>
+    ), host);
+    try {
+      await flushPositioning();
+      const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement;
+      expect(dialog.textContent).toContain('Switch that directory to another branch');
+      expect(dialog.textContent).not.toContain('private server detail');
+      expect(dialog.textContent).not.toContain('This action will');
+      const button = Array.from(dialog.querySelectorAll('button')).find((node) => controlText(node) === 'Force Delete Branch') as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      button.click();
+      expect(onConfirm).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  });
+
+  it('shows every reviewed worktree effect even from a branch-only entry point', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onConfirm = vi.fn();
+    const dispose = render(() => (
+      <LayoutProvider><NotificationProvider>
+        <GitDeleteBranchConfirmDialog open branch={{ name: 'feature', kind: 'local' }}
+          preview={{ repoRootPath: '/repo', name: 'feature', requiresWorktreeRemoval: true,
+            requiresDiscardConfirmation: true, safeDeleteAllowed: true,
+            forceDeleteAllowed: true, forceDeleteRequiresConfirm: true, planFingerprint: 'reviewed',
+            linkedWorktree: { worktreePath: '/repo/.worktrees/feature', accessible: true,
+              summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 } } }}
+          onClose={() => {}} onConfirm={onConfirm} />
+      </NotificationProvider></LayoutProvider>
+    ), host);
+    try {
+      await flushPositioning();
+      const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement;
+      expect(dialog.textContent).toContain('/repo/.worktrees/feature');
+      expect(dialog.textContent).toContain('Ignored files in this worktree');
+      const button = Array.from(dialog.querySelectorAll('button')).find((node) => controlText(node) === 'Delete Branch and Worktree') as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+      button.click();
+      expect(onConfirm).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ removeLinkedWorktree: true, discardLinkedWorktreeChanges: true, planFingerprint: 'reviewed' }));
+    } finally { dispose(); }
+  });
+
   it('renders the force-delete confirmation tooltip outside the dialog container', async () => {
     const blockedReason = 'Branch is not fully merged into HEAD.';
     const host = document.createElement('div');

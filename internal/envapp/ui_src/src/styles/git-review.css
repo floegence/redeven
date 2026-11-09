@@ -100,14 +100,11 @@
   height: var(--floe-row-height);
   padding: 0 10px;
   border: 0;
-  border-left: 2px solid transparent;
   box-shadow: none;
   font-size: var(--floe-type-control);
   line-height: var(--floe-line-control);
   transition: background-color 120ms ease-out, border-color 120ms ease-out;
 }
-.git-file-row[aria-selected='true'],
-.git-diff-file-table tr[aria-selected='true'] { border-left-color: var(--git-browser-selection-indicator); }
 .git-file-row:focus-visible,
 .git-diff-file-table tr:focus-visible { outline-offset: -2px; }
 .git-file-label {
@@ -181,7 +178,7 @@
 }
 @media (forced-colors: active) {
   .git-file-row[aria-selected='true'],
-  .git-diff-file-table tr[aria-selected='true'] { border-left-color: Highlight; }
+  .git-diff-file-table tr[aria-selected='true'] { outline: 1px solid Highlight; outline-offset: -1px; }
 }
 
 /* Narrow Git review dedicates the surface to files or the selected patch. */

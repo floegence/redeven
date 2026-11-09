@@ -17,8 +17,9 @@ const (
 )
 
 type worktreeBinding struct {
-	Ref  string
-	Path string
+	Ref    string
+	Path   string
+	Locked bool
 }
 
 var errWorktreePorcelainZUnsupported = errors.New("git worktree porcelain-z is unsupported")
@@ -72,6 +73,14 @@ func (s *Service) filterAccessibleWorktreeBindings(ctx context.Context, bindings
 }
 
 func (s *Service) readWorktreeBindings(ctx context.Context, repoRoot string) (map[string]worktreeBinding, error) {
+	worktrees, err := s.readWorktrees(ctx, repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	return worktreeBindings(worktrees), nil
+}
+
+func (s *Service) readWorktrees(ctx context.Context, repoRoot string) ([]worktreeBinding, error) {
 	result, err := s.runtime.RunRead(ctx, repoRoot, nil, "worktree", "list", "--porcelain", "-z")
 	if err != nil {
 		var commandErr *gitruntime.CommandError
@@ -82,11 +91,30 @@ func (s *Service) readWorktreeBindings(ctx context.Context, repoRoot string) (ma
 		}
 		return nil, err
 	}
-	return parseWorktreeBindingsPorcelainZ(result.Stdout)
+	return parseWorktreesPorcelainZ(result.Stdout)
 }
 
 func parseWorktreeBindingsPorcelainZ(out []byte) (map[string]worktreeBinding, error) {
+	worktrees, err := parseWorktreesPorcelainZ(out)
+	if err != nil {
+		return nil, err
+	}
+	return worktreeBindings(worktrees), nil
+}
+
+func worktreeBindings(worktrees []worktreeBinding) map[string]worktreeBinding {
 	result := make(map[string]worktreeBinding)
+	for _, worktree := range worktrees {
+		if worktree.Ref != "" {
+			result[worktree.Ref] = worktree
+		}
+	}
+	return result
+}
+
+func parseWorktreesPorcelainZ(out []byte) ([]worktreeBinding, error) {
+	result := make([]worktreeBinding, 0)
+	refs := make(map[string]bool)
 	pathValue := ""
 	refValue := ""
 	seenHead := false
@@ -106,11 +134,12 @@ func parseWorktreeBindingsPorcelainZ(out []byte) (map[string]worktreeBinding, er
 			return errors.New("malformed git worktree porcelain-z output")
 		}
 		if refValue != "" && pathValue != "" {
-			if _, duplicate := result[refValue]; duplicate {
+			if refs[refValue] {
 				return errors.New("malformed git worktree porcelain-z output")
 			}
-			result[refValue] = worktreeBinding{Ref: refValue, Path: pathValue}
+			refs[refValue] = true
 		}
+		result = append(result, worktreeBinding{Ref: refValue, Path: pathValue, Locked: locked})
 		pathValue = ""
 		refValue = ""
 		seenHead = false

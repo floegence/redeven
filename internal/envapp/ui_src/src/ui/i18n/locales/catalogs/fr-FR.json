@@ -2103,7 +2103,8 @@
       "discardFileDescription": "Restaurer « {path} » au dernier état Git et supprimer ses modifications non planifiées ? Tout instantané intermédiaire pour ce fichier restera intact.",
       "filterPlaceholder": "Filtrer les fichiers...",
       "filterActive": "Filtré",
-      "showingFiltered": "Affichage de {visible} des fichiers {total}"
+      "showingFiltered": "Affichage de {visible} des fichiers {total}",
+      "unstageFolder": "Désindexer le dossier"
     },
     "commitDialog": {
       "title": "Valider les modifications indexées",
@@ -2184,7 +2185,11 @@
       "branchNameCopied": "Nom de branche copié",
       "copyBranchNameValue": "Copier le nom de branche {name}",
       "confirmForceDeleteSuffix": "pour confirmer la suppression forcée",
-      "exactMatchHint": "Le nom de branche doit correspondre exactement."
+      "exactMatchHint": "Le nom de branche doit correspondre exactement.",
+      "primaryWorktree": "Cette branche est utilisée dans le worktree principal. Basculez ce répertoire vers une autre branche avant de la supprimer.",
+      "lockedWorktree": "Ce worktree est verrouillé. Déverrouillez-le explicitement avant de supprimer sa branche et son worktree.",
+      "nestedWorktree": "Ce worktree contient un autre worktree enregistré. Déplacez ou supprimez d’abord le worktree imbriqué.",
+      "ignoredFilesRemoved": "Les fichiers ignorés par Git dans ce worktree seront également supprimés définitivement."
     },
     "notifications": {
       "unavailableTitle": "Git indisponible",
@@ -2313,6 +2318,13 @@
       "checkoutRemoteFirst": "Extrayez d’abord cette branche localement.",
       "openBranchInWorktreeFirst": "Ouvrez d’abord cette branche dans un arbre de travail.",
       "unableToVerify": "Impossible de vérifier la branche"
+    },
+    "errors": {
+      "permissionDenied": "Vous n’avez pas l’autorisation d’effectuer cette opération Git.",
+      "scopeChanged": "L’état du dépôt a changé. Actualisez et vérifiez à nouveau la sélection.",
+      "resourceLimit": "Cette requête Git dépasse les ressources disponibles. Réduisez la sélection ou attendez la fin des autres opérations.",
+      "outcomeUnknown": "Le résultat de l’opération n’a pas pu être confirmé. Actualisez le dépôt avant de réessayer.",
+      "requestRejected": "Git a refusé cette requête. Vérifiez l’état du dépôt et l’opération sélectionnée."
     }
   },
   "terminal": {

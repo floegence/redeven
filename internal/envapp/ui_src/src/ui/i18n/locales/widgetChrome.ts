@@ -207,6 +207,13 @@ export const enUSWidgetChrome = defineDictionary({
     },
   },
   git: {
+    errors: {
+      permissionDenied: "You do not have permission to perform this Git operation.",
+      scopeChanged: "The repository state changed. Refresh and review the selection again.",
+      resourceLimit: "This Git request exceeds the available resources. Narrow the selection or try again after other operations finish.",
+      outcomeUnknown: "The operation result could not be confirmed. Refresh the repository before trying again.",
+      requestRejected: "Git rejected this request. Review the repository state and the selected operation.",
+    },
     workspace: {
       preparingActiveView: 'Preparing the active Git view...',
     },
@@ -364,6 +371,7 @@ export const enUSWidgetChrome = defineDictionary({
       stageFolder: 'Stage Folder',
       stageAll: 'Stage All',
       unstageAll: 'Unstage All',
+      unstageFolder: 'Unstage Folder',
       trackAll: 'Track All',
       commitAction: 'Commit...',
       stashAction: 'Stash...',
@@ -467,6 +475,10 @@ export const enUSWidgetChrome = defineDictionary({
       description: 'Remove this stash entry from the shared stack without applying its changes.',
     },
     deleteBranchReview: {
+      primaryWorktree: "This branch is checked out in the primary worktree. Switch that directory to another branch before deleting this branch.",
+      lockedWorktree: "This worktree is locked. Unlock it explicitly before deleting its branch and worktree.",
+      nestedWorktree: "This worktree contains another registered worktree. Move or remove the nested worktree first.",
+      ignoredFilesRemoved: "Ignored files in this worktree will also be permanently removed.",
       deleting: 'Deleting...',
       copyFailedTitle: 'Copy failed',
       failedToCopyBranchName: 'Failed to copy branch name.',
