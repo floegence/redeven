@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
@@ -46,7 +46,7 @@ await session.run(async () => {
   });
   const context = application.context();
   await context.addInitScript(() => localStorage.setItem('redeven_ui_language_preference', 'en-US'));
-  let page, welcome, serviceID;
+  let page, welcome, opened, serviceID;
   const report = { status: 'running', manifest, token: false, steps: [] };
   const api = async (suffix, method = 'GET', body) => page.evaluate(async ({ suffix, method, body }) => {
     const response = await fetch('/_redeven_proxy/api/managed-web-services' + suffix, { method, credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(15000), headers: { 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -110,9 +110,30 @@ await session.run(async () => {
     console.log('Opening owned service');
     await service.getByRole('button', { name: 'Open', exact: true }).click();
     console.log('Open action clicked');
-    const opened = await waitFor(() => context.pages().find(candidate => candidate !== page && candidate !== welcome && /^https?:/.test(candidate.url())), 30000, 'actual service browser');
+    opened = await waitFor(() => context.pages().find(candidate => candidate !== page && candidate !== welcome && /^https?:/.test(candidate.url())), 30000, 'actual service browser');
     await opened.waitForFunction(() => Boolean(document.body?.innerText.trim()));
     await opened.reload(); await opened.waitForFunction(() => Boolean(document.body?.innerText.trim()));
+    await opened.getByRole('button', { name: 'Continue', exact: true }).click();
+    await opened.getByRole('button', { name: 'Continue', exact: true }).waitFor({ state: 'hidden' });
+    await opened.getByText('Get started', { exact: true }).waitFor();
+    await opened.keyboard.press('Escape');
+    await opened.getByText('Get started', { exact: true }).waitFor({ state: 'hidden' });
+    report.defaultWorkspaceNotice = await opened.getByText('Unable to create default workspace. Use Choose workspace to select a folder.', { exact: true }).count() > 0;
+    await opened.getByRole('button', { name: 'Add workspace', exact: true }).click();
+    const directoryPicker = opened.getByRole('dialog', { name: 'Select Workspace Directory', exact: true });
+    await directoryPicker.waitFor();
+    await directoryPicker.getByRole('button', { name: 'New folder', exact: true }).click();
+    const folderDialog = opened.getByRole('dialog', { name: 'New folder', exact: true });
+    await folderDialog.getByRole('textbox', { name: 'Folder name', exact: true }).fill('acceptance-workspace');
+    await folderDialog.getByRole('button', { name: 'Create', exact: true }).click();
+    await folderDialog.waitFor({ state: 'hidden' });
+    await directoryPicker.getByRole('button', { name: 'Open', exact: true }).click();
+    await directoryPicker.waitFor({ state: 'hidden' });
+    await opened.getByText('acceptance-workspace', { exact: true }).first().waitFor();
+    assert.ok((await stat(path.join(report.receipt.service.workspace_path, 'acceptance-workspace'))).isDirectory());
+    report.steps.push('application onboarding -> select workspace -> create folder on the managed mount');
+    await opened.reload();
+    await opened.getByText('acceptance-workspace', { exact: true }).first().waitFor();
     await opened.screenshot({ path: path.join(evidence, 'product-service-open.png') });
     await opened.close();
     report.steps.push('actual Desktop service window open and reload');
@@ -125,11 +146,13 @@ await session.run(async () => {
     console.error('Product assertion failed', report.error);
     await writeFile(path.join(evidence, 'failure-before-cleanup.json'), JSON.stringify(report, null, 2));
     report.pages = context.pages().map(candidate => candidate.url());
+    if (opened && !opened.isClosed()) { report.application = await opened.locator('body').innerText(); await opened.screenshot({ path: path.join(evidence, 'application-failure.png') }); }
     if (welcome && !welcome.isClosed()) { report.welcome = await welcome.locator('body').innerText(); await welcome.screenshot({path:path.join(evidence, 'welcome-failure.png')}); }
     if (serviceID && page && !page.isClosed()) report.inventory = await api('');
     if (page && !page.isClosed()) { await page.screenshot({ path: path.join(evidence, 'product-failure.png') }); report.visible = await page.locator('body').innerText(); }
     throw error;
   } finally {
+    if (opened && !opened.isClosed()) await opened.close();
     try { await cleanup(); } catch (error) { report.cleanup_error = String(error); report.status = 'failed'; }
     await session.writeEvidence(path.join(evidence, 'product-deployment.json'), { ...report });
     await session.closeElectron(application);
