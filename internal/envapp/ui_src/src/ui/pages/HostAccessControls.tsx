@@ -5,7 +5,7 @@ import { Dialog } from '../primitives/EnvAppModal';
 import { useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { useI18n } from '../i18n';
 import type { HostAccessState } from '../services/hostAccess';
-import { HostAccessFeatureIllustration, HostAccessFeatureMark, HostAccessHelperIllustration, HostAccessPermissionIllustration, HostAccessStateIllustration } from './HostAccessIllustration';
+import { HostAccessFeatureIllustration, HostAccessFeatureMark, HostAccessPermissionIllustration, HostAccessStateIllustration } from './HostAccessIllustration';
 import { SettingRow, SettingsDisclosure, SettingsList } from './settings/SettingsPrimitives';
 import './host-access.css';
 export function HostAccessWelcome(props: {
@@ -118,11 +118,14 @@ function HostAccessRecovery(props: { name?: string; allowed: boolean; busy: bool
     createEffect(() => { if (!expanded() || !props.allowed) setConfirmRestart(false); });
     return <SettingsDisclosure open={expanded()} onOpenChange={setExpanded} class="host-access-recovery" title={i18n.t('hostAccess.permissionHelp')}>
       <SettingsList>
-      <SettingRow class="host-access-recovery-step" resourceIcon={() => <HostAccessHelperIllustration kind="locate" />} title={i18n.t('hostAccess.missingApplication')} description={i18n.t('hostAccess.addApplicationHint', { app: props.name || 'Redeven Desktop Access' })}><Button size="sm" variant="outline" disabled={!canManage() || !props.name} onClick={() => { if (canManage() && props.name) props.onRecovery('reveal_application'); }}>{i18n.t('hostAccess.revealApplication')}</Button></SettingRow>
-      <SettingRow class="host-access-recovery-step" resourceIcon={() => <HostAccessHelperIllustration kind="restart" />} title={i18n.t('hostAccess.changedPermissions')} description={i18n.t('hostAccess.helperRestartHint')}>
-      <Show when={confirmRestart()} fallback={<Button size="sm" variant="outline" disabled={!canManage()} onClick={() => { if (canManage()) setConfirmRestart(true); }}>{i18n.t('hostAccess.applyPermissions')}</Button>}>
-        <p role="alert">{i18n.t('hostAccess.helperRestartConfirm')}</p><div class="host-access-actions"><Button size="sm" variant="ghost" disabled={props.busy} onClick={() => setConfirmRestart(false)}>{i18n.t('common.actions.cancel')}</Button><Button size="sm" disabled={!canManage()} onClick={() => { if (!canManage()) return; props.onRecovery('restart_application'); setConfirmRestart(false); }}>{i18n.t('hostAccess.restartHelper')}</Button></div>
-      </Show></SettingRow>
+      <SettingRow class="host-access-recovery-step" title={i18n.t('hostAccess.missingApplication')}
+        description={i18n.t('hostAccess.addApplicationHint', { app: props.name || 'Redeven Desktop Access' })}
+        control={<Button size="sm" variant="outline" disabled={!canManage() || !props.name} onClick={() => { if (canManage() && props.name) props.onRecovery('reveal_application'); }}>{i18n.t('hostAccess.revealApplication')}</Button>} />
+      <SettingRow class="host-access-recovery-step" title={i18n.t('hostAccess.changedPermissions')}
+        description={i18n.t(confirmRestart() ? 'hostAccess.helperRestartConfirm' : 'hostAccess.helperRestartHint')}
+        control={<Show when={confirmRestart()} fallback={<Button size="sm" variant="outline" disabled={!canManage()} onClick={() => { if (canManage()) setConfirmRestart(true); }}>{i18n.t('hostAccess.applyPermissions')}</Button>}>
+          <div class="host-access-actions"><span class="sr-only" role="alert">{i18n.t('hostAccess.helperRestartConfirm')}</span><Button size="sm" variant="ghost" disabled={props.busy} onClick={() => setConfirmRestart(false)}>{i18n.t('common.actions.cancel')}</Button><Button size="sm" disabled={!canManage()} onClick={() => { if (!canManage()) return; props.onRecovery('restart_application'); setConfirmRestart(false); }}>{i18n.t('hostAccess.restartHelper')}</Button></div>
+        </Show>} />
       </SettingsList>
     </SettingsDisclosure>;
 }
@@ -159,6 +162,7 @@ function HostAccessStatus(props: { state: HostAccessState; ready?: boolean }) {
 }
 
 export function HostAccessManagement(props: {
+    feature: 'applications' | 'desktop';
     state: HostAccessState;
     ready?: boolean;
     compact?: boolean;
@@ -185,13 +189,13 @@ export function HostAccessManagement(props: {
     });
     const commit = async () => {
       const action = confirm();
-      if (!action || !canManage()) return;
+      if (!action || !canManage() || action === 'unconfigured' && props.feature !== 'desktop') return;
       try { await props.onChange(action); setConfirm(undefined); }
       catch { /* The owning panel keeps the failure visible for reconciliation. */ }
     };
     const menuItems = createMemo(() => [
       ...(props.state === 'enabled' && props.ready === false ? [{ id: 'paused', label: i18n.t('hostAccess.pause') }] : []),
-      { id: 'unconfigured', label: i18n.t('hostAccess.remove'), tone: 'danger' as const },
+      ...(props.feature === 'desktop' ? [{ id: 'unconfigured', label: i18n.t('hostAccess.resetDesktop'), tone: 'danger' as const }] : []),
     ]);
     if (props.compact) return <div class="host-access-feature-control">
       {/* IMPORTANT: The compact switch expresses current authority; turning it
@@ -204,11 +208,11 @@ export function HostAccessManagement(props: {
           if (props.state === 'enabled') setConfirm('paused'); else props.onReconfigure();
         }} />
       </Show>
-      <Show when={props.state !== 'unconfigured'}><Dropdown align="end" open={effectiveMenuOpen()} onOpenChange={setMenuOpen} trigger={<MoreHorizontal class="h-4 w-4" />} triggerClass="host-access-feature-more" triggerAriaLabel={`${i18n.t('hostAccess.manage')} · ${props.title}`} disabled={!canManage()} items={menuItems()} onSelect={action => { if (canManage()) setConfirm(action as 'paused' | 'unconfigured'); }} /></Show>
+      <Show when={props.state !== 'unconfigured' && menuItems().length > 0}><Dropdown align="end" open={effectiveMenuOpen()} onOpenChange={setMenuOpen} trigger={<MoreHorizontal class="h-4 w-4" />} triggerClass="host-access-feature-more" triggerAriaLabel={`${i18n.t('hostAccess.manage')} · ${props.title}`} disabled={!canManage()} items={menuItems()} onSelect={action => { if (canManage() && (action === 'paused' || action === 'unconfigured' && props.feature === 'desktop')) setConfirm(action); }} /></Show>
       <Dialog open={presented() && Boolean(confirm())} onOpenChange={open => { if (!open && !props.busy) setConfirm(undefined); }}
-        closeLabel={i18n.t('common.actions.close')} title={i18n.t(confirm() === 'paused' ? 'hostAccess.pauseTitle' : 'hostAccess.removeTitle')}
-        footer={<><Button variant="ghost" disabled={props.busy} onClick={() => setConfirm(undefined)}>{i18n.t('common.actions.cancel')}</Button><Button variant="destructive" disabled={!canManage()} onClick={() => void commit()}>{i18n.t(confirm() === 'paused' ? 'hostAccess.pause' : 'hostAccess.remove')}</Button></>}>
-        <p class="host-access-confirm-target">{props.title}</p><p class="text-sm text-muted-foreground">{i18n.t(confirm() === 'paused' ? 'hostAccess.pauseHint' : 'hostAccess.removeHint')}</p>
+        closeLabel={i18n.t('common.actions.close')} title={i18n.t(confirm() === 'paused' ? 'hostAccess.pauseTitle' : 'hostAccess.resetDesktopTitle')}
+        footer={<><Button variant="ghost" disabled={props.busy} onClick={() => setConfirm(undefined)}>{i18n.t('common.actions.cancel')}</Button><Button variant="destructive" disabled={!canManage()} onClick={() => void commit()}>{i18n.t(confirm() === 'paused' ? 'hostAccess.pause' : 'hostAccess.resetDesktopConfirm')}</Button></>}>
+        <p class="host-access-confirm-target">{props.title}</p><p class="text-sm text-muted-foreground">{i18n.t(confirm() === 'paused' ? 'hostAccess.pauseHint' : 'hostAccess.resetDesktopHint')}</p>
         <Show when={props.error}><p role="alert" class="host-app-error">{props.error}</p></Show>
       </Dialog>
     </div>;
@@ -217,9 +221,9 @@ export function HostAccessManagement(props: {
   <Show when={confirm()} fallback={<div class="host-access-actions">
    <Show when={props.state !== 'enabled' || props.ready === false}><Button variant="outline" disabled={!canManage()} onClick={() => { if (canManage()) props.onReconfigure(); }}>{i18n.t(props.state === 'paused' ? 'hostAccess.resume' : props.state === 'unconfigured' ? 'hostAccess.setup' : 'hostAccess.continue')}</Button></Show>
    <Show when={props.state === 'enabled'}><Button variant="outline" disabled={!canManage()} onClick={() => { if (canManage()) setConfirm('paused'); }}>{i18n.t('hostAccess.pause')}</Button></Show>
-   <Show when={props.state !== 'unconfigured'}><Button variant="ghost" disabled={!canManage()} onClick={() => { if (canManage()) setConfirm('unconfigured'); }}>{i18n.t('hostAccess.remove')}</Button></Show>
-  </div>}>{action => <div class="host-access-confirm" role="alert"><div class="host-access-state-summary"><HostAccessStateIllustration state={action() === 'paused' ? 'paused' : 'remove'} /><h3>{i18n.t(action() === 'paused' ? 'hostAccess.pauseTitle' : 'hostAccess.removeTitle')}</h3></div><p>{i18n.t(action() === 'paused' ? 'hostAccess.pauseHint' : 'hostAccess.removeHint')}</p><div class="host-access-actions">
-   <Button variant="ghost" disabled={props.busy} onClick={() => setConfirm(undefined)}>{i18n.t('common.actions.cancel')}</Button><Button variant="destructive" disabled={!canManage()} onClick={() => void commit()}>{i18n.t(action() === 'paused' ? 'hostAccess.pause' : 'hostAccess.remove')}</Button>
+   <Show when={props.feature === 'desktop' && props.state !== 'unconfigured'}><Button variant="ghost" disabled={!canManage()} onClick={() => { if (canManage()) setConfirm('unconfigured'); }}>{i18n.t('hostAccess.resetDesktop')}</Button></Show>
+  </div>}>{action => <div class="host-access-confirm" role="alert"><div class="host-access-state-summary"><HostAccessStateIllustration state={action() === 'paused' ? 'paused' : 'remove'} /><h3>{i18n.t(action() === 'paused' ? 'hostAccess.pauseTitle' : 'hostAccess.resetDesktopTitle')}</h3></div><p>{i18n.t(action() === 'paused' ? 'hostAccess.pauseHint' : 'hostAccess.resetDesktopHint')}</p><div class="host-access-actions">
+   <Button variant="ghost" disabled={props.busy} onClick={() => setConfirm(undefined)}>{i18n.t('common.actions.cancel')}</Button><Button variant="destructive" disabled={!canManage()} onClick={() => void commit()}>{i18n.t(action() === 'paused' ? 'hostAccess.pause' : 'hostAccess.resetDesktopConfirm')}</Button>
   </div></div>}</Show>
  </section>;
 }

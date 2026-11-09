@@ -229,37 +229,55 @@ func TestHostAccessPauseSurvivesServerRestart(t *testing.T) {
 	}
 }
 
-func TestHostAccessDesktopRemovalKeepsApplicationsAndSharedPermissions(t *testing.T) {
-	path := writeTestConfig(t)
-	if _, err := config.Update(path, func(cfg *config.Config) error {
-		cfg.HostAccess = &config.HostAccessConfig{Applications: "enabled", Desktop: "enabled"}
-		cfg.RemoteDesktop = &config.RemoteDesktopConfig{LastDisplayID: "monitor", Unattended: true}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	backend := &hostAccessBackend{ready: true}
-	desktop := remotedesktop.New(t.TempDir(), nil, nil)
-	defer desktop.Close()
-	server := &Server{configPath: path, hostApps: backend, remoteDesktop: desktop, resolveSessionMeta: resolveMetaForTest("ch_access", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
-	r := httptest.NewRequest(http.MethodPut, remoteDesktopAPI+"/access", strings.NewReader(`{"state":"unconfigured"}`))
-	r.Header.Set("Origin", envOriginWithChannel("ch_access"))
-	w := httptest.NewRecorder()
-	server.handleRemoteDesktopAPI(w, r)
-	if w.Code != http.StatusOK {
-		t.Fatal(w.Code, w.Body.String())
-	}
-	saved, err := config.Load(path)
-	if err != nil || saved.RemoteDesktop != nil || saved.HostAccess.Applications != "enabled" || saved.HostAccess.Desktop != "unconfigured" {
-		t.Fatal(saved, err)
-	}
-	if len(backend.enabled) != 0 || backend.calls != 0 || !backend.ready {
-		t.Fatal("desktop removal changed application capability")
-	}
-	if err := server.initializeHostAccess(context.Background(), "alice"); err != nil {
-		t.Fatal(err)
-	}
-	if backend.probes != 0 {
-		t.Fatal("removal caused capability-based reenable")
+func TestHostAccessDesktopPauseAndResetHaveDistinctPreferenceEffects(t *testing.T) {
+	for _, state := range []string{"paused", "unconfigured"} {
+		t.Run(state, func(t *testing.T) {
+			path := writeTestConfig(t)
+			preferences := config.RemoteDesktopConfig{LastDisplayID: "monitor", ApprovalPreferenceSet: true, Unattended: false}
+			if _, err := config.Update(path, func(cfg *config.Config) error {
+				cfg.HostAccess = &config.HostAccessConfig{Applications: "enabled", Desktop: "enabled"}
+				cfg.RemoteDesktop = &preferences
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			backend := &hostAccessBackend{ready: true}
+			desktop := remotedesktop.New(t.TempDir(), nil, nil)
+			defer desktop.Close()
+			server := &Server{configPath: path, hostApps: backend, remoteDesktop: desktop, resolveSessionMeta: resolveMetaForTest("ch_access", session.Meta{UserPublicID: "alice", CanRead: true, CanWrite: true, CanExecute: true})}
+			r := httptest.NewRequest(http.MethodPut, remoteDesktopAPI+"/access", strings.NewReader(`{"state":"`+state+`"}`))
+			r.Header.Set("Origin", envOriginWithChannel("ch_access"))
+			w := httptest.NewRecorder()
+			server.handleRemoteDesktopAPI(w, r)
+			if w.Code != http.StatusOK {
+				t.Fatal(w.Code, w.Body.String())
+			}
+			saved, err := config.Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if saved.HostAccess.Applications != "enabled" || saved.HostAccess.Desktop != state {
+				t.Fatal(saved.HostAccess)
+			}
+			if state == "paused" {
+				if saved.RemoteDesktop == nil || *saved.RemoteDesktop != preferences || saved.RemoteDesktop.RememberApproval() {
+					t.Fatal("pause must retain display and explicit approval preferences", saved.RemoteDesktop)
+				}
+			} else if saved.RemoteDesktop != nil || !saved.RemoteDesktop.RememberApproval() {
+				t.Fatal("reset must restore display and approval defaults", saved.RemoteDesktop)
+			}
+			if len(backend.enabled) != 0 || backend.calls != 0 || !backend.ready {
+				t.Fatal("desktop change affected application capability")
+			}
+			if _, err := desktop.Create(context.Background(), "alice", remotedesktop.CreateRequest{Mode: "view"}, false); err != remotedesktop.ErrForbidden {
+				t.Fatal("desktop access remained enabled", err)
+			}
+			if err := server.initializeHostAccess(context.Background(), "alice"); err != nil {
+				t.Fatal(err)
+			}
+			if backend.probes != 0 {
+				t.Fatal("disabled access caused capability-based reenable")
+			}
+		})
 	}
 }

@@ -3,7 +3,7 @@ type: Interaction Contract
 title: Remote desktop connection launcher
 tags: [desktop, applications, interaction, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -14,7 +14,7 @@ Host Applications separates connection, setup and feature management. Access set
 - Connection omits environment names and completed grants. Show a display selector only for multiple displays, visible control/view-only choices and one connect action. Settings replaces connection. Viewer/SSH requests retain host identity.
 - Onboarding SVGs distinguish one window from the whole desktop; settings uses corresponding compact marks. Localized text carries meaning. Theme-aware artwork supports reduced motion/forced colors.
 - Setup shows only missing grants, naming screen/input purpose before OS permission names. View-only requires no input grant. Settings separates system-permission management and explains shared scope.
-- Enabled features offer pause/removal; paused features resume/removal; unconfigured features setup; missing prerequisites completion. Remove then set up to reconfigure. Confirm affected connections. Refresh changes no intent and opens no viewer. Local settings explains that ordinary app launch needs no capture/input grant.
+- Enabled features offer pause; paused features resume; unconfigured features setup; missing prerequisites completion. Only desktop offers Reset desktop settings: confirmation names its saved display and approval-reuse defaults, disconnection and return to setup. Application access has no redundant removal. Refresh changes no intent or viewer. Local app launch needs no capture/input grant. Recovery uses icon-free shared rows with trailing actions; restart confirmation replaces the row description and retains explicit admission.
 - Preserve failure diagnostics/retry; cancellation stops only selected setup without reload. Status refresh cannot erase connection failure. Disabling approval reuse requests future confirmation without revoking OS grants.
 - SSH preparation, operation-bound challenge, progress and opening stay in one dialog. [SSH deployment](remote-desktop-ssh-deployment.md) owns admin scope and credential lifetime. Opening the launcher changes no OS permission.
 - Close/Escape/backdrop retains one preparation operation/subscription and restores progress/input/outcome on reopen. Explicit Cancel rolls back. Dismissal clears credentials/auto-opening and releases pending viewers; completed setup requires Connect. Challenges retain deadlines and require response. Navigation, disposal and Desktop closure cancel owned work.

@@ -107,15 +107,8 @@ it('completes interrupted setup, returns to applications, and keeps management a
  await userEvent.click(page.getByRole('switch', {name:'Remote application windows', exact:true}).element().closest('label')!);
  await expect.poll(()=>state.access).toBe('enabled');
  expect(state.launch).not.toHaveBeenCalled();
- await page.getByRole('button', {name:'Manage this feature · Remote application windows',exact:true}).click();
- await page.getByRole('menuitem', {name:'Remove settings…',exact:true}).click();
- expect(state.access).toBe('enabled');
- await userEvent.click(page.getByRole('button',{name:'Remove settings…',exact:true}));
- await expect.poll(()=>state.access).toBe('unconfigured');
- expect(state.screen&&state.input).toBe(true);
- await userEvent.click(page.getByRole('region',{name:'Remote application windows',exact:true}).getByRole('button',{name:'Set up',exact:true}));
- await userEvent.click(page.getByRole('button',{name:'Enable and view applications',exact:true}));
- await expect.poll(()=>state.access).toBe('enabled');
+ expect(page.getByRole('button', {name:'Manage this feature · Remote application windows',exact:true}).query()).toBeNull();
+ expect(state.save.mock.calls.map(call => call[1])).toEqual(['enabled', 'paused', 'enabled']);
  expect(state.permission).toHaveBeenCalledTimes(2);
  expect(state.launch).not.toHaveBeenCalled();
 });
@@ -149,13 +142,13 @@ it.each([
 it.each(['unconfigured','enabled','paused'] as const)('shows purposeful permissions and %s settings at 320px',async access=>{
  await page.viewport(320,900);await loadEnvAppDictionary('zh-CN');writeStoredLanguagePreference('zh-CN');
  const host=document.createElement('main');host.style.cssText='padding:18px;background:var(--background);color:var(--foreground)';document.body.append(host);
- dispose=render(()=><I18nProvider><HostAccessPermissions screen={access!=='unconfigured'} input={access!=='unconfigured'} needsInput desktop allowed busy={false} onPermission={()=>{}} onRefresh={()=>{}}/><HostAccessManagement state={access} allowed busy={false} onChange={async()=>{}} onReconfigure={()=>{}} /></I18nProvider>,host);
+ dispose=render(()=><I18nProvider><HostAccessPermissions screen={access!=='unconfigured'} input={access!=='unconfigured'} needsInput desktop allowed busy={false} onPermission={()=>{}} onRefresh={()=>{}}/><HostAccessManagement feature="desktop" state={access} allowed busy={false} onChange={async()=>{}} onReconfigure={()=>{}} /></I18nProvider>,host);
  await expect.poll(()=>host.querySelector(`.host-access-state[data-state=${access}]`)).not.toBeNull();
  expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth+1);
  for(const row of host.querySelectorAll('.host-access-permission')){const title=row.querySelector('h3')!.getBoundingClientRect();const visual=row.querySelector('svg')!.getBoundingClientRect();expect(visual.right).toBeLessThanOrEqual(title.left);}
  await page.screenshot({element:host,path:`__screenshots__/host-access-settings-${access}-narrow.png`});
  if(access==='paused'){
-   await userEvent.click(page.getByRole('button',{name:'移除设置…',exact:true}));
+   await userEvent.click(page.getByRole('button',{name:'重置桌面设置…',exact:true}));
    expect(host.querySelector('[data-scene=remove]')).not.toBeNull();
    await page.screenshot({element:host,path:'__screenshots__/host-access-settings-remove-narrow.png'});
    await userEvent.click(page.getByRole('button',{name:'取消',exact:true}));
@@ -261,9 +254,9 @@ it('closes an open feature action menu when Settings changes category or closes'
  const host = document.createElement('main'); document.body.append(host);
  dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
  await page.getByRole('button', {name:'Access settings',exact:true}).click();
- const menu = page.getByRole('button', {name:'Manage this feature · Remote application windows',exact:true});
+ const menu = page.getByRole('button', {name:'Manage this feature · Remote desktop',exact:true});
  await menu.click();
- await expect.element(page.getByRole('menuitem', {name:'Remove settings…',exact:true})).toBeVisible();
+ await expect.element(page.getByRole('menuitem', {name:'Reset desktop settings…',exact:true})).toBeVisible();
  state.openSettings('appearance');
  await expect.element(page.getByRole('menu')).not.toBeInTheDocument();
  state.openSettings('applications');
@@ -277,6 +270,74 @@ it('closes an open feature action menu when Settings changes category or closes'
  expect(state.save).not.toHaveBeenCalled();
  expect(warnings.mock.calls.filter(([message]) => String(message).includes('computations created outside'))).toEqual([]);
  warnings.mockRestore();
+});
+
+it.each(['enabled', 'paused'] as const)('resets only desktop access from %s after explicit confirmation', async access => {
+ await page.viewport(1024, 850); writeStoredLanguagePreference('en-US');
+ state.screen = true; state.input = true; state.access = 'enabled'; state.desktopAccess = access;
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
+ await page.getByRole('button', {name:'Access settings',exact:true}).click();
+ expect(page.getByRole('button', {name:'Manage this feature · Remote application windows',exact:true}).query()).toBeNull();
+ const menu = page.getByRole('button', {name:'Manage this feature · Remote desktop',exact:true});
+ await menu.click();
+ await page.getByRole('menuitem', {name:'Reset desktop settings…',exact:true}).click();
+ const confirmation = page.getByRole('dialog', {name:'Reset remote desktop settings?',exact:true});
+ await expect.element(confirmation).toBeVisible();
+ expect(confirmation.element().textContent).toContain('saved display selection and authorization reuse preference');
+ expect(state.save).not.toHaveBeenCalled();
+ await confirmation.getByRole('button', {name:'Cancel',exact:true}).click();
+ expect(state.desktopAccess).toBe(access); expect(state.save).not.toHaveBeenCalled();
+ await menu.click();
+ await page.getByRole('menuitem', {name:'Reset desktop settings…',exact:true}).click();
+ await confirmation.getByRole('button', {name:'Reset settings',exact:true}).click();
+ await expect.poll(() => state.desktopAccess).toBe('unconfigured');
+ expect(state.save).toHaveBeenCalledExactlyOnceWith('desktop', 'unconfigured');
+ expect(state.access).toBe('enabled'); expect(state.screen && state.input).toBe(true);
+ expect(state.permission).not.toHaveBeenCalled(); expect(state.launch).not.toHaveBeenCalled();
+ await expect.element(page.getByRole('region', {name:'Remote desktop',exact:true}).getByRole('button', {name:'Set up',exact:true})).toBeVisible();
+});
+
+it('offers pause alone when enabled application access needs attention', async () => {
+ await page.viewport(900, 700); writeStoredLanguagePreference('en-US');
+ const change = vi.fn().mockResolvedValue(undefined);
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostAccessFeatureSettings feature="applications" state="enabled" ready={false} allowed busy={false} onChange={change} onReconfigure={() => {}} /></I18nProvider>, host);
+ await page.getByRole('button', {name:'Manage this feature · Remote application windows',exact:true}).click();
+ expect(page.getByRole('menuitem').all()).toHaveLength(1);
+ await page.getByRole('menuitem', {name:'Pause',exact:true}).click();
+ expect(change).not.toHaveBeenCalled();
+ await page.getByRole('dialog', {name:'Pause this feature?',exact:true}).getByRole('button', {name:'Pause',exact:true}).click();
+ expect(change).toHaveBeenCalledExactlyOnceWith('paused');
+});
+
+it.each(SUPPORTED_LOCALES)('keeps the desktop reset confirmation explicit and readable at 320px in %s', async locale => {
+ await page.viewport(320, 900); const dictionary = await loadEnvAppDictionary(locale); writeStoredLanguagePreference(locale);
+ const change = vi.fn().mockResolvedValue(undefined);
+ const [allowed, setAllowed] = createSignal(true);
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostAccessFeatureSettings feature="desktop" state="paused" allowed={allowed()} busy={false} onChange={change} onReconfigure={() => {}} /></I18nProvider>, host);
+ await page.getByRole('button', {name:`${dictionary.hostAccess.manage} · ${dictionary.remoteDesktop.title}`,exact:true}).click();
+ await page.getByRole('menuitem', {name:dictionary.hostAccess.resetDesktop,exact:true}).click();
+ const dialog = page.getByRole('dialog', {name:dictionary.hostAccess.resetDesktopTitle,exact:true});
+ await expect.element(dialog).toBeVisible();
+ await expect.poll(() => getComputedStyle(dialog.element()).opacity).toBe('1');
+ await expect.poll(() => document.getAnimations().filter(animation => animation.playState === 'running').length).toBe(0);
+ expect(dialog.element().textContent).toContain(dictionary.hostAccess.resetDesktopHint);
+ for (const element of [dialog.element(), ...dialog.element().querySelectorAll<HTMLElement>('button, p')]) {
+   expect(element.scrollWidth, element.outerHTML).toBeLessThanOrEqual(element.clientWidth + 1);
+   expect(element.getBoundingClientRect().right).toBeLessThanOrEqual(320);
+   expect(element.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+ }
+ expect((await axe.run(dialog.element(), {runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations).toEqual([]);
+ if (locale === 'zh-CN') await page.screenshot({element:dialog.element(),path:'__screenshots__/host-access-desktop-reset-narrow-zh-CN.png'});
+ const confirm = dialog.getByRole('button', {name:dictionary.hostAccess.resetDesktopConfirm,exact:true}).element() as HTMLButtonElement;
+ setAllowed(false);
+ await expect.element(dialog).not.toBeInTheDocument();
+ confirm.click();
+ expect(change).not.toHaveBeenCalled();
+ setAllowed(true);
+ expect(dialog.query()).toBeNull();
 });
 
 it('shows the current permission and retains completed steps during first application setup', async () => {
@@ -367,13 +428,27 @@ it.each(SUPPORTED_LOCALES)('offers precise helper recovery without restarting th
  await userEvent.click(page.getByRole('button', {name: dictionary.hostAccess.openSystemSettings, exact: true}));
  expect(permission).toHaveBeenLastCalledWith('screen_recording', true);
  await userEvent.click(page.getByText(dictionary.hostAccess.permissionHelp, {exact: true}));
- expect(host.querySelector('[data-scene=locate]')).not.toBeNull();
- expect(host.querySelector('[data-scene=restart]')).not.toBeNull();
+ await expect.poll(() => host.getAnimations({subtree:true}).filter(animation => animation.playState === 'running').length).toBe(0);
+ expect(host.querySelector('.host-access-recovery-step svg')).toBeNull();
+ for (const row of host.querySelectorAll('.host-access-recovery-step')) {
+   expect(row.querySelector('.floe-setting-row__control button')).not.toBeNull();
+   expect(row.querySelector('.floe-setting-row__body')).toBeNull();
+ }
+ const assertRightAligned = () => {
+   for (const row of host.querySelectorAll<HTMLElement>('.host-access-recovery-step')) {
+     const control = row.querySelector<HTMLElement>('.floe-setting-row__control')!;
+     const action = control.querySelector('button:last-child')!;
+     expect(Math.abs(action.getBoundingClientRect().right - (row.getBoundingClientRect().right - parseFloat(getComputedStyle(row).paddingRight)))).toBeLessThan(1);
+     expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+   }
+ };
+ assertRightAligned();
  await userEvent.click(page.getByRole('button', {name: dictionary.hostAccess.revealApplication, exact: true}));
  expect(recovery).toHaveBeenCalledExactlyOnceWith('reveal_application');
  await userEvent.click(page.getByRole('button', {name: dictionary.hostAccess.applyPermissions, exact: true}));
  expect(recovery).toHaveBeenCalledTimes(1);
  expect(host.querySelector('[role=alert]')?.textContent).toBe(dictionary.hostAccess.helperRestartConfirm);
+ assertRightAligned();
  await userEvent.click(page.getByRole('button', {name: dictionary.hostAccess.restartHelper, exact: true}));
  expect(recovery).toHaveBeenLastCalledWith('restart_application');
  for (const element of host.querySelectorAll<HTMLElement>('button, .host-access-recovery, .host-access-recovery-step')) {
@@ -382,6 +457,14 @@ it.each(SUPPORTED_LOCALES)('offers precise helper recovery without restarting th
  }
  expect((await axe.run(host, {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa']}})).violations).toEqual([]);
  if (locale === 'zh-CN') await page.screenshot({element: host, path: '__screenshots__/host-access-helper-recovery-narrow.png'});
+ await page.viewport(1080, 900);
+ await expect.poll(() => host.getAnimations({subtree:true}).filter(animation => animation.playState === 'running').length).toBe(0);
+ assertRightAligned();
+ for (const row of host.querySelectorAll('.host-access-recovery-step')) {
+   const label = row.querySelector('.floe-setting-row__label')!.getBoundingClientRect();
+   const control = row.querySelector('.floe-setting-row__control')!.getBoundingClientRect();
+   expect(control.left).toBeGreaterThan(label.right);
+ }
 });
 
 it('preserves feature intent and refreshes after explicit helper recovery', async () => {

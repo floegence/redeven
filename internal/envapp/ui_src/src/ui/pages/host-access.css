@@ -67,10 +67,8 @@
 .host-access-state[data-state=enabled][data-ready=false]::before{background:var(--redeven-status-warning-foreground);}
 
 
-.host-access-helper-scene{width:72px;height:54px;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
 .host-access-recovery-step button{min-width:0;max-width:100%;white-space:normal;height:auto;min-height:32px;overflow-wrap:anywhere;}
 .host-access-recovery-step button span{min-width:0;white-space:normal;overflow-wrap:anywhere;}
-@media(max-width:380px){.host-access-helper-scene{width:48px;height:38px;}}
 
 
 /* Feature prerequisites precede optional tuning; retain the shared row surface. */
@@ -101,7 +99,5 @@
 
 /* Shared disclosure owns its rounded boundary, keyboard interaction and motion. */
 .host-access-system .host-access-permission-destination,.host-access-system .floe-settings-disclosure__content>p{margin:0;line-height:1.6;}
-.host-access-recovery-step .floe-setting-row__label{align-items:center;}
-.host-access-recovery-step .host-access-helper-scene{flex:none;}
-.host-access-recovery-step [role=alert]{margin:0 0 10px;font-size:var(--floe-type-supporting);line-height:1.6;color:var(--muted-foreground);}
+.host-access-recovery-step .floe-setting-row__control,.host-access-recovery-step .host-access-actions{justify-content:flex-end;}
 .host-access-picture{margin:0 12px 12px;}
