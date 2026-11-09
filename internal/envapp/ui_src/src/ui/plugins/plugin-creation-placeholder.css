@@ -3,60 +3,120 @@
   height: 100%; min-height: 0; overflow: auto; padding: 28px 24px 56px;
   color: var(--muted-foreground); background: var(--redeven-surface-main, var(--background));
 }
-.plugin-creation-placeholder { display: flex; flex-direction: column; align-items: center; width: min(100%, 340px); gap: 12px; margin: auto; }
-/* Four softly lit pieces gather into an open bloom, then loosen again. This is
-   ambient material, not a simulated application or a progress indicator. */
-.plugin-creation-sculpture {
-  --sculpture-ink: var(--info);
-  --sculpture-sage: var(--success);
-  --sculpture-warm: color-mix(in srgb, var(--info) 65%, var(--card));
-  --sculpture-light: var(--redeven-surface-highlight-source);
-  --sculpture-shade: var(--redeven-surface-shadow-source);
-  position: relative; width: 100%; aspect-ratio: 1.32; flex: 0 0 auto;
+.plugin-creation-placeholder {
+  display: flex; flex-direction: column; align-items: center;
+  width: min(100%, 320px); gap: 24px; margin: auto;
+}
+/* Open design materials share the canvas itself. No enclosing paper, panel,
+   shadow or simulated application chrome. The loop never measures progress. */
+.plugin-creation-composition {
+  --composition-ink: color-mix(in srgb, var(--foreground) 84%, var(--background));
+  --composition-muted: color-mix(in srgb, var(--foreground) 18%, var(--background));
+  --composition-accent: color-mix(in srgb, var(--warning) 72%, var(--background));
+  --composition-duration: 4s;
+  --composition-ease: cubic-bezier(.22, 1, .36, 1);
+  position: relative; width: 240px; max-width: 100%; aspect-ratio: 1.5;
   pointer-events: none; user-select: none;
 }
-.plugin-sculpture-halo { position: absolute; inset: 3% 4% 0; border-radius: 50%; background: radial-gradient(ellipse, color-mix(in srgb, var(--sculpture-ink) 9%, transparent), transparent 68%); }
-.plugin-sculpture-shadow { position: absolute; inset: auto 27% 9%; height: 9%; border-radius: 50%; background: color-mix(in srgb, var(--sculpture-ink) 13%, transparent); filter: blur(14px); animation: plugin-sculpture-shadow 14s ease-in-out infinite; }
-.plugin-sculpture-materials { position: absolute; inset: 16% 25% 20%; animation: plugin-sculpture-drift 14s ease-in-out infinite; }
-.plugin-sculpture-petal {
-  --material: var(--sculpture-ink);
-  position: absolute; width: 51%; height: 51%; overflow: hidden;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--material) 20%, var(--sculpture-light)), color-mix(in srgb, var(--material) 76%, var(--sculpture-light)) 58%, color-mix(in srgb, var(--material) 84%, var(--sculpture-shade)));
-  box-shadow: inset 1px 1px 2px color-mix(in srgb, var(--sculpture-light) 65%, transparent), inset -1px -2px 5px color-mix(in srgb, var(--material) 22%, transparent), 0 5px 12px color-mix(in srgb, var(--material) 14%, transparent);
-  animation: plugin-sculpture-unfold 14s cubic-bezier(.45, 0, .2, 1) infinite;
+.plugin-composition-type {
+  position: absolute; left: 11%; top: 7%;
+  color: var(--composition-muted); font-size: 57px; font-weight: 550;
+  line-height: 1; letter-spacing: -.065em;
 }
-.plugin-sculpture-petal i { position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(ellipse at 20% 10%, color-mix(in srgb, var(--sculpture-light) 45%, transparent), transparent 70%); }
-.plugin-sculpture-petal-a { --move-x: -10%; --move-y: -12%; --turn: -12deg; left: 0; top: 0; --petal-shape: 64% 48% 12% 48%; border-radius: var(--petal-shape); transform-origin: bottom right; }
-.plugin-sculpture-petal-b { --material: var(--sculpture-sage); --move-x: 12%; --move-y: -10%; --turn: 10deg; right: 0; top: 0; --petal-shape: 48% 64% 48% 12%; border-radius: var(--petal-shape); transform-origin: bottom left; animation-delay: -.5s; }
-.plugin-sculpture-petal-c { --material: var(--sculpture-warm); --move-x: -12%; --move-y: 10%; --turn: 9deg; left: 0; bottom: 0; --petal-shape: 48% 12% 48% 64%; border-radius: var(--petal-shape); transform-origin: top right; animation-delay: -1s; }
-.plugin-sculpture-petal-d { --material: color-mix(in srgb, var(--sculpture-ink) 60%, var(--sculpture-sage)); --move-x: 10%; --move-y: 12%; --turn: -10deg; right: 0; bottom: 0; --petal-shape: 12% 48% 64% 48%; border-radius: var(--petal-shape); transform-origin: top left; animation-delay: -.7s; }
-.plugin-sculpture-satellite { position: absolute; border-radius: 38%; background: linear-gradient(140deg, color-mix(in srgb, var(--sculpture-light) 65%, var(--sculpture-ink)), color-mix(in srgb, var(--sculpture-ink) 55%, var(--card))); box-shadow: inset 1px 1px 1px color-mix(in srgb, var(--sculpture-light) 65%, transparent), 0 5px 12px color-mix(in srgb, var(--sculpture-ink) 10%, transparent); animation: plugin-sculpture-orbit 14s ease-in-out infinite; }
-.plugin-sculpture-satellite-a { width: 18px; height: 18px; top: 22%; right: 14%; transform: rotate(18deg); }
-.plugin-sculpture-satellite-b { width: 10px; height: 10px; bottom: 28%; left: 15%; border-radius: 50%; animation-delay: -7s; opacity: .75; }
+.plugin-composition-type::after {
+  content: attr(data-specimen); position: absolute; inset: 0;
+  color: var(--composition-ink);
+  animation: plugin-composition-ink var(--composition-duration) var(--composition-ease) infinite;
+}
+.plugin-composition-type::before {
+  content: ''; position: absolute; left: 0; bottom: -12px; width: 26px; height: 3px;
+  border-radius: 2px; background: var(--composition-accent);
+}
+.plugin-composition-palette {
+  position: absolute; display: flex; align-items: center; gap: 5px; left: 61%; top: 23%;
+}
+.plugin-composition-palette i { position: relative; width: 17px; height: 17px; border-radius: 50%; background: var(--composition-muted); }
+.plugin-composition-palette i::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: var(--composition-ink);
+  animation: plugin-composition-swatch var(--composition-duration) ease-in-out infinite;
+}
+.plugin-composition-palette i:nth-child(1)::after { background: var(--composition-muted); }
+.plugin-composition-palette i:nth-child(3)::after { background: var(--composition-accent); }
+.plugin-composition-text {
+  position: absolute; display: flex; flex-direction: column; gap: 7px; left: 12%; top: 70%; width: 29%;
+}
+.plugin-composition-text i { position: relative; height: 3px; border-radius: 2px; background: var(--composition-muted); }
+.plugin-composition-text i:nth-child(2) { width: 82%; }
+.plugin-composition-text i:nth-child(3) { width: 54%; }
+.plugin-composition-text i::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: color-mix(in srgb, var(--foreground) 37%, var(--background));
+  animation: plugin-composition-typeset var(--composition-duration) var(--composition-ease) infinite;
+}
+.plugin-composition-chart {
+  position: absolute; display: flex; align-items: end; gap: 5px; left: 60%; top: 53%; height: 55px;
+}
+.plugin-composition-chart i { position: relative; width: 12px; border-radius: 3px 3px 1px 1px; background: var(--composition-muted); }
+.plugin-composition-chart i::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--composition-ink);
+  animation: plugin-composition-draw var(--composition-duration) var(--composition-ease) infinite;
+}
+.plugin-composition-chart i:nth-child(1) { height: 42%; }
+.plugin-composition-chart i:nth-child(2) { height: 76%; }
+.plugin-composition-chart i:nth-child(3) { height: 57%; }
+.plugin-composition-chart i:nth-child(4) { height: 100%; }
+.plugin-composition-chart i:nth-child(-n+2)::after { background: color-mix(in srgb, var(--foreground) 34%, var(--background)); }
+.plugin-composition-chart i:nth-child(4)::after { background: var(--composition-accent); }
 .plugin-creation-placeholder-caption { display: flex; flex-direction: column; align-items: center; gap: 7px; text-align: center; }
 .plugin-creation-placeholder-state { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; color: var(--foreground); }
 .plugin-creation-placeholder-state i { width: 4px; height: 4px; border-radius: 50%; background: var(--muted-foreground); opacity: .55; }
 .plugin-creation-placeholder-caption p { max-width: 280px; margin: 0; font-size: 11px; line-height: 1.7; text-wrap: balance; }
-.plugin-creation-empty-preview[data-build-state='running'] .plugin-creation-placeholder-state i { background: var(--ring); animation: plugin-sculpture-breathe 2.8s ease-in-out infinite; }
+.plugin-creation-empty-preview[data-build-state='running'] .plugin-creation-placeholder-state i { background: var(--ring); animation: plugin-composition-breathe 1.6s ease-in-out infinite; }
 .plugin-creation-empty-preview[data-build-state='failed'] .plugin-creation-placeholder-state i { background: var(--destructive); opacity: 1; }
 .plugin-creation-placeholder-checks { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 10px; margin-top: -4px; border-radius: 6px; font-size: 11px; cursor: pointer; }
 .plugin-creation-placeholder-checks:hover { background: var(--muted); color: var(--foreground); }
 .plugin-creation-placeholder-checks:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.plugin-creation-atmosphere[data-active='false'] ~ .plugin-creation-placeholder * { animation-play-state: paused; }
-@keyframes plugin-sculpture-unfold { 0%, 100% { border-radius: 36%; transform: translate(var(--move-x), var(--move-y)) rotate(var(--turn)) scale(.86); } 38%, 58% { border-radius: var(--petal-shape); transform: translate(0, 0) rotate(0) scale(1); } }
-@keyframes plugin-sculpture-drift { 0%, 100% { transform: translateY(3px) rotate(-8deg); } 50% { transform: translateY(-5px) rotate(3deg); } }
-@keyframes plugin-sculpture-shadow { 0%, 100% { transform: scale(1); opacity: .8; } 50% { transform: scale(.86); opacity: .5; } }
-@keyframes plugin-sculpture-orbit { 0%, 100% { translate: 0 0; rotate: 0deg; } 50% { translate: 3px -9px; rotate: 18deg; } }
-@keyframes plugin-sculpture-breathe { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
+.plugin-creation-atmosphere[data-active='false'] ~ .plugin-creation-placeholder *,
+.plugin-creation-atmosphere[data-active='false'] ~ .plugin-creation-placeholder *::after { animation-play-state: paused; }
+/* Fixed silhouettes stay readable throughout. Ink is drawn inside them, then
+   softly withdrawn together; no element translates, rotates or scales. */
+@keyframes plugin-composition-ink {
+  0%, 3% { clip-path: inset(0 100% 0 0); opacity: 1; }
+  19%, 76% { clip-path: inset(0); opacity: 1; }
+  91%, 99% { clip-path: inset(0); opacity: 0; }
+  100% { clip-path: inset(0 100% 0 0); opacity: 0; }
+}
+@keyframes plugin-composition-swatch {
+  0%, 10%, 91%, 100% { opacity: 0; }
+  24%, 76% { opacity: 1; }
+}
+@keyframes plugin-composition-typeset {
+  0%, 17% { clip-path: inset(0 100% 0 0); opacity: 1; }
+  33%, 76% { clip-path: inset(0); opacity: 1; }
+  91%, 99% { clip-path: inset(0); opacity: 0; }
+  100% { clip-path: inset(0 100% 0 0); opacity: 0; }
+}
+@keyframes plugin-composition-draw {
+  0%, 24% { clip-path: inset(100% 0 0 0); opacity: 1; }
+  41%, 76% { clip-path: inset(0); opacity: 1; }
+  91%, 99% { clip-path: inset(0); opacity: 0; }
+  100% { clip-path: inset(100% 0 0 0); opacity: 0; }
+}
+@keyframes plugin-composition-breathe { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
 @media (max-width: 720px) {
   .plugin-creation-empty-preview { padding: 20px 24px 32px; }
-  .plugin-creation-placeholder { max-width: 280px; gap: 8px; }
+  .plugin-creation-placeholder { max-width: 280px; gap: 18px; }
+  .plugin-creation-composition { width: 220px; }
+  .plugin-composition-type { font-size: 52px; }
+  .plugin-composition-chart { height: 48px; }
   .plugin-creation-placeholder-checks { min-height: 44px; }
 }
-@media (prefers-reduced-motion: reduce) { .plugin-creation-placeholder * { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .plugin-creation-placeholder *, .plugin-creation-placeholder *::after { animation: none !important; }
+}
 @media (forced-colors: active) {
-  .plugin-creation-placeholder * { animation: none !important; filter: none; box-shadow: none; }
-  .plugin-sculpture-halo, .plugin-sculpture-shadow, .plugin-sculpture-petal i { display: none; }
-  .plugin-sculpture-petal, .plugin-sculpture-satellite { background: CanvasText; }
-  .plugin-sculpture-petal-b, .plugin-sculpture-petal-c { background: Highlight; }
+  .plugin-creation-placeholder *, .plugin-creation-placeholder *::after { animation: none !important; }
+  .plugin-creation-composition { --composition-ink: CanvasText; --composition-muted: GrayText; --composition-accent: Highlight; }
+  .plugin-creation-composition *, .plugin-creation-composition *::after { forced-color-adjust: none; }
 }

@@ -12,17 +12,12 @@ export function PluginCreationPlaceholder(props: { active: boolean; state: 'runn
     <div class="plugin-creation-empty-preview" data-build-state={props.state}>
       <PluginCreationCanvasBackground active={props.active && props.state !== 'failed'} />
       <div class="plugin-creation-placeholder">
-        <div class="plugin-creation-sculpture" aria-hidden="true">
-          <div class="plugin-sculpture-halo" />
-          <div class="plugin-sculpture-shadow" />
-          <div class="plugin-sculpture-materials">
-            <span class="plugin-sculpture-petal plugin-sculpture-petal-a"><i /></span>
-            <span class="plugin-sculpture-petal plugin-sculpture-petal-b"><i /></span>
-            <span class="plugin-sculpture-petal plugin-sculpture-petal-c"><i /></span>
-            <span class="plugin-sculpture-petal plugin-sculpture-petal-d"><i /></span>
-          </div>
-          <span class="plugin-sculpture-satellite plugin-sculpture-satellite-a" />
-          <span class="plugin-sculpture-satellite plugin-sculpture-satellite-b" />
+        <div class="plugin-creation-composition" aria-hidden="true">
+          {/* A typographic specimen is artwork, not product copy. */}
+          <span class="plugin-composition-type" data-specimen="Aa">Aa</span>
+          <span class="plugin-composition-palette"><i /><i /><i /></span>
+          <span class="plugin-composition-text"><i /><i /><i /></span>
+          <span class="plugin-composition-chart"><i /><i /><i /><i /></span>
         </div>
         <div class="plugin-creation-placeholder-caption" role="status" aria-live="polite">
           <span class="plugin-creation-placeholder-state"><i aria-hidden="true" />{i18n.t(label())}</span>

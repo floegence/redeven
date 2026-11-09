@@ -144,34 +144,52 @@ it('animates the empty canvas and pauses it when the workspace or document is hi
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
   const background = host.querySelector<HTMLElement>('.plugin-creation-empty-preview .plugin-creation-atmosphere')!;
   const grid = background.querySelector('span')!;
-  const sculpture = host.querySelector<HTMLElement>('.plugin-creation-sculpture')!;
-  const tile = sculpture.querySelector<HTMLElement>('.plugin-sculpture-petal-a')!;
-  const [animation] = tile.getAnimations();
+  const composition = host.querySelector<HTMLElement>('.plugin-creation-composition')!;
+  expect(getComputedStyle(composition).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  expect(getComputedStyle(composition).boxShadow).toBe('none');
+  expect(getComputedStyle(composition).borderTopWidth).toBe('0px');
+  for (const material of composition.children) {
+    expect(getComputedStyle(material).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(material).boxShadow).toBe('none');
+  }
+  const tile = composition.querySelector<HTMLElement>('.plugin-composition-type')!;
+  const animations = composition.getAnimations({ subtree: true });
+  const [animation] = tile.getAnimations({ subtree: true });
   expect(animation.playState).toBe('running');
   const start = Number(animation.currentTime);
   await expect.poll(() => Number(animation.currentTime)).toBeGreaterThan(start);
-  animation.pause();
-  animation.currentTime = 0;
-  const original = getComputedStyle(tile).transform;
-  const originalShape = getComputedStyle(tile).borderRadius;
-  animation.currentTime = 6000;
-  expect(getComputedStyle(tile).transform).not.toBe(original);
-  expect(getComputedStyle(tile).borderRadius).not.toBe(originalShape);
-  expect(getComputedStyle(tile).backgroundImage).toContain('linear-gradient');
-  const tileRect = tile.getBoundingClientRect(), bounds = sculpture.getBoundingClientRect();
-  expect(tileRect.left).toBeGreaterThanOrEqual(bounds.left);
-  expect(tileRect.right).toBeLessThanOrEqual(bounds.right);
-  animation.play();
+  for (const motion of animations) { motion.pause(); motion.currentTime = 0; }
+  const original = getComputedStyle(tile, '::after').clipPath;
+  const materials = [...composition.querySelectorAll<HTMLElement>('*')];
+  const bounds = materials.map(material => material.getBoundingClientRect().toJSON());
+  // Ink may change, but the entire open composition must remain spatially still.
+  for (const time of [600, 1200, 1800, 2800, 3600, 4000]) {
+    for (const motion of animations) motion.currentTime = time;
+    materials.forEach((material, index) => {
+      expect(material.getBoundingClientRect().toJSON()).toEqual(bounds[index]);
+      expect(getComputedStyle(material).transform).toBe('none');
+      expect(getComputedStyle(material, '::after').transform).toBe('none');
+    });
+  }
+  for (const motion of animations) motion.currentTime = 1800;
+  expect(getComputedStyle(tile, '::after').clipPath).not.toBe(original);
+  expect(getComputedStyle(tile, '::after').opacity).toBe('1');
+  const settled = getComputedStyle(tile, '::after').clipPath;
+  for (const motion of animations) motion.currentTime = 2800;
+  expect(getComputedStyle(tile, '::after').clipPath).toBe(settled);
+  for (const motion of animations) motion.currentTime = 4000;
+  expect(getComputedStyle(tile, '::after').clipPath).toBe(original);
+  for (const motion of animations) motion.play();
   setVisible(false);
   expect(getComputedStyle(grid).animationPlayState).toBe('paused');
-  expect(getComputedStyle(tile).animationPlayState).toBe('paused');
+  expect(getComputedStyle(tile, '::after').animationPlayState).toBe('paused');
   setVisible(true);
   expect(getComputedStyle(grid).animationPlayState).toBe('running');
   const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
   try {
     document.dispatchEvent(new Event('visibilitychange'));
     expect(background.dataset.active).toBe('false');
-    expect(getComputedStyle(tile).animationPlayState).toBe('paused');
+    expect(getComputedStyle(tile, '::after').animationPlayState).toBe('paused');
   } finally {
     hidden.mockRestore();
     document.dispatchEvent(new Event('visibilitychange'));
@@ -184,11 +202,17 @@ it('keeps the canvas static under reduced motion and omits it in forced colors',
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
   await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
   const background = host.querySelector<HTMLElement>('.plugin-creation-empty-preview .plugin-creation-atmosphere')!;
-  const tiles = host.querySelectorAll<HTMLElement>('.plugin-creation-sculpture *, .plugin-creation-atmosphere > span');
-  for (const tile of tiles) expect(getComputedStyle(tile).animationName).toBe('none');
+  const tiles = host.querySelectorAll<HTMLElement>('.plugin-creation-composition *, .plugin-creation-atmosphere > span');
+  for (const tile of tiles) {
+    expect(getComputedStyle(tile).animationName).toBe('none');
+    expect(getComputedStyle(tile, '::after').animationName).toBe('none');
+  }
+  const ink = getComputedStyle(host.querySelector('.plugin-composition-type')!, '::after');
+  expect(ink.clipPath).toBe('none');
+  expect(ink.opacity).toBe('1');
   await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'active' });
   expect(getComputedStyle(background).display).toBe('none');
-  expect(getComputedStyle(host.querySelector('.plugin-sculpture-petal-a')!).animationName).toBe('none');
+  expect(getComputedStyle(host.querySelector('.plugin-composition-type')!, '::after').animationName).toBe('none');
 });
 it('requires confirmation before deleting only the selected draft', async () => {
   const { onBack } = mount();
@@ -673,7 +697,7 @@ it('shows actual failed build stages and bounded command output', async () => {
   mount();
   await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
   await expect.element(page.elementLocator(document.querySelector('.plugin-creation-check-button')!)).toHaveAttribute('data-build-state', 'failed');
-  expect(getComputedStyle(document.querySelector('.plugin-sculpture-petal-a')!).animationPlayState).toBe('paused');
+  expect(getComputedStyle(document.querySelector('.plugin-composition-type')!, '::after').animationPlayState).toBe('paused');
   await page.elementLocator(document.querySelector('.plugin-creation-placeholder-checks')!).click();
   await expect.element(page.getByRole('dialog').getByText('Failed', { exact: true })).toBeVisible();
   await expect.element(page.getByText('Not run', { exact: true })).toBeVisible();

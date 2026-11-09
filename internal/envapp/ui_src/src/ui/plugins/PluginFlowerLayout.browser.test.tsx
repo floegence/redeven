@@ -99,11 +99,11 @@ it.each([
   expect(toolbar.scrollWidth).toBeLessThanOrEqual(toolbar.clientWidth);
   await page.screenshot({ path: `__screenshots__/workspace-${width}-${theme}${locale ? '-'+locale : ''}${started ? '-generating' : ''}.png` });
   if (started && width === 1280) {
-    const animations = host.querySelector('.plugin-creation-sculpture')!.getAnimations({ subtree: true });
+    const animations = host.querySelector('.plugin-creation-composition')!.getAnimations({ subtree: true });
     for (const animation of animations) animation.pause();
-    for (const time of [0, 6000, 11000]) {
+    for (const time of [0, 800, 1800, 3800]) {
       for (const animation of animations) animation.currentTime = time;
-      await page.screenshot({ path: `__screenshots__/workspace-${theme}-sculpture-${time}.png` });
+      await page.screenshot({ path: `__screenshots__/workspace-${theme}-composition-${time}.png` });
     }
     for (const animation of animations) animation.play();
   }
