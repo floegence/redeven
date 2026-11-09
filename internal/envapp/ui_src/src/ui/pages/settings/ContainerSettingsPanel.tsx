@@ -137,6 +137,7 @@ function ContainerServiceSettings(props: { refreshRevision: number; service: Con
   const [serviceConfiguration, setServiceConfiguration] = createSignal<ContainerServiceConfiguration | null>(null);
   const serviceConfigurationTarget = () => props.service;
   const [serviceConfigurationSourceID, setServiceConfigurationSourceID] = createSignal<ContainerServiceConfigurationSourceID>('engine');
+  const selectedSourceDirty = () => dirtySources().has(serviceConfigurationSourceID());
   const [serviceConfigurationMode, setServiceConfigurationMode] = createSignal<ContainerServiceConfigurationSection>('proxy');
   const [serviceConfigurationSecretsVisible, setServiceConfigurationSecretsVisible] = createSignal(false);
   const [serviceConfigurationDrafts, setServiceConfigurationDrafts] = createSignal<Partial<Record<ContainerServiceConfigurationSourceID, ContainerServiceConfigurationDraft>>>({});
@@ -246,10 +247,13 @@ function ContainerServiceSettings(props: { refreshRevision: number; service: Con
         dirtySources().has(source.source_id) && source.source_id !== resetSource ? previous[source.source_id] : configurationDraftFromSource(source),
       ])));
       if (resetSource) { setDirtySources(previous => { const next = new Set(previous); next.delete(resetSource); return next; }); setPendingSource(undefined); }
-      const initialSource = configuration.sources[0];
-      if (initialSource) {
-        setServiceConfigurationSourceID(initialSource.source_id);
-        setServiceConfigurationMode(initialSource.sections[0] ?? 'advanced');
+      // IMPORTANT: Refresh and discard keep the user's source and subsection
+      // when still available. Neither action navigates back to the first tab.
+      const retainedSource = configuration.sources.find(source => source.source_id === serviceConfigurationSourceID());
+      const displayedSource = retainedSource ?? configuration.sources[0];
+      if (displayedSource) {
+        setServiceConfigurationSourceID(displayedSource.source_id);
+        if (!retainedSource || !displayedSource.sections.includes(serviceConfigurationMode())) setServiceConfigurationMode(displayedSource.sections[0] ?? 'advanced');
       }
     } catch (cause) {
       if (requestCurrent()) {
@@ -268,7 +272,7 @@ function ContainerServiceSettings(props: { refreshRevision: number; service: Con
     const service = serviceConfigurationTarget();
     const source = serviceConfigurationSource();
     const draft = serviceConfigurationDraft();
-    if (!service || !source || !draft || !draft.baseRevision || !canSave() || busy()) return;
+    if (!service || !source || !draft || !draft.baseRevision || !selectedSourceDirty() || !canSave() || busy()) return;
     const mode = serviceConfigurationMode();
     const request = {
       engine: service.engine,
@@ -344,7 +348,7 @@ function ContainerServiceSettings(props: { refreshRevision: number; service: Con
       {/* IMPORTANT: The dialog header refreshes inventory and reconciles this
           exact editor; it cannot replace drafts or replay uncertain writes. */}
       <Show when={(serviceConfiguration()?.sources.length ?? 0) > 1}><Tabs class="min-w-0 flex-1" items={(serviceConfiguration()?.sources ?? []).map((source) => ({ id: source.source_id, label: i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLI' : 'containers.services.engineConfiguration'), disabled: !canSave() || busy() || !!review() || serviceConfigurationLoading() }))} activeId={serviceConfigurationSourceID()} onChange={(id) => { if (canSave() && !busy() && !review() && !serviceConfigurationLoading()) selectServiceConfigurationSource(id as ContainerServiceConfigurationSourceID); }} size="md" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} /></Show>
-      <Show when={dirty()}><Button size="sm" variant="ghost" disabled={busy() || uncertain() || !current()} onClick={() => void openServiceConfiguration(props.service, serviceConfigurationSourceID())}>{i18n.t('filePreview.discardChanges')}</Button></Show>
+        <Show when={selectedSourceDirty()}><Button size="sm" variant="ghost" disabled={busy() || uncertain() || !current()} onClick={() => void openServiceConfiguration(props.service, serviceConfigurationSourceID())}>{i18n.t('filePreview.discardChanges')}</Button></Show>
     </header></Show>
     <Show when={uncertain()}><p role="alert">{i18n.t('settings.operationUnknown')}</p></Show>
     <fieldset class="min-w-0 space-y-4" aria-busy={serviceConfigurationLoading()} disabled={!canSave() || busy() || !!review() || serviceConfigurationLoading()}>
@@ -431,7 +435,9 @@ function ContainerServiceSettings(props: { refreshRevision: number; service: Con
     </SettingsSection>}</Show>
     <Show when={operation()}>{value => <p role="status">{i18n.t(`containers.operationStates.${value().state}` as Parameters<typeof i18n.t>[0])}</p>}</Show>
     <Show when={operation()?.error_code}><p role="alert">{operation()?.error_code}: {operation()?.error_message}</p></Show>
-    <Show when={!review() && props.service.configuration.mode === 'local'}><div class="flex flex-wrap justify-end gap-2">
+    {/* IMPORTANT: Idle sources have no commit actions, even when another source
+        has a retained draft. Submission rechecks this same exact-source gate. */}
+    <Show when={!review() && selectedSourceDirty() && props.service.configuration.mode === 'local'}><div class="flex flex-wrap justify-end gap-2">
       <Button variant="outline" disabled={!canSave() || busy() || !serviceConfigurationSourceEditable() || serviceConfigurationLoading()} onClick={() => void submitServiceConfiguration('save')}>{i18n.t('containers.services.save')}</Button>
       <Show when={serviceConfigurationSource()?.apply_modes.includes('save_and_restart')}><Button disabled={!canSave() || busy() || !serviceConfigurationSourceEditable() || !props.service?.capabilities.restart || serviceConfigurationLoading()} onClick={() => void submitServiceConfiguration('save_and_restart')}>{i18n.t('containers.services.saveRestart')}</Button></Show>
     </div></Show>

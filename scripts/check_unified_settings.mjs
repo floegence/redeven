@@ -45,7 +45,7 @@ assert.match(hostAccess, /<SettingRow class="host-access-feature-row"/);
 const picture = read('internal/envapp/ui_src/src/ui/pages/settings/ApplicationPictureSettings.tsx');
 assert.doesNotMatch(picture, /common.actions.save|application-picture-save/);
 assert.match(picture, /useSettingsPresentation\('applications'\)/);
-assert.match(hostAccess, /open=\{presented\(\) && Boolean\(confirm\(\)\)\}/);
+assert.match(hostAccess, /open=\{presented\(\) && confirm\(\)\}/);
 assert.match(hostAccess, /if \(!canManage\(\)\) return/);
 const hostApplications = read('internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.tsx');
 assert.match(hostApplications, /const canLaunch = \(\) => Boolean\(\(!props.settingsOnly \|\| presented\(\)\)/);
@@ -84,6 +84,8 @@ assert.match(read('internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAda
 assert.match(read('internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx'), /subscribeWorkbenchLocalPreferences/);
 const recovery = read('internal/envapp/ui_src/src/ui/pages/settings/ContainerSettingsPanel.tsx');
 assert.match(recovery, /getContainerOperationByRequestID/); assert.doesNotMatch(recovery, /listContainerOperations/);
+assert.match(recovery, /!selectedSourceDirty\(\) \|\| !canSave\(\)/);
+assert.match(recovery, /!review\(\) && selectedSourceDirty\(\)/);
 assert.match(read('internal/envapp/ui_src/src/ui/services/hostApplicationSettingsTarget.ts'), /event\.origin === owner\.origin/);
 
 // IMPORTANT: A retained category cannot retain an actionable popup.

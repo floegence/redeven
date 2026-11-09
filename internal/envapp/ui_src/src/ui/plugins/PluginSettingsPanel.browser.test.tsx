@@ -79,6 +79,11 @@ it.each([390, 1100])('keeps installed connection drafts and exact targets outsid
   await expect.element(destination).toBeVisible();
   await destination.fill('https://unsaved.example.com');
   const original = destination.element();
+  state.connections.mockResolvedValueOnce({ connections: [{ plugin_instance_id: 'instance-0', connector_id: 'workspace-api', transport: 'http', status: 'active', destination: 'https://updated.example.com', revision: 9, scope: 'environment', http_methods: ['GET'], private_prefixes: [] }] });
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect.poll(() => state.connections.mock.calls.length).toBe(2);
+  await expect.element(destination).toHaveValue('https://unsaved.example.com');
+  expect(destination.element()).toBe(original);
   await picker.click(); await page.getByRole('option', { name: 'Documents', exact: true }).click();
   await expect.element(destination).toHaveValue('https://instance-1.example.com');
   state.open('plugins', { resource: pluginInstalledSettingsResource('missing-instance') });
@@ -89,6 +94,16 @@ it.each([390, 1100])('keeps installed connection drafts and exact targets outsid
   expect(destination.element()).toBe(original);
   expect(document.querySelector('[data-plugin-center-view]')).toBeNull();
   expect(state.mutate).not.toHaveBeenCalled();
+  state.mutate.mockResolvedValueOnce({ review: { plugin_instance_id: 'instance-0', connector_id: 'workspace-api', expected_revision: 1, review_id: 'retained-draft-review', scope: 'environment', destination: 'https://unsaved.example.com', http_methods: ['GET'], private_prefixes: [], expires_at: new Date(Date.now() + 3600000).toISOString(), review_expires_at: new Date(Date.now() + 300000).toISOString() } });
+  await page.getByRole('button', { name: 'Review connection', exact: true }).click();
+  await expect.poll(() => state.mutate.mock.calls.length).toBe(1);
+  expect(state.mutate).toHaveBeenCalledWith(expect.objectContaining({ plugin_instance_id: 'instance-0', expected_revision: 1, destination: 'https://unsaved.example.com' }), expect.anything());
+  await expect.poll(() => document.querySelector('[data-connection-review]')).not.toBeNull();
+  const readsBeforeReviewRefresh = state.connections.mock.calls.length;
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect.element(page.getByRole('button', { name: 'Approve connection', exact: true })).toBeVisible();
+  expect(state.connections.mock.calls.length).toBe(readsBeforeReviewRefresh);
+  expect(state.mutate).toHaveBeenCalledTimes(1);
 });
 
 it('requires explicit same-value selection before adopting a replaced author preview', async () => {

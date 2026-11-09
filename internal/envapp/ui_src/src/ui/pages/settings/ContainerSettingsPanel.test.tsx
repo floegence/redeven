@@ -112,7 +112,7 @@ it('retries a failed service discovery without pretending a target exists', asyn
 
 it('retries the initial configuration read without resetting state or submitting defaults', async () => {
   state.configuration.mockRejectedValueOnce(new Error('configuration read failed')); await mount();
-  expect(host.textContent).toContain('configuration read failed'); expect(save().disabled).toBe(true);
+  expect(host.textContent).toContain('configuration read failed'); expect(save()).toBeUndefined();
   sourceRefresh().click(); await settle(); expect(state.configuration).toHaveBeenCalledTimes(2); expect(editor().value).toBe('{"engine":"a"}');
   expect(state.preflight).not.toHaveBeenCalled(); expect(state.create).not.toHaveBeenCalled();
 });
@@ -137,7 +137,7 @@ it('resets only the successfully saved Engine source and retains an unsaved Dock
 
 it('does not use a previous successful operation to resolve a newer save with a lost response', async () => {
   await mount(); edit('{"engine":"first"}'); await review(); run().click(); await settle();
-  const firstRequest = state.create.mock.calls[0][2]; expect(save().disabled).toBe(false);
+  const firstRequest = state.create.mock.calls[0][2]; expect(save()).toBeUndefined();
   edit('{"engine":"second"}'); state.create.mockRejectedValueOnce(new Error('response lost')); await review(); run().click(); await settle();
   const secondRequest = state.create.mock.calls[1][2]; expect(secondRequest).not.toBe(firstRequest); expect(save().disabled).toBe(true);
   expect(host.textContent).toContain('settings.operationUnknown');
@@ -177,7 +177,10 @@ it('discards only the selected source and keeps other unsaved source drafts', as
   await mount(); edit('{"engine":"unsaved"}'); await selectSource('docker_cli'); edit('{"context":"discard-me"}');
   state.configuration.mockResolvedValue(configuration('b'));
   button('filePreview.discardChanges').click(); await settle();
-  expect(editor().value).toBe('{"engine":"unsaved"}'); await selectSource('docker_cli'); expect(editor().value).toBe('{"context":"b","credsStore":"desktop"}');
+  expect(editor().value).toBe('{"context":"b","credsStore":"desktop"}'); expect(save()).toBeUndefined();
+  await selectSource('engine'); expect(editor().value).toBe('{"engine":"unsaved"}');
+  await selectSource('docker_cli');
+  expect(save()).toBeUndefined(); edit('{"context":"after-discard"}');
   await review(); expect(state.preflight).toHaveBeenLastCalledWith(preflight.method, expect.objectContaining({ source_id: 'docker_cli', base_revision: 'cli-b' }));
 });
 
@@ -220,7 +223,7 @@ it('automatically reconciles a disconnected operation by exact ID without consul
   state.operations.mockRejectedValue(new Error('recent list unavailable'));
   await settle();
   expect(state.operation).toHaveBeenCalledExactlyOnceWith('op-a'); expect(state.operations).not.toHaveBeenCalled();
-  expect(save().disabled).toBe(false); expect(state.create).toHaveBeenCalledOnce();
+  expect(save()).toBeUndefined(); expect(state.create).toHaveBeenCalledOnce();
 });
 
 it('does not treat an exact request lookup failure as safe to retry', async () => {
@@ -231,18 +234,18 @@ it('does not treat an exact request lookup failure as safe to retry', async () =
 });
 
 it('rejects a retained container Save after another target is selected', async () => {
- await mount(); const stale=save(); setTarget('missing'); await settle(); stale.click(); await settle(); expect(state.preflight).not.toHaveBeenCalled();
+ await mount(); edit('{"engine":"draft"}'); const stale=save(); setTarget('missing'); await settle(); stale.click(); await settle(); expect(state.preflight).not.toHaveBeenCalled();
 });
 it('invalidates a retained container review after another target is selected', async () => {
- await mount(); await review(); const stale=run(); setTarget('missing'); await settle(); stale.click(); await settle(); expect(state.create).not.toHaveBeenCalled();
+ await mount(); edit('{"engine":"draft"}'); await review(); const stale=run(); setTarget('missing'); await settle(); stale.click(); await settle(); expect(state.create).not.toHaveBeenCalled();
 });
 it('does not create review after delayed preflight loses current target', async () => {
- await mount(); const pending=deferred<typeof preflight>(); state.preflight.mockReturnValueOnce(pending.promise); save().click(); setTarget('missing'); await settle(); pending.resolve(preflight); await settle();
+ await mount(); edit('{"engine":"draft"}'); const pending=deferred<typeof preflight>(); state.preflight.mockReturnValueOnce(pending.promise); save().click(); setTarget('missing'); await settle(); pending.resolve(preflight); await settle();
  expect(host.textContent).not.toContain('containers.actions.run');
 });
 
 it('retires delayed preflight intent after leaving and returning to the same target', async () => {
-  await mount(); const pending = deferred<typeof preflight>(); state.preflight.mockReturnValueOnce(pending.promise);
+  await mount(); edit('{"engine":"draft"}'); const pending = deferred<typeof preflight>(); state.preflight.mockReturnValueOnce(pending.promise);
   save().click(); setTarget('missing'); await settle(); setTarget(service.service_id); await settle();
   pending.resolve(preflight); await settle();
   expect(button('containers.actions.run')).toBeUndefined(); expect(state.create).not.toHaveBeenCalled();
@@ -267,6 +270,6 @@ for (const retirement of ['category', 'closed'] as const) it(`settles admitted c
   await settle(); state.configuration.mockResolvedValue(configuration('b')); pending.resolve(operation(requestID, 'accepted', 'queued')); await settle();
   expect(state.subscribe).toHaveBeenCalledOnce();
   if (retirement === 'category') panelSession.open({ section: 'containers', resource: service.service_id }); else panelSession.setPresent(true);
-  await settle(); expect(editor().value).toBe('{"engine":"b"}'); expect(save().disabled).toBe(false);
+  await settle(); expect(editor().value).toBe('{"engine":"b"}'); expect(save()).toBeUndefined();
   expect(state.create).toHaveBeenCalledOnce();
 });

@@ -6,7 +6,7 @@ import { ContainerSettingsPanel } from './ContainerSettingsPanel';
 import type { ContainerServiceConfiguration } from '../../services/containerResourcesApi';
 
 const api = vi.hoisted(() => ({ list: vi.fn(), configuration: vi.fn(), preflight: vi.fn(), create: vi.fn() }));
-vi.mock('../EnvContext', () => ({ useEnvContext: () => ({ resourceCacheAccess: () => ({ phase: 'ready', generation: 0 }), env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }), openSettings: vi.fn() }) }));
+vi.mock('../EnvContext', () => ({ useEnvContext: () => ({ env_id: () => 'container-settings-design', resourceCacheAccess: () => ({ phase: 'ready', generation: 0 }), env: () => ({ permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true } }), openSettings: vi.fn() }) }));
 vi.mock('./EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => true, canAdmin: () => true }) }));
 vi.mock('../../services/containerResourcesApi', async original => ({ ...await original<object>(), listContainerServices: api.list, getContainerServiceConfiguration: api.configuration, preflightContainerOperation: api.preflight, createContainerOperation: api.create }));
 vi.mock('../../widgets/TextFilePreviewPane', () => ({ TextFilePreviewPane: (props: { path: string; draftText: string; onDraftChange: (value: string) => void }) => <textarea aria-label={props.path} value={props.draftText} onInput={event => props.onDraftChange(event.currentTarget.value)} /> }));
@@ -28,9 +28,19 @@ it.each([1100, 390])('uses one scrolling owner and aligned configuration rows at
   expect(header.querySelector('[role=tablist]')).not.toBeNull();
   const refresh = host.querySelector<HTMLButtonElement>('[data-settings-config-refresh]')!;
   expect(refresh.getAttribute('aria-label')).toBe('Refresh');
+  expect([...host.querySelectorAll('button')].some(button => button.textContent?.includes('Save'))).toBe(false);
   refresh.click();
   await expect.poll(() => api.configuration.mock.calls.length).toBe(2);
   expect(api.list).toHaveBeenCalledTimes(2);
+  const proxy = page.getByRole('textbox', { name: 'HTTP proxy', exact: true });
+  await proxy.fill('http://proxy.example.com:3128');
+  await expect.element(page.getByRole('button', { name: 'Save only', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Docker CLI', exact: true }).click();
+  await expect.poll(() => [...host.querySelectorAll('button')].some(button => button.textContent?.includes('Save'))).toBe(false);
+  expect([...host.querySelectorAll('button')].some(button => button.textContent?.includes('Discard'))).toBe(false);
+  await page.getByRole('tab', { name: 'Engine', exact: true }).click();
+  await expect.element(proxy).toHaveValue('http://proxy.example.com:3128');
+  await expect.element(page.getByRole('button', { name: 'Save only', exact: true })).toBeVisible();
   for (const name of ['HTTP proxy', 'HTTPS proxy', 'No proxy']) {
     const input = host.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)!;
     expect(input.closest('.floe-setting-row')).not.toBeNull();
@@ -84,6 +94,10 @@ it.each([1100, 390])('keeps Docker CLI controls usable and drafts intact across 
   await expect.element(advancedEditor).toHaveValue('{');
   await advancedEditor.fill(JSON.stringify(documentDraft));
   await page.getByRole('tab', { name: 'General', exact: true }).click();
+  await expect.element(page.getByRole('textbox', { name: 'Detach keys', exact: true })).toHaveValue('ctrl-a,ctrl-b');
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect.poll(() => api.configuration.mock.calls.length).toBe(2);
+  await expect.element(page.getByRole('tab', { name: 'Docker CLI', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect.element(page.getByRole('textbox', { name: 'Detach keys', exact: true })).toHaveValue('ctrl-a,ctrl-b');
   expect(api.preflight).not.toHaveBeenCalled();
   expect(api.create).not.toHaveBeenCalled();

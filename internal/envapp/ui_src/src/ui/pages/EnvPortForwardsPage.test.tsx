@@ -9,6 +9,7 @@ import { render } from 'solid-js/web';
 import { SettingsPanelContext } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { createSettingsSession } from '../../../../../settings_ui/src/settingsSession';
 import { createSignal, Show } from 'solid-js';
+import { createResourceCache } from '@floegence/floe-webapp-core/resource-cache';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -2491,19 +2492,21 @@ describe('EnvPortForwardsPage', () => {
     } finally { dispose(); }
   });
 
-  it('ignores a receipt after the authenticated resource generation changes', async () => {
-    const [access, setAccess] = createSignal({phase: 'ready' as const, generation: 0, scope: ''});
+  it('ignores a receipt after the authenticated resource owner changes', async () => {
+    const cache = createResourceCache({ storage: { get: async () => null, set: async () => {}, remove: async () => {}, list: async () => [] } });
+    const owner = { cache, scope: 'install-original', persistent: false };
+    const [access, setAccess] = createSignal({phase: 'ready' as const, generation: 0, scope: '', owner});
     envContextMocks.resourceCacheAccess = access;
     const fixture = installHandoffFixture();
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await flushPage(); await fixture.open(); await fixture.submit();
-      setAccess({phase: 'ready', generation: 1, scope: ''}); await flushPage();
+      setAccess({phase: 'ready', generation: 1, scope: '', owner: { ...owner, scope: 'install-replacement' }}); await flushPage();
       fixture.response.resolve(fixture.receipt); await flushPage();
       expect(host.querySelector('[data-testid="managed-install-submission"]')).toBeNull();
       expect(localApiMocks.fetchLocalApi).not.toHaveBeenCalled();
       expect(notificationMocks.success).not.toHaveBeenCalled();
-    } finally { dispose(); }
+    } finally { dispose(); cache.dispose(); }
   });
 
   it('ignores an old preflight when the same template is reopened', async () => {
@@ -2657,7 +2660,7 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/managed-web-services/mws-desktop/operations' && init?.method === 'POST') {
         operationBody = JSON.parse(String(init.body));
         updated = true;
-        return { operation_id: 'mop-desktop-update', service_id: 'mws-desktop', state: 'pending', stage: 'update_preparing', progress_current: 0, progress_total: 7 };
+        return { operation_id: 'mop-desktop-update', service_id: 'mws-desktop', action: 'update', state: 'pending', stage: 'update_preparing', progress_current: 0, progress_total: 7 };
       }
       throw new Error(`Unexpected local API call: ${url}`);
     });
@@ -2701,7 +2704,7 @@ describe('EnvPortForwardsPage', () => {
       update_plan_id: 'upl-reviewed',
       accepted_notice_revisions: { 'interactive-desktop-root-and-network': 2 },
     }));
-    expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeNull();
+    await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-update-plan"]')).toBeNull());
     await waitForAssertion(() => expect(host.querySelector('.web-service-status-trigger[aria-expanded]')?.getAttribute('aria-label')).toContain('Update'));
     expect(host.querySelector('[data-testid="managed-operation-progress"]')).toBeNull();
     streamController?.enqueue(new TextEncoder().encode(`event: snapshot\ndata: ${JSON.stringify({ operation_id: 'mop-desktop-update', service_id: 'mws-desktop', action: 'update', state: 'succeeded', stage: 'completed', progress_current: 7, progress_total: 7 })}\n\n`));
