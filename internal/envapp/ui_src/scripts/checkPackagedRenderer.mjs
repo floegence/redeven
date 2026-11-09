@@ -1594,9 +1594,14 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         : request.payload;
       return { ...request, payload };
     });
+    // Inventory and runtime recovery have independent startup owners. Both must
+    // precede installation; their relative network arrival order is not a contract.
+    const inspectionIndex = normalizedPluginRequests.findIndex((request) => request.path === '/_redevplugin/api/plugins/external-packages/inspect');
+    assert.ok(normalizedPluginRequests.slice(0, inspectionIndex).some((request) => isDeepStrictEqual(request, {
+      method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {},
+    })), 'Plugin inventory must load before package inspection');
     const requiredPluginRequests = [
       { method: 'POST', path: '/_redevplugin/api/plugins/runtime/recover-enabled', payload: {} },
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
       { method: 'POST', path: '/_redevplugin/api/plugins/external-packages/inspect', payload: builtPluginInspectRequest },
       { method: 'POST', path: '/_redevplugin/api/plugins/external-packages/install-operations', payload: {
         request_id: ':requestID', inspection_id: builtPluginInspection.inspection_id,
