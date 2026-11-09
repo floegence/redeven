@@ -1447,20 +1447,20 @@ describe('EnvPortForwardsPage', () => {
     const templates = [
       {
         template_id: 'example-host', service_family_id: 'example-host', name: 'Example Service · Host', description: 'Host deployment',
-        source: 'builtin', deployment: 'host', revision: 1,
+        source: 'custom', deployment: 'host', revision: 1,
         duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true,
         default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-host', deployments: [{ deployment: 'host', available: true }], workspace_roots: [],
       },
       {
         template_id: 'example-container', service_family_id: 'example-container', name: 'Example Service · Container', description: 'Container deployment',
-        source: 'builtin', deployment: 'container', revision: 1,
+        source: 'custom', deployment: 'container', revision: 1,
         duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('oci', '0.1.1-rc.2'), developer_preview: true,
         default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-container', deployments: [{ deployment: 'container', available: true }], workspace_roots: [],
       },
     ];
     const service = {
       service_id: 'mws-container', template_id: 'example-container',
-      name: 'Example Service · Container', template_source: 'builtin', deployment: 'container', workspace_path: templates[1].default_workspace_path,
+      name: 'Example Service · Container', template_source: 'custom', deployment: 'container', workspace_path: templates[1].default_workspace_path,
       release_status: releaseStatus('oci', '0.1.1-rc.2'), desired_state: 'running', observed_state: 'running', primary_action: 'stop', forward_id: 'pf-container', runtime_port: 3080,
       access_mode: 'unified_proxy',
     };
@@ -1478,6 +1478,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
     await flushPage();
 
     const hostRow = host.querySelector<HTMLElement>('[data-template-id="example-host"]');
@@ -1561,7 +1563,7 @@ describe('EnvPortForwardsPage', () => {
 
   it('disables Docker deployment when the runtime reports it unavailable', async () => {
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
-      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [{ template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment', source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }, { template_id: 'example-container', service_family_id: 'example-service', name: 'Example Service · Container', description: 'Container deployment', source: 'builtin', deployment: 'container', revision: 1, duplicateable: true, editable: false, available: false, reason_code: 'DOCKER_UNAVAILABLE', recommended_release: recommendedRelease('oci', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'container', available: false, reason_code: 'DOCKER_UNAVAILABLE' }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }] };
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [{ template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment', source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }, { template_id: 'example-container', service_family_id: 'example-service', name: 'Example Service · Container', description: 'Container deployment', source: 'custom', deployment: 'container', revision: 1, duplicateable: true, editable: false, available: false, reason_code: 'DOCKER_UNAVAILABLE', recommended_release: recommendedRelease('oci', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'container', available: false, reason_code: 'DOCKER_UNAVAILABLE' }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] }] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
       if (url === '/_redeven_proxy/api/forwards') return { forwards: [] };
       throw new Error(`Unexpected local API call: ${url}`);
@@ -1570,6 +1572,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
     await flushPage();
     const containerTab = Array.from(document.querySelectorAll<HTMLElement>('[role="tab"]')).find((button) => controlText(button)?.trim().startsWith('Container templates'));
     containerTab?.click();
@@ -1585,7 +1589,7 @@ describe('EnvPortForwardsPage', () => {
   });
 
   it('presents the catalog as grouped service identities without a catalog footer', async () => {
-    const template = { template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment', source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
+    const template = { template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment', source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [template] };
       if (url === '/_redeven_proxy/api/managed-web-services') return { services: [] };
@@ -1597,10 +1601,12 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
+    await flushPage();
 
     const drawer = host.querySelector<HTMLElement>('[data-testid="env-app-drawer-mock"]')!;
     expect(drawer.querySelectorAll('[data-testid="service-template-group"]')).toHaveLength(1);
-    expect(controlText(drawer)).toContain('Redeven built-in');
+    expect(controlText(drawer)).toContain('Custom');
     expect(controlText(drawer)).toContain('Host deployment');
     expect(drawer.querySelector('[data-template-kind="host"]')).toBeTruthy();
     expect(controlText(drawer)).toContain('Ready to deploy');
@@ -1632,7 +1638,7 @@ describe('EnvPortForwardsPage', () => {
   it('uses a space-free recommended workspace and preserves a custom path with spaces', async () => {
     const template = {
       template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment',
-      source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true,
+      source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true,
       deployments: [{ deployment: 'host', available: true }],
       default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-service',
       workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
@@ -1647,6 +1653,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')?.click();
     await flushPage();
@@ -1689,7 +1697,7 @@ describe('EnvPortForwardsPage', () => {
       {
         template_id: 'example-desktop-a', service_family_id: 'example-desktop-a', name: 'Unlocalized Ubuntu desktop', description: 'Unlocalized Ubuntu description',
         localizations: { 'en-US': { name: 'Example Desktop A', description: 'An example managed desktop.', notices: { 'interactive-desktop-root-and-network': { title: 'Container root access and outbound network', description: 'Only share this service with trusted users.' } } } },
-        source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
+        source: 'custom', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
         recommended_release: recommendedRelease('oci', '654ea8e3-ls177'), developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
         default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-a', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
         effective_spec: {
@@ -1700,7 +1708,7 @@ describe('EnvPortForwardsPage', () => {
       {
         template_id: 'example-desktop-b', service_family_id: 'example-desktop-b', name: 'Unlocalized Debian desktop', description: 'Unlocalized Debian description',
         localizations: { 'en-US': { name: 'Example Desktop B', description: 'Another example managed desktop.', notices: { 'interactive-desktop-root-and-network': { title: 'Container root access and outbound network', description: 'Only share this service with trusted users.' } } } },
-        source: 'builtin', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
+        source: 'custom', deployment: 'container', revision: 1, duplicateable: false, editable: false, available: true,
         recommended_release: recommendedRelease('oci', '7c4ebdc9-ls209'), developer_preview: false, notices: [notice], deployments: [{ deployment: 'container', available: true }],
         default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/example-desktop-b', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
       },
@@ -1728,6 +1736,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
     await flushPage();
     Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
     await vi.waitFor(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container'));
@@ -1762,10 +1772,10 @@ describe('EnvPortForwardsPage', () => {
     }));
   });
 
-  it('requires an explicit verified release when the built-in recommendation is unavailable', async () => {
+  it('requires an explicit verified release when the template recommendation is unavailable', async () => {
     const template = {
       template_id: 'example-webtop', service_family_id: 'linuxserver-webtop', name: 'LinuxServer Webtop', description: 'Browser desktop',
-      source: 'builtin', deployment: 'container', revision: 2, duplicateable: false, editable: false, available: true,
+      source: 'custom', deployment: 'container', revision: 2, duplicateable: false, editable: false, available: true,
       recommended_release: { schema_version: 1 as const, kind: 'oci' as const, source: 'lscr.io/linuxserver/webtop', tag: '654ea8e3-ls177', digest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
       developer_preview: false, notices: [], deployments: [{ deployment: 'container', available: true }],
       default_workspace_path: '/Users/demo/Redeven/workspaces/managed-services/webtop', workspace_roots: [{ id: 'home', label: 'Home', path: '/Users/demo' }],
@@ -1812,6 +1822,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
     await flushPage();
     Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
     await vi.waitFor(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container'));
@@ -1883,6 +1895,8 @@ describe('EnvPortForwardsPage', () => {
     const open = async () => {
       host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
       await flushPage();
+      findButton('My templates').click();
+      await flushPage();
       host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!.click();
       await flushPage();
     };
@@ -1933,7 +1947,7 @@ describe('EnvPortForwardsPage', () => {
       await flushPage();
       host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
       await flushPage();
-      fixture.findButton('Discover').click();
+      fixture.findButton(classification === 'official' ? 'Official' : 'Community').click();
       await waitForAssertion(() => expect(host.textContent).toContain('Discovered handoff'));
       host.querySelector<HTMLButtonElement>('[data-testid="service-template-primary"]')!.click();
       await flushPage();
@@ -1968,42 +1982,48 @@ describe('EnvPortForwardsPage', () => {
     } finally { dispose(); }
   });
 
-  it('shows the remote official catalog once and keeps builtin entries in the library', async () => {
+  it('discovers all official templates by default and retires builtins from the library', async () => {
     const fixture = installHandoffFixture();
     Object.assign(fixture.template, {source:'builtin',name:'Bundled handoff'});
     const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
     const entries = ['deepseek-harness-host','deepseek-harness-container','linuxserver-webtop-debian-xfce','linuxserver-webtop-ubuntu-kde'].map((id,index) => ({
-      template_id:`git_${id}`,document_template_id:id,service_family_id:id,revision:[17,26,5,5][index],
+      template_id:`git_${id}`,document_template_id:id,service_family_id:id,revision:[17,26,6,6][index],
       source:{repository:'floegence/redeven-service-templates',repository_id:1354288096,ref:'main',path:`templates/${id}`,commit_sha:'a'.repeat(40)},
       sha256:'b'.repeat(64),deployment:index === 0 ? 'host':'container',default_locale:'en-US',localizations:{'en-US':{name:id,description:'Official remote template'}},classification:'official',status:'available',
     }));
-    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => url.endsWith('/market-catalog') ? Promise.resolve({items:entries,stale:false,generation:4,checked_at:Date.now()}) : normalFetch(url,init));
+    const community = {...entries[0],template_id:'git_community',document_template_id:'team-dashboard',deployment:'compose',classification:'community',source:{...entries[0].source,repository:'team/dashboard'},localizations:{'en-US':{name:'Team dashboard',description:'Community status board'}}};
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => url.endsWith('/market-catalog') ? Promise.resolve({items:[...entries,community],stale:false,generation:4,checked_at:Date.now()}) : normalFetch(url,init));
     const dispose = render(() => <EnvPortForwardsPage />, host);
     try {
       await flushPage();
       host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
-      await flushPage();
-      expect(host.textContent).toContain('Bundled handoff');
-      fixture.findButton('Discover').click();
-      await waitForAssertion(() => expect(host.textContent).toContain('deepseek-harness-host'));
+      await waitForAssertion(() => expect(host.querySelectorAll('[data-testid="service-template-row"]')).toHaveLength(5));
       expect(host.textContent).not.toContain('Bundled handoff');
-      expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('Official');
+      expect(host.textContent).not.toContain('GitHub templates');
+      expect(host.textContent).toContain('All types · 5');
       expect(host.textContent).toContain('Host templates · 1');
       expect(host.textContent).toContain('Container templates · 3');
-      const filter = host.querySelector<HTMLSelectElement>('select')!;
-      filter.value = 'community'; filter.dispatchEvent(new Event('change',{bubbles:true}));
-      await flushPage();
-      expect(host.textContent).not.toContain('deepseek-harness-host');
-      filter.value = 'official'; filter.dispatchEvent(new Event('change',{bubbles:true}));
-      await flushPage();
-      expect(host.textContent).toContain('deepseek-harness-host');
-      Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find(button => controlText(button)?.includes('Container templates'))!.click();
-      await flushPage();
-      await waitForAssertion(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container'));
-      for (const entry of entries.slice(1)) expect(host.textContent).toContain(entry.document_template_id);
-      fixture.findButton('My templates').click();
-      await flushPage();
-      expect(host.textContent).not.toContain('linuxserver-webtop-debian-xfce');
+      expect(host.textContent).toContain('Docker Compose · 1');
+      fixture.findButton('Official').click(); await flushPage();
+      expect(host.querySelectorAll('[data-testid="service-template-row"]')).toHaveLength(4);
+      fixture.findButton('Community').click(); await flushPage();
+      expect(host.querySelectorAll('[data-testid="service-template-row"]')).toHaveLength(1);
+      expect(host.querySelector('[data-testid="service-template-row"]')?.textContent).toContain('Team dashboard');
+      fixture.findButton('Discover').click(); await flushPage();
+      const search = host.querySelector<HTMLInputElement>('input[aria-label="Search templates"]')!;
+      search.value = 'FLOEGENCE KDE';search.dispatchEvent(new InputEvent('input',{bubbles:true}));await flushPage();
+      expect(host.querySelectorAll('[data-testid="service-template-row"]')).toHaveLength(1);
+      expect(host.textContent).toContain('linuxserver-webtop-ubuntu-kde');
+      Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find(button => controlText(button)?.includes('Host templates'))!.click();
+      await vi.waitFor(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('host'));await flushPage();
+      expect(host.querySelectorAll('[data-testid="service-template-row"]')).toHaveLength(0);
+      fixture.findButton('Reset filters').click();
+      await vi.waitFor(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('all'));await flushPage();
+      expect(search.value).toBe('');
+      expect(host.querySelectorAll('[data-testid="service-template-row"]')).toHaveLength(5);
+      fixture.findButton('My templates').click();await flushPage();
+      expect(host.querySelectorAll('[data-testid="service-template-row"]')).toHaveLength(0);
+      expect(host.textContent).not.toContain('Bundled handoff');
     } finally { dispose(); }
   });
 
@@ -2203,6 +2223,8 @@ describe('EnvPortForwardsPage', () => {
     try {
       await flushPage();
       host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+      await flushPage();
+      Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
       await flushPage();
       Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find((button) => controlText(button)?.includes('Container templates'))?.click();
       await vi.waitFor(() => expect(host.querySelector('[data-testid="service-template-category-content"]')?.getAttribute('data-template-category')).toBe('container'));
@@ -2506,9 +2528,9 @@ describe('EnvPortForwardsPage', () => {
     expect(host.querySelector<HTMLButtonElement>('[data-testid="managed-release-submit"]')?.disabled).toBe(true);
   });
 
-  it('searches the catalog using localized built-in identity copy', async () => {
+  it('searches the catalog using localized library identity copy', async () => {
     const templates = [
-      { template_id: 'example-host', service_family_id: 'example-service', name: 'Unlocalized host name', description: 'Unlocalized host description', localizations: { 'en-US': { name: 'Example Host', description: 'Run directly in this Environment.' } }, source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [] },
+      { template_id: 'example-host', service_family_id: 'example-service', name: 'Unlocalized host name', description: 'Unlocalized host description', localizations: { 'en-US': { name: 'Example Host', description: 'Run directly in this Environment.' } }, source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [] },
       { template_id: 'custom-host', service_family_id: 'custom-host', name: 'Workspace dashboard', description: 'Internal status view', source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: true, available: true, recommended_release: recommendedRelease('npm', '1.0.0'), developer_preview: false, deployments: [{ deployment: 'host', available: true }], workspace_roots: [] },
     ];
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
@@ -2521,6 +2543,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
     await flushPage();
     const search = host.querySelector<HTMLInputElement>('input[aria-label="Search templates"]')!;
     search.value = 'directly';
@@ -2543,13 +2567,15 @@ describe('EnvPortForwardsPage', () => {
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
     await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
+    await flushPage();
     const row = host.querySelector('[data-template-id="git_locale"]');
     expect(controlText(row)).toContain('示例服务');
     expect(controlText(row)).not.toContain('Metadata name');
   });
 
-  it('duplicates a built-in service template as an independent custom template', async () => {
-    const source = { template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment', source: 'builtin', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
+  it('duplicates a custom service template as an independent custom template', async () => {
+    const source = { template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment', source: 'custom', deployment: 'host', revision: 1, duplicateable: true, editable: false, available: true, recommended_release: recommendedRelease('npm', '0.1.1-rc.2'), developer_preview: true, deployments: [{ deployment: 'host', available: true }], workspace_roots: [{ id: 'home', label: 'Home', path: '/workspace' }] };
     let duplicateBody: Record<string, unknown> | null = null;
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/managed-web-services/catalog') return { templates: [source] };
@@ -2565,6 +2591,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
     await flushPage();
     document.querySelector<HTMLButtonElement>('button[title="Duplicate"]')?.click();
     await flushPage();
@@ -2615,6 +2643,8 @@ describe('EnvPortForwardsPage', () => {
     render(() => <EnvPortForwardsPage />, host);
     await flushPage();
     host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')?.click();
+    await flushPage();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'My templates')!.click();
     await flushPage();
     document.querySelector<HTMLButtonElement>('button[title="Edit template"]')?.click();
     await flushPage();

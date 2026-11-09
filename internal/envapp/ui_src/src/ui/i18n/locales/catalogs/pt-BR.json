@@ -4211,7 +4211,7 @@
         "cancel": "Cancelar"
       },
       "serviceTemplates": "Modelos de serviço",
-      "templateCenterDescription": "Implante serviços de host ou contêiner, integrados ou personalizados, no ambiente atual.",
+      "templateCenterDescription": "Descubra modelos oficiais e da comunidade ou implante seus próprios serviços.",
       "templateCategories": "Categorias de modelos de serviço",
       "hostTemplates": "Modelos de host",
       "containerTemplates": "Modelos de contêiner",
@@ -4754,7 +4754,11 @@
       "continueDeploy": "Continuar implantação",
       "sourceVersion": "Código do modelo",
       "reviewUpdate": "Revisar atualização",
-      "sourceReviewRequired": "Esta instância existente exige uma revisão explícita do código antes de executar operações do ciclo de vida."
+      "sourceReviewRequired": "Esta instância existente exige uma revisão explícita do código antes de executar operações do ciclo de vida.",
+      "allTypes": "Todos os tipos",
+      "resetFilters": "Redefinir filtros",
+      "platforms": "Plataformas compatíveis",
+      "reviewBeforeDeploy": "Revise o código-fonte e as configurações antes da implantação."
     }
   },
   "debugConsoleSettings": {

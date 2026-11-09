@@ -3898,6 +3898,10 @@ export const enUS = defineDictionary({
   },
   webServices: {
     market: {
+      "reviewBeforeDeploy": "Review the source and deployment settings before running this template.",
+      "allTypes": "All types",
+      "resetFilters": "Reset filters",
+      "platforms": "Supported platforms",
       "library": "My templates",
       "discover": "Discover",
       "all": "All sources",
@@ -4225,7 +4229,7 @@ export const enUS = defineDictionary({
       title: 'Managed services',
       description: 'Install and manage services from reusable templates in the current Environment.',
       serviceTemplates: 'Service templates',
-      templateCenterDescription: 'Deploy built-in or custom host and container services in the current Environment.',
+      templateCenterDescription: 'Discover official and community templates, or deploy your own services.',
       templateCategories: 'Service template categories',
       hostTemplates: 'Host templates',
       containerTemplates: 'Container templates',

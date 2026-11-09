@@ -4211,7 +4211,7 @@
         "cancel": "취소"
       },
       "serviceTemplates": "서비스 템플릿",
-      "templateCenterDescription": "현재 환경에 기본 제공 또는 사용자 지정 호스트 및 컨테이너 서비스를 배포합니다.",
+      "templateCenterDescription": "공식 및 커뮤니티 템플릿을 찾거나 직접 만든 서비스를 배포하세요.",
       "templateCategories": "서비스 템플릿 분류",
       "hostTemplates": "호스트 템플릿",
       "containerTemplates": "컨테이너 템플릿",
@@ -4754,7 +4754,11 @@
       "continueDeploy": "배포 계속",
       "sourceVersion": "템플릿 소스",
       "reviewUpdate": "소스 업데이트 검토",
-      "sourceReviewRequired": "이 기존 인스턴스의 수명 주기 작업을 실행하려면 소스를 명시적으로 검토해야 합니다."
+      "sourceReviewRequired": "이 기존 인스턴스의 수명 주기 작업을 실행하려면 소스를 명시적으로 검토해야 합니다.",
+      "allTypes": "모든 유형",
+      "resetFilters": "필터 초기화",
+      "platforms": "지원 플랫폼",
+      "reviewBeforeDeploy": "배포하기 전에 템플릿 소스와 배포 설정을 검토하세요."
     }
   },
   "debugConsoleSettings": {

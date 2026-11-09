@@ -18,7 +18,8 @@ import { useI18n } from '../i18n';
 import { ServiceTemplateActions } from './ServiceTemplateActions';
 import './service-template-center.css';
 
-export type ServiceTemplateCategory = 'host' | 'container';
+export type ServiceTemplateCategory = 'all' | 'host' | 'container' | 'compose';
+export type ServiceTemplateCollection = 'discover' | 'official' | 'community' | 'library';
 export type ServiceTemplateKind = 'host' | 'container' | 'compose';
 
 export type ServiceTemplateIcon = Readonly<{
@@ -86,6 +87,8 @@ export type ServiceTemplatePresentation = Readonly<{
   diskBytes?: number;
   dataLocation?: string;
   sourceURL?: string;
+  searchText?: string;
+  supportedPlatforms?: readonly string[];
   dockerSourceURL?: string;
   defaultWorkspacePath?: string;
   defaultAccessMode?: string;
@@ -361,12 +364,14 @@ export type ServiceTemplateCatalogProps = Readonly<{
   query: string;
   hostCount: number;
   containerCount: number;
+  composeCount?: number;
   templates: readonly ServiceTemplatePresentation[];
   loading: boolean;
   canManage: boolean;
   selection?: Readonly<{ templateID: string | null; onChange: (id: string) => void }>;
   onCategoryChange: (category: ServiceTemplateCategory) => void;
   onQueryChange: (query: string) => void;
+  onResetFilters?: () => void;
   onCreate: (kind: ServiceTemplateKind) => void;
   onImport?: () => void;
   onCheckSource?: (templateID: string) => void;
@@ -377,6 +382,35 @@ export type ServiceTemplateCatalogProps = Readonly<{
   onEdit: (templateID: string) => void;
   onDelete: (templateID: string) => void;
 }>;
+
+// Facets use published deployment/source metadata; no name-based classification.
+export function matchesServiceTemplate(template: ServiceTemplatePresentation, query: string): boolean {
+  const text = [template.name, template.description, template.defaultReleaseLabel, template.deploymentLabel, template.sourceURL, template.searchText].join(' ').normalize('NFKC').toLocaleLowerCase();
+  return query.normalize('NFKC').toLocaleLowerCase().trim().split(/\s+/u).every(term => text.includes(term));
+}
+
+export function ServiceTemplateNavigation(props: {
+  collection: ServiceTemplateCollection;
+  onChange: (collection: ServiceTemplateCollection) => void;
+  refreshing: boolean;
+  canRefresh: boolean;
+  onRefresh: () => void;
+}): JSX.Element {
+  const i18n = useI18n();
+  return <div class="service-template-navigation" data-testid="market-navigation">
+    <div class="service-template-collections" role="group" aria-label={i18n.t('webServices.market.sourceVersion')}>
+      <For each={['discover', 'official', 'community', 'library'] as const}>{collection =>
+        <Button size="md" variant={props.collection === collection ? 'secondary' : 'ghost'}
+          aria-pressed={props.collection === collection} onClick={() => props.onChange(collection)}>
+          {i18n.t(`webServices.market.${collection}`)}
+        </Button>
+      }</For>
+    </div>
+    <Show when={props.collection !== 'library'}>
+      <Button size="sm" variant="ghost" disabled={props.refreshing || !props.canRefresh} aria-busy={props.refreshing} onClick={props.onRefresh}>{i18n.t('webServices.actions.refresh')}</Button>
+    </Show>
+  </div>;
+}
 
 function templateIconSource(icon: ServiceTemplateIcon | undefined): string | undefined {
   if (!icon || icon.media_type !== 'image/svg+xml') return undefined;
@@ -500,7 +534,7 @@ export function ServiceTemplateRow(props: {
       aria-selected={props.selected}
       tabIndex={props.selected ? 0 : -1}
       class={cn(
-        'service-template-row min-w-0 px-3 py-2.5 text-left text-card-foreground focus-visible:z-[1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+        'service-template-row whitespace-normal min-w-0 px-3 py-2.5 text-left text-card-foreground focus-visible:z-[1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
         props.selected && 'service-template-row--selected',
       )}
       data-testid="service-template-row"
@@ -517,12 +551,12 @@ export function ServiceTemplateRow(props: {
           <TemplateKindIcon kind={props.template.kind} icon={props.template.icon} class={templateIconClass(props.template.icon, true)} />
         </div>
         <div class="min-w-0 flex-1">
-          <h3 class="truncate text-[length:var(--floe-type-body)] font-medium leading-5 text-foreground" dir="auto">{props.template.name}</h3>
-          <p class="service-template-row__description mt-0.5 truncate text-xs leading-4 text-[var(--floe-ink-soft)]" dir="auto">{props.template.description}</p>
+          <h3 class="service-template-row__title text-[length:var(--floe-type-body)] font-medium leading-5 text-foreground" dir="auto">{props.template.name}</h3>
+          <p class="service-template-row__description mt-0.5 text-xs leading-4 text-[var(--floe-ink-soft)]" dir="auto">{props.template.description}</p>
           <div class="mt-1 flex min-w-0 items-center justify-between gap-3">
             <div class="flex min-w-0 items-center gap-1.5 truncate text-[10px] leading-4 text-[var(--floe-ink-soft)]" data-template-metadata>
               <Show when={props.template.defaultReleaseLabel}>
-                <span class="shrink-0 font-mono">v{props.template.defaultReleaseLabel}</span>
+                <span class="truncate font-mono" title={props.template.defaultReleaseLabel}>{props.template.defaultReleaseLabel}</span>
               </Show>
             </div>
             <ServiceTemplateStatus template={props.template} compact />
@@ -609,6 +643,7 @@ export function ServiceTemplateDetailsPane(props: {
       </div>
 
       <div class="service-template-details__body">
+        <Show when={!props.template.marketplace}>
         <Show when={props.template.kind === 'host'} fallback={(<>
           <DetailSection title={i18n.t('webServices.managed.deploymentInformation')}>
             <DetailField label={i18n.t('webServices.managed.deployment')} value={props.template.deploymentLabel} />
@@ -672,6 +707,16 @@ export function ServiceTemplateDetailsPane(props: {
           </details>
         </Show>
 
+        </Show>
+        <Show when={props.template.marketplace}>
+          <DetailSection title={i18n.t('webServices.managed.deploymentInformation')}>
+            <DetailField label={i18n.t('webServices.managed.deployment')} value={props.template.deploymentLabel} />
+            <DetailField label={i18n.t('webServices.managed.details.templateRevision')} value={props.template.revision} />
+            <Show when={props.template.defaultReleaseLabel}><DetailField label={i18n.t('webServices.managed.defaultVersion')} value={props.template.defaultReleaseLabel} mono wide /></Show>
+            <Show when={props.template.supportedPlatforms?.length}><DetailField label={i18n.t('webServices.market.platforms')} value={props.template.supportedPlatforms?.join(', ')} wide /></Show>
+          </DetailSection>
+          <p class="service-template-review-note text-xs leading-5 text-muted-foreground">{i18n.t('webServices.market.reviewBeforeDeploy')}</p>
+        </Show>
         <Show when={props.template.sourceURL || props.template.dockerSourceURL}>
           <div class="service-template-detail-links flex flex-wrap gap-x-4 gap-y-2">
             <Show when={props.template.sourceURL}>
@@ -746,18 +791,19 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
   const [requestedTemplateID, setRequestedTemplateID] = createSignal<string | null>(null);
   const selectTemplate = (id: string) => props.selection ? props.selection.onChange(id) : setRequestedTemplateID(id);
   const builtInTemplates = createMemo(() => props.templates.filter((template) => template.source === 'builtin'));
-  const gitTemplates = createMemo(() => props.templates.filter((template) => template.source === 'git'));
+  const gitTemplates = createMemo(() => props.templates.filter((template) => template.source === 'git' && !template.classification));
+  const officialTemplates = createMemo(() => props.templates.filter(template => template.classification === 'official'));
+  const communityTemplates = createMemo(() => props.templates.filter(template => template.classification === 'community'));
   const customTemplates = createMemo(() => props.templates.filter((template) => template.source === 'custom'));
   const selectedTemplate = createMemo(() => {
     const requestedID = props.selection ? props.selection.templateID : requestedTemplateID();
     return props.templates.find((template) => template.id === requestedID) ?? props.templates[0];
   });
-  const createItems = (): DropdownItem[] => props.category === 'host'
-    ? [{ id: 'host', label: i18n.t('webServices.managed.newHostTemplate'), disabled: !props.canManage }]
-    : [
-      { id: 'container', label: i18n.t('webServices.managed.newContainerTemplate'), disabled: !props.canManage },
-      { id: 'compose', label: i18n.t('webServices.managed.newComposeTemplate'), disabled: !props.canManage },
-    ];
+  const createItems = (): DropdownItem[] => [
+    { id: 'host', label: i18n.t('webServices.managed.newHostTemplate'), disabled: !props.canManage },
+    { id: 'container', label: i18n.t('webServices.managed.newContainerTemplate'), disabled: !props.canManage },
+    { id: 'compose', label: i18n.t('webServices.managed.newComposeTemplate'), disabled: !props.canManage },
+  ];
   const moveRowSelection: JSX.EventHandler<HTMLButtonElement, KeyboardEvent> = (event) => {
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
     const list = event.currentTarget.closest('[data-testid="service-template-list"]');
@@ -781,20 +827,7 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
     <section class="service-template-catalog min-h-0" data-testid="service-template-catalog">
       <div class="service-template-toolbar sticky top-0 z-10 -mx-1 px-1 pb-4" data-testid="service-template-toolbar">
         {props.toolbar}
-        <div class="flex flex-wrap items-center gap-3">
-          <Tabs
-            class="service-template-switcher"
-            size="md"
-            slotClassNames={{ tab: '[&>span]:max-w-none' }}
-            ariaLabel={i18n.t('webServices.managed.templateCategories')}
-            activeId={props.category}
-            onChange={(id) => props.onCategoryChange(id as ServiceTemplateCategory)}
-            features={{ indicator: { mode: 'none' }, containerBorder: false, scrollButtons: 'never' }}
-            items={[
-              { id: 'host', domId: categoryID + '-host', panelId: categoryID, label: `${i18n.t('webServices.managed.hostTemplates')} · ${props.hostCount}` },
-              { id: 'container', domId: categoryID + '-container', panelId: categoryID, label: `${i18n.t('webServices.managed.containerTemplates')} · ${props.containerCount}` },
-            ]}
-          />
+        <div class="service-template-search-actions">
           <div class="service-template-search relative min-w-[12rem] flex-1">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
@@ -822,6 +855,21 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
             )}
           />
         </div>
+          <Tabs
+            class="service-template-switcher"
+            size="md"
+            slotClassNames={{ tab: '[&>span]:max-w-none', scrollContainer: 'flex-wrap overflow-visible' }}
+            ariaLabel={i18n.t('webServices.managed.templateCategories')}
+            activeId={props.category}
+            onChange={(id) => props.onCategoryChange(id as ServiceTemplateCategory)}
+            features={{ indicator: { mode: 'none' }, containerBorder: false, scrollButtons: 'never' }}
+            items={[
+              { id: 'all', domId: categoryID + '-all', panelId: categoryID, label: `${i18n.t('webServices.market.allTypes')} · ${props.hostCount + props.containerCount + (props.composeCount ?? 0)}` },
+              { id: 'host', domId: categoryID + '-host', panelId: categoryID, label: `${i18n.t('webServices.managed.hostTemplates')} · ${props.hostCount}` },
+              { id: 'container', domId: categoryID + '-container', panelId: categoryID, label: `${i18n.t('webServices.managed.containerTemplates')} · ${props.containerCount}` },
+              { id: 'compose', domId: categoryID + '-compose', panelId: categoryID, label: `${i18n.t('webServices.managed.composeDeployment')} · ${props.composeCount ?? 0}` },
+            ]}
+          />
       </div>
 
       <div class="service-template-category-stage" id={categoryID} role="tabpanel" aria-labelledby={categoryID + '-' + props.category}>
@@ -841,8 +889,8 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                 fallback={(
                   <div class="service-template-empty rounded-2xl border border-dashed px-5 py-12 text-center">
                     <p class="text-[length:var(--floe-type-body)] font-medium text-foreground">{props.query.trim() ? i18n.t('webServices.managed.noTemplateMatches') : i18n.t('webServices.managed.noTemplates')}</p>
-                    <Show when={props.query.trim()}>
-                      <Button size="sm" variant="ghost" class="mt-2" onClick={() => props.onQueryChange('')}>{i18n.t('webServices.managed.clearTemplateSearch')}</Button>
+                    <Show when={props.onResetFilters || props.query.trim()}>
+                      <Button size="sm" variant="ghost" class="mt-2" onClick={() => props.onResetFilters ? props.onResetFilters() : props.onQueryChange('')}>{i18n.t(props.onResetFilters ? 'webServices.market.resetFilters' : 'webServices.managed.clearTemplateSearch')}</Button>
                     </Show>
                   </div>
                 )}
@@ -863,6 +911,9 @@ export function ServiceTemplateCatalog(props: ServiceTemplateCatalogProps): JSX.
                         onSelect={selectTemplate}
                         onKeyDown={moveRowSelection}
                       />
+                      <For each={[{title: i18n.t('webServices.market.official'), templates: officialTemplates()}, {title: i18n.t('webServices.market.community'), templates: communityTemplates()}]}>{group =>
+                        <TemplateGroup title={group.title} description="" templates={group.templates} selectedTemplateID={selectedTemplate()?.id} onSelect={selectTemplate} onKeyDown={moveRowSelection} />
+                      }</For>
                       <TemplateGroup
                         title={i18n.t('webServices.sources.groupTitle')}
                         description={i18n.t('webServices.sources.groupDescription')}

@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ServiceTemplateCatalog,
   type ServiceTemplatePresentation,
+  type ServiceTemplateCategory,
+  matchesServiceTemplate,
 } from './ServiceTemplateCatalog';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -108,9 +110,9 @@ describe('ServiceTemplateCatalog', () => {
   function mount(overrides: Partial<Parameters<typeof ServiceTemplateCatalog>[0]> = {}) {
     host = document.createElement('div');
     document.body.appendChild(host);
-    const [category, setCategory] = createSignal<'host' | 'container'>('host');
+    const [category, setCategory] = createSignal<ServiceTemplateCategory>('host');
     const [query, setQuery] = createSignal('');
-    const onCategoryChange = vi.fn((next: 'host' | 'container') => setCategory(next));
+    const onCategoryChange = vi.fn((next: ServiceTemplateCategory) => setCategory(next));
     const onCreate = vi.fn();
     const onDeploy = vi.fn();
     const onOpen = vi.fn();
@@ -356,5 +358,17 @@ describe('ServiceTemplateCatalog', () => {
     expect(Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dropdown-items] button')).every((button) => button.disabled)).toBe(true);
     const versions = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.trim() === 'Versions');
     expect(versions?.disabled).toBe(true);
+  });
+});
+
+
+describe('template search', () => {
+  const item = {...builtIn, name: 'Ubuntu Desktop', description: 'Persistent KDE workspace', sourceURL: 'https://github.com/team/desktops', searchText: '桌面 Ubuntu', defaultReleaseLabel: '2026.11'};
+  it('combines normalized terms across published identity and source fields', () => {
+    expect(matchesServiceTemplate(item, '  TEAM   kde ')).toBe(true);
+    expect(matchesServiceTemplate(item, 'ＵＢＵＮＴＵ')).toBe(true);
+    expect(matchesServiceTemplate(item, '桌面 2026.11')).toBe(true);
+    expect(matchesServiceTemplate(item, 'kde mysql')).toBe(false);
+    expect(matchesServiceTemplate(item, '   ')).toBe(true);
   });
 });

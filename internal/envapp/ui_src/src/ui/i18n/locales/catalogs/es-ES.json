@@ -4211,7 +4211,7 @@
         "cancel": "Cancelar"
       },
       "serviceTemplates": "Plantillas de servicio",
-      "templateCenterDescription": "Despliega servicios de host o contenedor, integrados o personalizados, en el entorno actual.",
+      "templateCenterDescription": "Descubre plantillas oficiales y de la comunidad, o despliega tus propios servicios.",
       "templateCategories": "Categorías de plantillas de servicio",
       "hostTemplates": "Plantillas de host",
       "containerTemplates": "Plantillas de contenedor",
@@ -4754,7 +4754,11 @@
       "continueDeploy": "Continuar con el despliegue",
       "sourceVersion": "Código de la plantilla",
       "reviewUpdate": "Revisar actualización",
-      "sourceReviewRequired": "Esta instancia existente requiere revisar explícitamente su código antes de ejecutar operaciones de ciclo de vida."
+      "sourceReviewRequired": "Esta instancia existente requiere revisar explícitamente su código antes de ejecutar operaciones de ciclo de vida.",
+      "allTypes": "Todos los tipos",
+      "resetFilters": "Restablecer filtros",
+      "platforms": "Plataformas compatibles",
+      "reviewBeforeDeploy": "Revisa el código fuente y la configuración antes del despliegue."
     }
   },
   "debugConsoleSettings": {

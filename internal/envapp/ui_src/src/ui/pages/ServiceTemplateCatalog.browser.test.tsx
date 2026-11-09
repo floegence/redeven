@@ -2,14 +2,18 @@ import '../../index.css';
 
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
-import { Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 
 import {
   ServiceTemplateCatalog,
+  ServiceTemplateNavigation,
+  type ServiceTemplateCollection,
   type ServiceTemplatePresentation,
 } from './ServiceTemplateCatalog';
+import { I18nProvider } from '../i18n';
+import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from '../i18n/storageKey';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
 
 const mediaCommands = commands as unknown as Readonly<{
@@ -94,6 +98,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     dispose?.();
     dispose = undefined;
     document.body.replaceChildren();
+    localStorage.removeItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY);
     document.documentElement.classList.remove('light', 'dark');
     document.documentElement.style.removeProperty('--redeven-desktop-titlebar-height');
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
@@ -131,7 +136,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
   it('identifies discovered official sources and keeps deployment review reachable', async () => {
     mount([{...template, id:'git_official', source:'git', classification:'official', marketplace:true, runtimeSpec:undefined, hostLifecyclePlan:undefined, duplicateable:false}]);
     await settle();
-    await expect.element(page.getByText('Official', {exact:true})).toBeVisible();
+    await expect.element(page.getByTestId('service-template-details').getByText('Official', {exact:true})).toBeVisible();
     await expect.element(page.getByTestId('service-template-primary')).toBeEnabled();
     expect(document.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('Official');
   });
@@ -171,6 +176,69 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     ), host);
   }
 
+  it('separates marketplace navigation from search and actions', async () => {
+    const host = document.createElement('div');
+    host.style.width = '1100px';
+    document.body.appendChild(host);
+    dispose = render(() => <ServiceTemplateCatalog
+      toolbar={<div class="flex flex-wrap items-center justify-between gap-2" data-testid="market-navigation">
+        <Button size="sm">Discover</Button><select class="h-8 rounded-md border px-2"><option>All sources</option></select>
+      </div>}
+      category="host" query="" hostCount={1} containerCount={0} templates={[template]}
+      loading={false} canManage onCategoryChange={() => undefined} onQueryChange={() => undefined}
+      onCreate={() => undefined} onImport={() => undefined} onDeploy={() => undefined}
+      onOpen={() => undefined} onDuplicate={() => undefined} onEdit={() => undefined} onDelete={() => undefined}
+    />, host);
+    await settle();
+    const navigation = host.querySelector('[data-testid="market-navigation"]')!.getBoundingClientRect();
+    const search = host.querySelector('.service-template-search')!.getBoundingClientRect();
+    expect(search.top - navigation.bottom).toBeGreaterThanOrEqual(12);
+  });
+
+  it.each([
+    [1440, 'en-US'], [1100, 'zh-CN'], [900, 'de-DE'], [768, 'zh-TW'], [640, 'fr-FR'], [375, 'zh-CN'], [320, 'de-DE'],
+  ] as const)('keeps market navigation and actions separate at %s in %s', async (width, locale) => {
+    await page.viewport(width, 900);
+    localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, locale);
+    const host = document.createElement('div');document.body.appendChild(host);
+    const remote = {...longContainerTemplate, id: 'git_desktop', source: 'git' as const, classification: 'official' as const, marketplace: true,
+      name: 'LinuxServer Webtop · Ubuntu (KDE Plasma)', description: 'Run a persistent desktop in an isolated container with a reviewed application release.',
+      defaultReleaseLabel: 'ubuntu-kde-7a396ff1-ls189', supportedPlatforms: ['linux-amd64','linux-arm64'], runtimeSpec: undefined};
+    dispose = render(() => {
+      const [collection, setCollection] = createSignal<ServiceTemplateCollection>('discover');
+      return <I18nProvider><EnvAppDrawer open onOpenChange={() => undefined} class="service-template-explorer-drawer" bodyClass="h-full" title="Service templates">
+        <div class="service-template-drawer-shell h-full min-h-0 p-1" data-view="catalog">
+          <ServiceTemplateCatalog toolbar={<ServiceTemplateNavigation collection={collection()} onChange={setCollection} refreshing={false} canRefresh onRefresh={() => undefined} />}
+            category="all" query="" hostCount={1} containerCount={1} composeCount={0} templates={[remote,{...remote,id:'git_host',kind:'host',deploymentLabel:'Host',name:'DeepSeek Harness'}]}
+            loading={false} canManage onCategoryChange={() => undefined} onQueryChange={() => undefined} onCreate={() => undefined} onImport={() => undefined}
+            onDeploy={() => undefined} onOpen={() => undefined} onDuplicate={() => undefined} onEdit={() => undefined} onDelete={() => undefined} />
+        </div>
+      </EnvAppDrawer></I18nProvider>;
+    },host);
+    await expect.element(page.getByTestId('service-template-toolbar')).toBeVisible();
+    await vi.waitFor(() => expect(document.querySelector('[data-floe-dialog-panel]')?.getAttribute('data-floating-presence')).toBe('open'));
+    await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => undefined)));await settle();
+    const navigation = document.querySelector('[data-testid="market-navigation"]')!.getBoundingClientRect();
+    const search = document.querySelector('.service-template-search')!.getBoundingClientRect();
+    const actions = document.querySelector('.service-template-search-actions')!.getBoundingClientRect();
+    const categories = document.querySelector('.service-template-switcher')!.getBoundingClientRect();
+    expect(search.top - navigation.bottom).toBeGreaterThanOrEqual(12);
+    expect(categories.top - actions.bottom).toBeGreaterThanOrEqual(12);
+    for (const control of document.querySelectorAll<HTMLElement>('.service-template-navigation button, .service-template-search-actions input, .service-template-search-actions button')) {
+      const rect = control.getBoundingClientRect();expect(rect.left).toBeGreaterThanOrEqual(0);expect(rect.right).toBeLessThanOrEqual(width+1);
+    }
+    const controls = [...document.querySelectorAll<HTMLElement>('.service-template-toolbar button, .service-template-toolbar input')].filter(el => {
+      const rect=el.getBoundingClientRect();return rect.width>0 && rect.left>=0 && rect.right<=width;
+    });
+    for(let i=0;i<controls.length;i++)for(let j=i+1;j<controls.length;j++) {
+      const a=controls[i].getBoundingClientRect(),b=controls[j].getBoundingClientRect();
+      expect(Math.min(a.right,b.right)-Math.max(a.left,b.left)>1 && Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1).toBe(false);
+    }
+    expect(getComputedStyle(document.querySelector('.service-template-row__title')!).whiteSpace).toBe('normal');
+    expect(document.querySelector('[data-testid="service-template-details"]')?.textContent).not.toContain('—');
+    await page.screenshot({path:`__screenshots__/market-${width}-${locale}.png`});
+  });
+
   it.each(['light', 'dark'])('keeps selected category text readable in %s mode', (mode) => {
     document.documentElement.classList.add(mode);
     mount();
@@ -193,6 +261,20 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect((Math.max(foreground, backdrop) + 0.05) / (Math.min(foreground, backdrop) + 0.05)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('moves keyboard selection across official and community groups', async () => {
+    mount([
+      {...template,id:'official-host',source:'git',classification:'official',marketplace:true},
+      {...template,id:'community-host',source:'git',classification:'community',marketplace:true},
+    ]);
+    await settle();
+    document.querySelector<HTMLButtonElement>('[data-template-id="official-host"][role="option"]')!.focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(document.activeElement?.getAttribute('data-template-id')).toBe('community-host');
+    expect(document.querySelector('[data-testid="service-template-details"]')?.getAttribute('data-template-id')).toBe('community-host');
+    await userEvent.keyboard('{Home}');
+    expect(document.activeElement?.getAttribute('data-template-id')).toBe('official-host');
+  });
+
   it('uses aligned master-detail columns and lets a single template fill the list', async () => {
     await page.viewport(1280, 720);
     mount();
@@ -208,7 +290,7 @@ describe('ServiceTemplateCatalog browser presentation', () => {
     expect(row.getAttribute('aria-selected')).toBe('true');
 
     await userEvent.tab();
-    expect(document.activeElement?.getAttribute('role')).toBe('tab');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Search templates');
     expect(document.activeElement?.matches(':focus-visible')).toBe(true);
     const focusStyle = getComputedStyle(document.activeElement!);
     expect(focusStyle.outlineStyle !== 'none' || focusStyle.boxShadow !== 'none').toBe(true);

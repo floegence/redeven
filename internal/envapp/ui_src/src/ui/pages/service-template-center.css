@@ -1,5 +1,13 @@
 @layer components {
-  .service-template-toolbar { background: var(--redeven-surface-panel); }
+  .service-template-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; background: var(--redeven-surface-panel); }
+  .service-template-navigation, .service-template-collections { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+  .service-template-navigation { justify-content: space-between; gap: 8px; }
+  .service-template-search-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
+  .service-template-search-actions .service-template-search { min-width: min(100%, 16rem); }
+  .service-template-review-note { margin-block: 16px; }
+  .service-template-row__title { overflow-wrap: anywhere; white-space: normal; }
+  .service-template-row__description { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .service-template-row .service-template-status { flex: none; }
   .service-template-drawer-shell { overflow-y: auto; overscroll-behavior: contain; }
   /* Floe owns category selection, contrast, focus and keyboard navigation. */
   .service-template-switcher { flex: none; max-width: 100%; }
@@ -45,7 +53,7 @@
     background: transparent;
     transition: background-color 120ms var(--floe-ease-out);
   }
-  .service-template-row__description { display: block; min-height: 0; }
+  .service-template-row__description { min-height: 0; }
   .service-template-row--selected { --floe-ink-soft: var(--foreground); background: var(--floe-state-selected); transition: none; }
 
   .service-template-identity__icon,
@@ -301,10 +309,6 @@
   }
 
   @media (max-width: 639px) {
-    .service-template-toolbar > div {
-      align-items: stretch;
-    }
-
     .service-template-switcher,
     .service-template-search,
     .service-template-create-trigger,

@@ -58,6 +58,9 @@ import { useEnvContext } from './EnvContext';
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
 import {
   ServiceTemplateCatalog,
+  ServiceTemplateNavigation,
+  matchesServiceTemplate,
+  type ServiceTemplateCollection,
   HostLifecyclePlanDetails,
   ServiceTemplateIdentity,
   type HostLifecyclePlan,
@@ -2367,11 +2370,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const [gitImportTemplate, setGitImportTemplate] = createSignal<ManagedCatalogTemplate>();
   const [templateDrawerOpen, setTemplateDrawerOpen] = createSignal(false);
   const [templateDrawerView, setTemplateDrawerView] = createSignal<TemplateDrawerView>('catalog');
-  const [templateCategory, setTemplateCategory] = createSignal<ServiceTemplateCategory>('host');
+  const [templateCategory, setTemplateCategory] = createSignal<ServiceTemplateCategory>('all');
   const [templateSearch, setTemplateSearch] = createSignal('');
-  const [templateCollection, setTemplateCollection] = createSignal<'library' | 'discover'>('library');
-  const [marketFilter, setMarketFilter] = createSignal<'all' | 'official' | 'community'>('all');
-  const market = createServiceTemplateMarket(() => templateDrawerOpen() && templateCollection() === 'discover', () => JSON.stringify([managedResource.identity(), ctx.resourceCacheAccess?.().generation]), canManageManagedService);
+  const [templateCollection, setTemplateCollection] = createSignal<ServiceTemplateCollection>('discover');
+  const market = createServiceTemplateMarket(() => templateDrawerOpen() && templateCollection() !== 'library', () => JSON.stringify([managedResource.identity(), ctx.resourceCacheAccess?.().generation]), canManageManagedService);
   const marketItems = market.items, marketLoading = market.loading, marketStale = market.stale, marketError = market.error;
   const [marketSource, setMarketSource] = createSignal<{source: MarketTemplate['source'];expected:{repository_id:number;commit_sha:string;sha256:string}}>();
   const [installSourcePreview, setInstallSourcePreview] = createSignal<SourcePreview>();
@@ -2859,7 +2861,8 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       revision: template.revision,
       diskBytes: template.disk_bytes,
       dataLocation: template.data_location,
-      sourceURL: template.source_url,
+      sourceURL: template.git_source ? `https://github.com/${template.git_source.repository}/tree/${template.git_source.commit_sha}/${template.git_source.path}` : template.source_url,
+      searchText: [template.git_source?.repository, template.git_source?.path, ...Object.values(template.localizations ?? {}).flatMap(locale => [locale.name, locale.description])].join(' '),
       dockerSourceURL: template.docker_source_url,
       defaultWorkspacePath: template.default_workspace_path,
       defaultAccessMode: template.default_access_mode,
@@ -2876,31 +2879,25 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     };
   };
   const templatePresentations = createMemo(() => {
-    if (templateCollection() === 'library') return managedTemplates().map(templatePresentation);
+    if (templateCollection() === 'library') return managedTemplates().filter(template => template.source !== 'builtin').map(templatePresentation);
     const discovered: ServiceTemplatePresentation[] = marketItems().map(item => {
       const locale = item.localizations[i18n.locale()] ?? item.localizations[item.default_locale];
       const installed = managedTemplates().find(template => template.template_id === item.template_id);
       const installedPresentation = installed ? templatePresentation(installed) : undefined;
-      return {id:item.template_id,name:locale?.name ?? item.document_template_id,description:locale?.description ?? '',source:'git',classification:item.classification,marketplace:true,kind:item.deployment as ServiceTemplateKind,icon:item.icon?.media_type === 'image/svg+xml' ? {...item.icon,media_type:'image/svg+xml'} : undefined,deploymentLabel:managedDeploymentLabel(item.deployment as ManagedDeployment, i18n),revision:item.revision,defaultReleaseLabel:item.recommended_version,developerPreview:item.developer_preview,available:item.status === 'available',availabilityReason:item.status !== 'available' ? i18n.t('webServices.market.unavailable') : undefined,installed:installedPresentation?.installed ?? false,openable:installedPresentation?.openable,openUnavailableReason:installedPresentation?.openUnavailableReason,duplicateable:false,editable:false,sourceURL:`https://github.com/${item.source.repository}`};
+      return {id:item.template_id,name:locale?.name ?? item.document_template_id,description:locale?.description ?? '',source:'git',classification:item.classification,marketplace:true,kind:item.deployment as ServiceTemplateKind,icon:item.icon?.media_type === 'image/svg+xml' ? {...item.icon,media_type:'image/svg+xml'} : undefined,deploymentLabel:managedDeploymentLabel(item.deployment as ManagedDeployment, i18n),revision:item.revision,defaultReleaseLabel:item.recommended_version,developerPreview:item.developer_preview,available:item.status === 'available',availabilityReason:item.status !== 'available' ? i18n.t('webServices.market.unavailable') : undefined,installed:installedPresentation?.installed ?? false,openable:installedPresentation?.openable,openUnavailableReason:installedPresentation?.openUnavailableReason,duplicateable:false,editable:false,sourceURL:`https://github.com/${item.source.repository}/tree/${item.source.commit_sha}/${item.source.path}`,supportedPlatforms:item.supported_platforms,searchText:[item.document_template_id,item.source.repository,...Object.values(item.localizations).flatMap(locale => [locale.name,locale.description])].join(' ')};
     });
-    return discovered.filter(item => marketFilter() === 'all' || item.classification === marketFilter());
+    return discovered.filter(item => templateCollection() === 'discover' || item.classification === templateCollection());
   });
   const templateCounts = createMemo(() => templatePresentations().reduce(
     (counts, template) => {
-      counts[template.kind === 'host' ? 'host' : 'container'] += 1;
+      if (matchesServiceTemplate(template, templateSearch())) counts[template.kind] += 1;
       return counts;
     },
-    { host: 0, container: 0 },
+    { host: 0, container: 0, compose: 0 },
   ));
-  const filteredTemplates = createMemo(() => {
-    const query = templateSearch().trim().toLowerCase();
-    return templatePresentations().filter((template) => {
-      const isHost = template.kind === 'host';
-      if ((templateCategory() === 'host') !== isHost) return false;
-      if (!query) return true;
-      return `${template.name}\n${template.description}\n${template.defaultReleaseLabel ?? ''}\n${template.deploymentLabel}`.toLowerCase().includes(query);
-    });
-  });
+  const filteredTemplates = createMemo(() => templatePresentations().filter(template =>
+    (templateCategory() === 'all' || template.kind === templateCategory()) && matchesServiceTemplate(template, templateSearch()),
+  ));
   const selectedTemplatePresentation = createMemo(() => {
     const template = selectedTemplate();
     return template ? templatePresentation(template) : null;
@@ -3306,6 +3303,9 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       setTemplateDraft(null);
       setTemplateValidationVisible(false);
       setTemplateDrawerView('catalog');
+      setTemplateCollection('library');
+      setTemplateCategory('all');
+      setTemplateSearch('');
       notify.success(i18n.t('webServices.managed.templateSaved'), i18n.t('webServices.managed.templateSavedMessage'));
     } catch (error) {
       const message = error instanceof Error && error.message === 'TEMPLATE_ENV_INVALID' ? i18n.t('webServices.managed.environmentInvalid') : error instanceof Error ? error.message : String(error);
@@ -4110,35 +4110,27 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         <div ref={templateDrawerElement} class="service-template-drawer-shell h-full min-h-0 space-y-4 p-1" data-view={templateDrawerView()} data-testid="service-template-drawer">
           <Show when={templateDrawerView() === 'catalog'}>
             <ServiceTemplateCatalog
-              toolbar={<div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex items-center gap-1" role="group" aria-label={i18n.t('webServices.managed.serviceTemplates')}>
-                  <For each={['library','discover'] as const}>{collection => <Button size="sm" variant={templateCollection() === collection ? 'secondary':'ghost'} aria-pressed={templateCollection() === collection} onClick={() => setTemplateCollection(collection)}>{i18n.t(`webServices.market.${collection}`)}</Button>}</For>
-                </div>
-                <Show when={templateCollection() === 'discover'}>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <select class="h-8 rounded-md border bg-background px-2 text-xs" aria-label={i18n.t('webServices.market.sourceVersion')} value={marketFilter()} onChange={event => setMarketFilter(event.currentTarget.value as 'all'|'official'|'community')}>
-                      <For each={['all','official','community'] as const}>{filter => <option value={filter}>{i18n.t(`webServices.market.${filter}`)}</option>}</For>
-                    </select>
-                    <Button size="sm" variant="ghost" disabled={marketLoading() || !canManageManagedService()} onClick={() => void market.refresh()}>{i18n.t('webServices.actions.refresh')}</Button>
-                  </div>
-                  <Show when={marketError() || marketStale()}><p role="status" class="w-full text-xs text-muted-foreground">{i18n.t(marketError() ? 'webServices.market.refreshFailed':'webServices.market.cached')}</p></Show>
-                </Show>
-              </div>}
+              toolbar={<>
+                <ServiceTemplateNavigation collection={templateCollection()} onChange={setTemplateCollection} refreshing={marketLoading()} canRefresh={canManageManagedService()} onRefresh={() => void market.refresh()} />
+                <Show when={templateCollection() !== 'library' && (marketError() || marketStale())}><p role="status" class="text-xs text-muted-foreground">{i18n.t(marketError() ? 'webServices.market.refreshFailed' : 'webServices.market.cached')}</p></Show>
+              </>}
               category={templateCategory()}
               query={templateSearch()}
               hostCount={templateCounts().host}
               containerCount={templateCounts().container}
+              composeCount={templateCounts().compose}
               templates={filteredTemplates()}
-              loading={managedLoading() || (templateCollection() === 'discover' && marketLoading() && !marketItems().length)}
+              loading={managedLoading() || (templateCollection() !== 'library' && marketLoading() && !marketItems().length)}
               canManage={canManageManagedService()}
               selection={{templateID: catalogTemplateID(), onChange: setCatalogTemplateID}}
               onCategoryChange={setTemplateCategory}
               onQueryChange={setTemplateSearch}
+              onResetFilters={() => {setTemplateSearch('');setTemplateCategory('all');setTemplateCollection('discover');}}
               onCreate={beginTemplateCreate}
               onImport={() => {setMarketSource(undefined);setGitImportTemplate(undefined);setGitImportOpen(true);}}
               onCheckSource={(id) => {setMarketSource(undefined);setGitImportTemplate(templateByID(id));setGitImportOpen(true);}}
               onDeploy={(templateID) => {
-                const item = templateCollection() === 'discover' ? marketItems().find(item => item.template_id === templateID) : undefined;
+                const item = templateCollection() !== 'library' ? marketItems().find(item => item.template_id === templateID) : undefined;
                 if (item) { setGitImportTemplate(undefined); setMarketSource({source:item.source,expected:{repository_id:item.source.repository_id,commit_sha:item.source.commit_sha,sha256:item.sha256}});setGitImportOpen(true); }
                 else { const template = templateByID(templateID); if (template) beginTemplateInstall(template); }
               }}
@@ -4432,7 +4424,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         onReviewed={marketSource() ? (preview) => {clearInstallSource();setInstallSourcePreview(preview);beginTemplateInstall(preview.template);} : undefined}
         onClose={() => setGitImportOpen(false)}
         onImported={() => {
-          void loadManaged();
+          setTemplateCollection('library');
+          setTemplateCategory('all');
+          setTemplateSearch('');
+          void loadManaged(true);
           notify.success(i18n.t('webServices.managed.templateSaved'), i18n.t('webServices.managed.templateSavedMessage'));
         }}
         serviceName={(id) => managedState().find((item) => item.service_id === id)?.name || id}

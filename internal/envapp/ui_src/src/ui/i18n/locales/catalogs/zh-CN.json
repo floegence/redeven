@@ -4211,7 +4211,7 @@
         "cancel": "取消"
       },
       "serviceTemplates": "服务模板",
-      "templateCenterDescription": "在当前环境中部署内置或自定义的主机与容器服务。",
+      "templateCenterDescription": "发现官方和社区模板，或部署自己的服务。",
       "templateCategories": "服务模板分类",
       "hostTemplates": "主机模板",
       "containerTemplates": "容器模板",
@@ -4754,7 +4754,11 @@
       "continueDeploy": "继续部署",
       "sourceVersion": "模板源码",
       "reviewUpdate": "审核源码更新",
-      "sourceReviewRequired": "此历史实例需要明确审核源码后才能执行生命周期操作。"
+      "sourceReviewRequired": "此历史实例需要明确审核源码后才能执行生命周期操作。",
+      "allTypes": "全部类型",
+      "resetFilters": "重置筛选",
+      "platforms": "支持的平台",
+      "reviewBeforeDeploy": "部署前，请审阅模板源码和部署设置。"
     }
   },
   "debugConsoleSettings": {

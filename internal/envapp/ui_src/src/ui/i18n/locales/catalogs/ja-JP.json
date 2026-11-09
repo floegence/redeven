@@ -4211,7 +4211,7 @@
         "cancel": "キャンセル"
       },
       "serviceTemplates": "サービステンプレート",
-      "templateCenterDescription": "組み込みまたはカスタムのホスト／コンテナサービスを現在の環境にデプロイします。",
+      "templateCenterDescription": "公式やコミュニティのテンプレートを探すか、独自のサービスをデプロイします。",
       "templateCategories": "サービステンプレートの分類",
       "hostTemplates": "ホストテンプレート",
       "containerTemplates": "コンテナテンプレート",
@@ -4754,7 +4754,11 @@
       "continueDeploy": "デプロイに進む",
       "sourceVersion": "テンプレートのソース",
       "reviewUpdate": "ソース更新を確認",
-      "sourceReviewRequired": "この既存インスタンスでライフサイクル操作を実行するには、ソースの明示的な確認が必要です。"
+      "sourceReviewRequired": "この既存インスタンスでライフサイクル操作を実行するには、ソースの明示的な確認が必要です。",
+      "allTypes": "すべての種類",
+      "resetFilters": "絞り込みをリセット",
+      "platforms": "対応プラットフォーム",
+      "reviewBeforeDeploy": "デプロイする前に、テンプレートのソースとデプロイ設定を確認してください。"
     }
   },
   "debugConsoleSettings": {

@@ -4211,7 +4211,7 @@
         "cancel": "Annuler"
       },
       "serviceTemplates": "Modèles de service",
-      "templateCenterDescription": "Déployez des services hôte ou conteneur, intégrés ou personnalisés, dans l’environnement actuel.",
+      "templateCenterDescription": "Découvrez les modèles officiels et communautaires, ou déployez vos propres services.",
       "templateCategories": "Catégories de modèles de service",
       "hostTemplates": "Modèles hôte",
       "containerTemplates": "Modèles de conteneur",
@@ -4754,7 +4754,11 @@
       "continueDeploy": "Continuer le déploiement",
       "sourceVersion": "Source du modèle",
       "reviewUpdate": "Examiner la mise à jour",
-      "sourceReviewRequired": "Les opérations de cycle de vie de cette instance existante nécessitent un examen explicite de sa source."
+      "sourceReviewRequired": "Les opérations de cycle de vie de cette instance existante nécessitent un examen explicite de sa source.",
+      "allTypes": "Tous les types",
+      "resetFilters": "Réinitialiser les filtres",
+      "platforms": "Plateformes prises en charge",
+      "reviewBeforeDeploy": "Vérifiez le code source et les paramètres avant le déploiement."
     }
   },
   "debugConsoleSettings": {

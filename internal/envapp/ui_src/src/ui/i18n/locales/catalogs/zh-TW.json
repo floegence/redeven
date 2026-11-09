@@ -4211,7 +4211,7 @@
         "cancel": "取消"
       },
       "serviceTemplates": "服務範本",
-      "templateCenterDescription": "在目前環境中部署內建或自訂的主機與容器服務。",
+      "templateCenterDescription": "探索官方與社群範本，或部署自己的服務。",
       "templateCategories": "服務範本分類",
       "hostTemplates": "主機範本",
       "containerTemplates": "容器範本",
@@ -4754,7 +4754,11 @@
       "continueDeploy": "繼續部署",
       "sourceVersion": "範本原始碼",
       "reviewUpdate": "審閱原始碼更新",
-      "sourceReviewRequired": "此既有執行個體需要明確審閱原始碼後，才能執行生命週期操作。"
+      "sourceReviewRequired": "此既有執行個體需要明確審閱原始碼後，才能執行生命週期操作。",
+      "allTypes": "所有類型",
+      "resetFilters": "重設篩選",
+      "platforms": "支援的平台",
+      "reviewBeforeDeploy": "部署前，請檢閱範本原始碼與部署設定。"
     }
   },
   "debugConsoleSettings": {

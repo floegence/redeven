@@ -4211,7 +4211,7 @@
         "cancel": "Abbrechen"
       },
       "serviceTemplates": "Dienstvorlagen",
-      "templateCenterDescription": "Integrierte oder benutzerdefinierte Host- und Containerdienste in der aktuellen Umgebung bereitstellen.",
+      "templateCenterDescription": "Offizielle und Community-Vorlagen entdecken oder eigene Dienste bereitstellen.",
       "templateCategories": "Kategorien für Dienstvorlagen",
       "hostTemplates": "Hostvorlagen",
       "containerTemplates": "Containervorlagen",
@@ -4754,7 +4754,11 @@
       "continueDeploy": "Weiter zur Bereitstellung",
       "sourceVersion": "Vorlagenquelle",
       "reviewUpdate": "Quellaktualisierung prüfen",
-      "sourceReviewRequired": "Für Lebenszyklusaktionen dieser bestehenden Instanz muss die Quelle ausdrücklich geprüft werden."
+      "sourceReviewRequired": "Für Lebenszyklusaktionen dieser bestehenden Instanz muss die Quelle ausdrücklich geprüft werden.",
+      "allTypes": "Alle Typen",
+      "resetFilters": "Filter zurücksetzen",
+      "platforms": "Unterstützte Plattformen",
+      "reviewBeforeDeploy": "Prüfen Sie vor der Bereitstellung den Quellcode und die Einstellungen."
     }
   },
   "debugConsoleSettings": {
