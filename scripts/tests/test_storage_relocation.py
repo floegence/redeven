@@ -69,19 +69,88 @@ class RelocationTests(unittest.TestCase):
         self.assertNotEqual(self.check_plugins().returncode, 0)
         self.assertFalse((self.state / m.MARKER).exists())
 
-    def test_nested_dependency_links_fail_without_mutating_retained_state(self):
+    def dependency_links(self):
         source = self.state / 'author-workspaces/projects/example/source/node_modules'
         (source / '.bin').mkdir(parents=True)
         (source / 'tool.js').write_bytes(b'retained dependency')
         (source / '.bin/tool').symlink_to('../tool.js')
         (self.state / 'control.sqlite').write_bytes(b'retained control state')
-        with self.assertRaisesRegex(ValueError, 'unsupported filesystem entry'):
-            m.relocate(self.state, apply=True)
-        self.assertEqual((source / '.bin/tool').readlink(), Path('../tool.js'))
-        self.assertEqual((source / 'tool.js').read_bytes(), b'retained dependency')
-        self.assertEqual((self.state / 'control.sqlite').read_bytes(), b'retained control state')
+        return source
+
+    def test_nested_dependency_links_move_as_opaque_entries(self):
+        source = self.dependency_links()
+        original_inode = (source / '.bin/tool').lstat().st_ino
+        preview = m.relocate(self.state)
         self.assertFalse((self.state / m.MARKER).exists())
-        self.assertFalse((self.state / 'apps/plugins/platform').exists())
+        result = m.relocate(self.state, apply=True)
+        target = self.state / 'apps/plugins/platform/author-workspaces/projects/example/source/node_modules'
+        self.assertEqual(result['operations'], preview['operations'])
+        self.assertEqual((target / '.bin/tool').readlink(), Path('../tool.js'))
+        self.assertEqual((target / '.bin/tool').lstat().st_ino, original_inode)
+        self.assertEqual((target / 'tool.js').read_bytes(), b'retained dependency')
+        self.assertEqual((self.state / 'apps/plugins/platform/control.sqlite').read_bytes(), b'retained control state')
+        self.assertFalse(source.exists())
+        self.assertEqual(m.relocate(self.state, apply=True), result)
+
+    def test_dependency_links_reject_absolute_escape_missing_and_cycles_before_writing(self):
+        source = self.dependency_links()
+        link = source / '.bin/tool'
+        for target in (str(source / 'tool.js'), '../../../../../../outside', '../missing', 'tool'):
+            with self.subTest(target=target):
+                link.unlink(); link.symlink_to(target)
+                with self.assertRaises(ValueError): m.relocate(self.state, apply=True)
+                self.assertEqual(os.readlink(link), target)
+                self.assertFalse((self.state / m.MARKER).exists())
+                self.assertFalse((self.state / 'apps/plugins/platform').exists())
+
+    def test_dependency_directory_link_chain_is_preserved_without_traversal(self):
+        source = self.dependency_links()
+        (source / 'alias').symlink_to('.', target_is_directory=True)
+        (source / '.bin/tool').unlink()
+        (source / '.bin/tool').symlink_to('../alias/tool.js')
+        m.relocate(self.state, apply=True)
+        target = self.state / 'apps/plugins/platform/author-workspaces/projects/example/source/node_modules'
+        self.assertEqual(os.readlink(target / 'alias'), '.')
+        self.assertEqual(os.readlink(target / '.bin/tool'), '../alias/tool.js')
+
+    def test_dependency_link_chain_cannot_escape_through_another_link(self):
+        source = self.dependency_links()
+        outside = self.root / 'outside'; outside.mkdir()
+        (outside / 'tool.js').write_bytes(b'external bytes')
+        (source / 'alias').symlink_to(outside, target_is_directory=True)
+        (source / '.bin/tool').unlink()
+        (source / '.bin/tool').symlink_to('../alias/tool.js')
+        with self.assertRaises(ValueError): m.relocate(self.state, apply=True)
+        self.assertEqual((outside / 'tool.js').read_bytes(), b'external bytes')
+        self.assertFalse((self.state / m.MARKER).exists())
+
+    def test_dependency_link_text_is_bound_across_interruption(self):
+        source = self.dependency_links()
+        (source / 'other.js').write_bytes(b'retained dependency')
+        rename = m.os.rename
+        def stop_author(src, dst):
+            if src.name == 'author-workspaces': raise OSError('injected stop')
+            return rename(src, dst)
+        with patch.object(m.os, 'rename', stop_author):
+            with self.assertRaises(OSError): m.relocate(self.state, apply=True)
+        link = source / '.bin/tool'; link.unlink(); link.symlink_to('../other.js')
+        with self.assertRaisesRegex(ValueError, 'changed relocation input'): m.relocate(self.state, apply=True)
+        self.assertEqual(json.loads((self.state / m.MARKER).read_text())['status'], 'pending')
+        link.unlink(); link.symlink_to('../tool.js')
+        self.assertEqual(m.relocate(self.state, apply=True)['status'], 'complete')
+
+    def test_other_plugin_trees_and_skills_still_reject_links(self):
+        for name in ('assets', 'plugin-data'):
+            directory = self.state / name; directory.mkdir()
+            (directory / 'file').write_bytes(b'bytes')
+            link = directory / 'link'; link.symlink_to('file')
+            with self.assertRaises(ValueError): m.relocate(self.state, apply=True)
+            self.assertFalse((self.state / m.MARKER).exists())
+            link.unlink()
+        source, _ = self.skill_fixture()
+        (source / 'link').symlink_to('example')
+        with self.assertRaises(ValueError): m.relocate(self.state, source, True)
+        self.assertFalse((self.state / m.MARKER).exists())
 
     def test_opaque_sqlite_and_sidecars_move_without_interpretation(self):
         for name in ['control.sqlite', 'control.sqlite-wal', 'secrets.sqlite']:

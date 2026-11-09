@@ -3,11 +3,14 @@
 
 IMPORTANT: Rename opaque upstream files with their SQLite sidecars; never open,
 convert, repair or reset them. The journal fences startup until all exact moves
-verify. Conflicting targets and symlinks fail closed. Shared user skills are
-copied only with an explicit source; their originals remain untouched.
+verify. Only confined relative links inside the renamed author-workspaces tree
+are retained as opaque entries; never read through them. Conflicting targets,
+other links and special files fail closed. Shared user skills are copied only
+with an explicit source; their originals remain untouched.
 """
 import argparse
 import base64
+from collections import deque
 import contextlib
 import fcntl
 import hashlib
@@ -25,12 +28,50 @@ PLUGIN_NAMES = ('control.sqlite', 'secrets.sqlite', 'observability.sqlite',
 MARKER = 'storage-relocation.json'
 
 
-def fingerprint(path):
-    """Hash regular bytes and relative names; reject links/special files."""
+def validate_author_link(root, item, target):
+    """Inspect each path component without following links or leaving root."""
+    if os.path.isabs(target): raise ValueError(f'absolute author link: {item}')
+    pending = deque((*item.parent.relative_to(root).parts, *Path(target).parts))
+    resolved = []
+    links = 0
+    while pending:
+        part = pending.popleft()
+        if part == '..':
+            if not resolved: raise ValueError(f'author link escapes relocation tree: {item}')
+            resolved.pop()
+            continue
+        if part == '.': continue
+        candidate = root.joinpath(*resolved, part)
+        try: info = candidate.lstat()
+        except FileNotFoundError as error:
+            raise ValueError(f'author link target is missing: {item}') from error
+        if stat.S_ISLNK(info.st_mode):
+            links += 1
+            if links > 40: raise ValueError(f'cyclic or excessive author link chain: {item}')
+            nested = os.readlink(candidate)
+            if os.path.isabs(nested): raise ValueError(f'absolute author link: {candidate}')
+            pending.extendleft(reversed(Path(nested).parts))
+        else:
+            if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
+                raise ValueError(f'unsupported author link target: {item}')
+            if pending and not stat.S_ISDIR(info.st_mode):
+                raise ValueError(f'non-directory author link ancestor: {item}')
+            resolved.append(part)
+
+
+def fingerprint(path, *, author_links=False):
+    """Hash opaque entries; only author-tree relative links may be retained."""
     result = hashlib.sha256()
     def visit(item, relative):
         info = item.lstat()
-        if stat.S_ISLNK(info.st_mode) or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
+        if stat.S_ISLNK(info.st_mode):
+            if not author_links or item == path:
+                raise ValueError(f'unsupported filesystem entry: {item}')
+            target = os.readlink(item)
+            validate_author_link(path, item, target)
+            result.update(relative.encode() + b'\0' + str(stat.S_IMODE(info.st_mode)).encode() + b'\0symlink\0' + os.fsencode(target) + b'\0')
+            return
+        if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
             raise ValueError(f'unsupported filesystem entry: {item}')
         result.update(relative.encode() + b'\0' + str(stat.S_IMODE(info.st_mode)).encode() + b'\0')
         if stat.S_ISDIR(info.st_mode):
@@ -243,7 +284,7 @@ def plan(state, skills_source=None):
             target = 'apps/plugins/platform/' + source
             if secure_path(state, source).exists():
                 if secure_path(state, target).exists(): raise ValueError(f'conflicting destination: {target}')
-                operations.append({'source': source, 'target': target, 'sha256': fingerprint(state / source)})
+                operations.append({'source': source, 'target': target, 'sha256': fingerprint(state / source, author_links=source == 'author-workspaces')})
     for old, new in [('skills_state.json', 'state.json'), ('skills_sources.json', 'sources.json')]:
         if secure_path(state, old).exists():
             target = 'apps/skills/' + new
@@ -292,7 +333,7 @@ def relocate(state, skills_source=None, apply=False):
             expected = operation['sha256']
             final = finals.get(target.name) if operation['target'].startswith('apps/skills/') else None
             matches_final = current == target and final is not None and json.loads(target.read_text()) == final
-            if not current.exists() or (fingerprint(current) != expected and not matches_final): raise ValueError(f'changed relocation input: {current}')
+            if not current.exists() or (fingerprint(current, author_links=operation['source'] == 'author-workspaces') != expected and not matches_final): raise ValueError(f'changed relocation input: {current}')
         skills = record['skills']
         if skills:
             source = Path(skills['source']); destination = secure_path(state, 'apps/skills/packages')
@@ -315,7 +356,7 @@ def relocate(state, skills_source=None, apply=False):
                 mkdir_durable(target.parent)
                 os.rename(source, target); sync_dir(source.parent); sync_dir(target.parent)
             final = finals.get(target.name) if operation['target'].startswith('apps/skills/') else None
-            if fingerprint(target) != operation['sha256'] and not (final is not None and json.loads(target.read_text()) == final): raise ValueError('post-move verification failed')
+            if fingerprint(target, author_links=operation['source'] == 'author-workspaces') != operation['sha256'] and not (final is not None and json.loads(target.read_text()) == final): raise ValueError('post-move verification failed')
         # Originals were durably bound to their fingerprints before any move.
         # Recompute the only allowed transform on every resume, including after
         # a crash between publishing the two product-owned metadata files.
