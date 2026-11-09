@@ -27,6 +27,8 @@ await session.run(async () => {
     status: 'running', target: 'built Env App renderer in isolated native Electron',
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     floe: JSON.parse(await readFile(new URL('../node_modules/@floegence/floe-webapp-core/package.json', import.meta.url), 'utf8')).version,
+    theme: process.env.REDEVEN_GIT_INTERACTION_THEME ?? 'dark',
+    sourceDiff: execFileSync('git', ['diff', '--stat'], { cwd: root, encoding: 'utf8' }).trim(),
     cases: [], errors: [],
   };
   const main = path.join(state, 'main.cjs');
@@ -44,15 +46,17 @@ await session.run(async () => {
     await writeFile(path.join(output, `${name}.png`), Buffer.from(data, 'base64'));
   };
   await trustBuiltDistWebTransport(page, tls);
-  await page.addInitScript(() => {
+  await page.addInitScript(theme => {
     localStorage.setItem('redeven-envapp:env_local-activity-navigation', JSON.stringify({ version: 1, target: { kind: 'builtin', page: 'files' }, recentBuiltins: ['files', 'terminal'] }));
     localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     localStorage.setItem('redeven_ui_language_preference', 'zh-CN');
-    localStorage.setItem('redeven-envapp:theme', JSON.stringify('dark'));
-  });
+    localStorage.setItem('redeven-envapp:env_local-theme', JSON.stringify(theme));
+  }, report.theme);
   try {
     await page.goto(`${server.baseURL}_redeven_proxy/env/`);
     const mode = page.locator('[data-browser-mode-switch]');
+    await mode.waitFor();
+    assert.equal(await page.locator('html').evaluate(el => el.classList.contains('dark')), report.theme === 'dark');
     await mode.getByRole('radio', { name: 'Git', exact: true }).click();
     await page.locator('[data-git-commit-summary]').waitFor();
     await page.waitForFunction(() => document.querySelector('[data-git-commit-summary]')?.textContent.includes('+232'));
@@ -70,11 +74,20 @@ await session.run(async () => {
     assert.equal(await page.locator('[data-git-all-scroll]').evaluate(el => el.scrollWidth > el.clientWidth), true);
     await collapse.click();
     assert.equal(await collapse.isDisabled(), true);
-    await screenshot('changes-zh-dark');
+    await screenshot(`changes-zh-${report.theme}`);
     report.cases.push('whole-index summary, explicit commit, collapsed lazy tree, horizontal scrolling');
     const nav = page.locator('[data-git-workspace-navigation]');
     for (const label of ['已暂存', '变更', '全部']) {
       await page.getByRole('radio', { name: label, exact: true }).click();
+      const overlay = await page.getByRole('radio', { name: label, exact: true }).evaluate(button => {
+        const rail = button.closest('.floe-segmented-control');
+        return {
+          labels: rail.querySelectorAll('.floe-segmented-control__ink-label').length,
+          hidden: rail.querySelector('.floe-segmented-control__pill')?.getAttribute('aria-hidden'),
+        };
+      });
+      assert.equal(overlay.labels, 4, 'published shared selection keeps clipped label ink');
+      assert.equal(overlay.hidden, 'true', 'decorative labels stay out of accessible names');
       assert.equal(await draft.locator('textarea').inputValue(), 'fix: preserve git review state');
       assert.match(await draft.textContent(), /\+232/);
     }

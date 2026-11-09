@@ -687,7 +687,7 @@
               "protocol",
               "ui"
             ],
-            "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.9, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.",
+            "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.10, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.",
             "section_count": 3
           },
           {
@@ -10572,15 +10572,15 @@
         "title": "Env App upstream web dependencies",
         "type": "Frontend Contract"
       },
-      "body_length": 3517,
-      "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.9, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.",
+      "body_length": 3546,
+      "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.10, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns strict target-based context-source capture, retained reading selection, compact contributed menu icons and composable PromptCard toolbar actions. Secondary-pointer menus preserve prompt drafts. Redeven supplies semantic readers and screenshot authorization. Boot forwards the declared response-header allowlist; Redeven declares its attachment staging capability header without changing protocol validation.\n\nFloe owns logical-edge anchored-panel alignment and surface clamping; Flower opts into start alignment for a stable model picker.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
-          "char_count": 2005
+          "body": "Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal, stationary contrasting ink and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.\n\n## Mechanism\n\nCodeSpace, Web Service and service-template catalog modules own their styles.\nVite loads feature styles with their lazy page chunks. Resource presentation\ncomponents import their shared header stylesheet; the root stylesheet does not\nduplicate these imports. Every document retains the enforced 122 KiB gzip\ninitial CSS budget, including Desktop development builds.\n\nFloe owns strict target-based context-source capture, retained reading selection, compact contributed menu icons and composable PromptCard toolbar actions. Secondary-pointer menus preserve prompt drafts. Redeven supplies semantic readers and screenshot authorization. Boot forwards the declared response-header allowlist; Redeven declares its attachment staging capability header without changing protocol validation.\n\nFloe owns logical-edge anchored-panel alignment and surface clamping; Flower opts into start alignment for a stable model picker.\n\nFloe owns loading icons, intrinsic localized label space, persistent feedback and resolved inline-media viewports; see [layout stability](../ui/page-loading-continuity.md#asynchronous-layout).\n\nFloe owns progress-shimmer paint scheduling during drag and resize. Hosts consume\nits published CSS and shared interaction marker; they do not copy its animation\nimplementation or suppress model output to keep input responsive.\n\nCore supplies Host Applications' remote pointer/input controllers with render-independent bounded motion and explicit local text composition.\n\n[Flower citations](../ui/flower-citations.md#inline-code-references) owns citation presentation and browser acceptance.",
+          "char_count": 2033
         },
         {
           "id": "boundaries",
@@ -10609,7 +10609,7 @@
           "description": "Tests."
         }
       ],
-      "snippet": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.9, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floe",
+      "snippet": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.10, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Flo",
       "links": [
         {
           "label": "Flower citations",
@@ -25143,5 +25143,5 @@
       ]
     }
   ],
-  "source_sha256": "c1098360e4d0a0779afc2e0e015ad7a05c1b341c28b72e29bb8a3cbc8b939e91"
+  "source_sha256": "4a068b7e59158055f248d6c9536cc7fc865e9df73b3d92aa9a42c6e0bf164e40"
 }
