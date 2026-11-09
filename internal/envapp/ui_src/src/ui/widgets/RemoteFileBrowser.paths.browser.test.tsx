@@ -19,16 +19,16 @@ import { writeStoredLanguagePreference } from '../i18n/storage';
 
 const home = '/Users/tangjianyin';
 const target = '/Volumes/JianDisk/code/floegence/floebrowser-projection-lifecycle';
-const transport = vi.hoisted(() => ({ session: {}, list: vi.fn(), context: vi.fn(), repo: vi.fn(), capabilities: vi.fn() }));
+const transport = vi.hoisted(() => ({ session: {}, list: vi.fn(), context: vi.fn(), repo: vi.fn(), capabilities: vi.fn(), summary: vi.fn(), workspace: vi.fn(), branches: vi.fn(), commits: vi.fn(), statuses: vi.fn() }));
 vi.mock('@floegence/floe-webapp-protocol', async () => ({
   ...await vi.importActual<typeof import('@floegence/floe-webapp-protocol')>('@floegence/floe-webapp-protocol'),
-  useProtocol: () => ({ session: () => transport.session, status: () => 'connected' }),
+  useProtocol: () => ({ session: () => transport.session, status: () => 'connected', rpcTransport: () => null }),
 }));
 vi.mock('../protocol/redeven_v1', async () => ({
   ...await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1'),
   useRedevenRpc: () => ({
     fs: { list: transport.list, getPathContext: transport.context },
-    git: { resolveRepo: transport.repo, getCapabilities: transport.capabilities },
+    git: { resolveRepo: transport.repo, getCapabilities: transport.capabilities, getRepoSummary: transport.summary, listWorkspacePage: transport.workspace, listBranches: transport.branches, listCommits: transport.commits, listWorkspacePathStatuses: transport.statuses },
   }),
 }));
 
@@ -61,10 +61,10 @@ beforeEach(() => {
 });
 afterEach(() => { releaseFavorites?.(); releaseFavorites = undefined; dispose?.(); document.body.replaceChildren(); document.documentElement.classList.remove('dark'); vi.restoreAllMocks(); writeStoredLanguagePreference('en-US'); });
 
-async function mountFiles(initialPath: string, placement: 'activity' | 'workbench' = 'activity', options: { storage?: Map<string, string>; restore?: boolean; unavailable?: boolean; picker?: boolean; locale?: RedevenLocale } = {}) {
+async function mountFiles(initialPath: string, placement: 'activity' | 'workbench' = 'activity', options: { storage?: Map<string, string>; restore?: boolean; unavailable?: boolean; picker?: boolean; locale?: RedevenLocale; width?: number; initialMode?: 'files' | 'git' } = {}) {
   writeStoredLanguagePreference(options.locale ?? 'en-US');
   const copy = createI18nHelpers(options.locale ?? 'en-US', await loadEnvAppDictionary(options.locale ?? 'en-US'));
-  await page.viewport(1440, 900);
+  await page.viewport((options.width ?? 1200) + 80, 900);
   const storage = options.storage ?? new Map<string, string>();
   const host = document.createElement('div');
   document.body.append(host);
@@ -80,13 +80,13 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
       setFilesSidebarOpen: () => {},
     } as unknown as EnvContextValue;
     return <I18nProvider><FloeConfigProvider config={{ storage: { namespace: 'files-path-test', adapter: {
-      getItem: (key) => storage.get(key) ?? null,
+      getItem: (key) => storage.get(key) ?? (options.initialMode && key.includes('remote-file-browser:page-mode:') ? JSON.stringify(options.initialMode) : null),
       setItem: (key, value) => { storage.set(key, value); },
       removeItem: (key) => { storage.delete(key); },
     } } }}><LayoutProvider><NotificationProvider>
       <EnvContext.Provider value={context}><DownloadContext.Provider value={downloads}>
         <FilePreviewContext.Provider value={{ controller: preview, openPreview: preview.openPreview, closePreview: preview.closePreview }}>
-          <div data-testid="files-surface" style={{ height: '740px', width: '1200px', transform: placement === 'workbench' ? 'translate(20px, 10px) scale(0.9)' : undefined }}>
+          <div data-testid="files-surface" style={{ height: '740px', width: `${options.width ?? 1200}px`, transform: placement === 'workbench' ? 'translate(20px, 10px) scale(0.9)' : undefined }}>
             <RemoteFileBrowser initialPathOverride={options.restore ? undefined : initialPath} widgetId={placement === 'workbench' ? 'paths-widget' : undefined}
               onCommittedPathChange={(path, rootId) => { setCommitted(path); setRoot(rootId ?? ''); }} onTitleChange={setTitle} />
           </div>
@@ -117,6 +117,39 @@ async function mountFiles(initialPath: string, placement: 'activity' | 'workbenc
   transport.list.mockClear();
   return { host, storage, savedPaths, committedPath, enter };
 }
+
+describe('Native Files/Git control through the real retained workspaces', () => {
+  it.each([
+    ['activity', 1180, 'files'], ['activity', 375, 'git'],
+    ['workbench', 900, 'git'], ['workbench', 680, 'files'],
+  ] as const)('keeps one visible control through cold %s at %i px in %s mode', async (placement, width, initialMode) => {
+    transport.repo.mockResolvedValue({ available: true, gitAvailable: true, repoRootPath: target, headRef: 'main' });
+    transport.capabilities.mockResolvedValue({ workspaceRevisionV1: true, workspaceDirectoryScopeV1: true, workspacePathStatusV1: true, stashSectionDiffV1: true });
+    transport.summary.mockResolvedValue({ repoRootPath: target, headRef: 'main', workspaceRevision: 'mode-test', workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 } });
+    transport.workspace.mockImplementation(async request => ({ repoRootPath: target, section: request.section, workspaceRevision: 'mode-test', items: [], summary: {}, totalCount: 0, nextOffset: 0, hasMore: false }));
+    transport.statuses.mockResolvedValue({ repoRootPath: target, workspaceRevision: 'mode-test', items: [] });
+    transport.branches.mockResolvedValue({ repoRootPath: target, currentRef: 'main', local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }], remote: [] });
+    transport.commits.mockResolvedValue({ repoRootPath: target, commits: [], hasMore: false, nextOffset: 0 });
+    const { host } = await mountFiles(target, placement, { width, initialMode });
+    await expect.poll(() => host.querySelectorAll('[data-browser-mode-switch]').length).toBe(1);
+    const control = host.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
+    const buttons = [...control.querySelectorAll<HTMLButtonElement>('button')];
+    const visibleMode = () => control.closest('[data-browser-mode-panel][data-state="active"]')?.getAttribute('data-browser-mode-panel');
+    await expect.poll(visibleMode).toBe(initialMode);
+    for (const mode of ['git', 'files', 'git', 'files'] as const) {
+      const button = buttons[mode === 'git' ? 1 : 0];
+      await expect.poll(() => button.disabled).toBe(false);
+      await userEvent.click(button);
+      await expect.poll(visibleMode).toBe(mode);
+      expect(host.querySelectorAll('[data-browser-mode-switch]')).toHaveLength(1);
+      expect(host.querySelector('[data-browser-mode-switch]')).toBe(control);
+      expect(control.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })).toBe(true);
+      expect(document.activeElement).toBe(button);
+      expect(control.getBoundingClientRect().width).toBeGreaterThan(150);
+      expect(button.getAttribute('aria-checked')).toBe('true');
+    }
+  });
+});
 
 describe('Files quick access navigation feedback', () => {
   async function mountShortcuts(paths = [target], placement: 'activity' | 'workbench' = 'activity') {

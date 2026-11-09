@@ -1,7 +1,7 @@
 import { ResizeHandle } from '@floegence/floe-webapp-core/layout';
 import type { GitWorkspaceDirectoryLoader } from './gitWorkspaceTreeModel';
 import { StableText, Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
-import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
+import { For, Show, children, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn, createAdaptiveSidebar, useLayout } from '@floegence/floe-webapp-core';
 import { ArrowDown, ArrowUp, Copy, Download, Folder, GitBranch, History, MoreHorizontal, Refresh, Terminal } from '@floegence/floe-webapp-core/icons';
 import type {
@@ -173,6 +173,7 @@ const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 type RepositoryHeaderActionId = 'stashes' | 'fetch' | 'pull' | 'push' | 'terminal' | 'files';
 
 export function GitWorkbench(props: GitWorkbenchProps) {
+  const modeSwitcher = children(() => props.modeSwitcher);
   const [workspaceElement, setWorkspaceElement] = createSignal<HTMLDivElement>();
   const layout = useLayout();
   const topPresentation = createAdaptiveSidebar({ container: workspaceElement, sidebarWidth: () => props.railWidth ?? 280, minContentWidth: () => 480 });
@@ -370,8 +371,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
 
   return (
     <div ref={setWorkspaceElement} data-git-workspace data-compact-mode={layout.isMobile() || topPresentation() === 'overlay'} class={cn('git-workbench relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'), props.class)} style={{ '--git-review-rail-width': `${props.railWidth ?? 280}px` }}>
-      <div class="git-workspace-top" data-with-mode={Boolean(props.modeSwitcher)}>
-        <Show when={props.modeSwitcher}><div class="git-workspace-mode">{props.modeSwitcher}</div></Show>
+      <div class="git-workspace-top" data-with-mode={Boolean(modeSwitcher())}>
+        <Show when={modeSwitcher()}><div class="git-workspace-mode">{modeSwitcher()}</div></Show>
       <div
         class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}
         data-git-repository-header="compact"

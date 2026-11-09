@@ -104,8 +104,13 @@ describe('Git workspace redesign acceptance', () => {
     </ProtocolProvider></NotificationProvider></LayoutProvider></FloeConfigProvider>, host);
     await expect.poll(() => host.querySelector('[data-browser-mode-switch]')?.getBoundingClientRect().width ?? 0).toBeGreaterThan(200);
     const control = host.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
+    expect(host.querySelectorAll('[data-browser-mode-switch]')).toHaveLength(1);
+    expect(filesMount()?.contains(control)).toBe(true);
     const bounds = control.getBoundingClientRect();
     await userEvent.click(control.querySelectorAll<HTMLButtonElement>('button')[1]);
+    await expect.poll(() => gitMount()?.contains(control)).toBe(true);
+    expect(control.checkVisibility({ checkVisibilityCSS: true })).toBe(true);
+    expect(host.querySelectorAll('[data-browser-mode-switch]')).toHaveLength(1);
     await expect.poll(() => host.querySelector('[data-browser-mode-switch]')).toBe(control);
     await expect.poll(() => control.getBoundingClientRect().x).toBeCloseTo(bounds.x, 0);
     expect(control.getBoundingClientRect().y).toBeCloseTo(bounds.y, 0);

@@ -611,6 +611,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
         onRevealRequestConsumed={props.onRevealRequestConsumed}
       >
         <FileBrowserWorkspaceInner
+          modeSwitcherMount={props.modeSwitcherMount}
           registerPageStateReader={props.registerPageStateReader}
           mode={props.mode}
           onModeChange={props.onModeChange}

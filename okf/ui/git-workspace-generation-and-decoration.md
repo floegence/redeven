@@ -42,7 +42,7 @@ Every preset has complete interaction roles. Forced colors expose selection/focu
 The Files/Git switch places its disabled-reason tooltip below the tabs through the published Floe floating layer. Keep both buttons unobscured from the first visible animation frame in viewport and projected-surface hosts, contain wrapped text, and dismiss on pointer exit.
 
 ## Tree review workspace
-The shared Files/Git control has one mounted native button pair across retained mode panels. Solid Portal moves it between matching top-row slots; keyboard focus returns to the triggering button. Narrow Files layouts keep this control above the directory drawer. Repository identity and sync actions share the top row. Git navigation spans the complete workspace above both review panes; it never belongs to a separate sidebar or drawer. The review divider resizes the file rail and matching mode slot together. Branch/history selectors stay below the navigation. Narrow file inspection uses retained list/detail steps with a back action.
+The shared Files/Git control has one mounted native button pair across retained mode panels. Solid Portal moves it between matching top-row slots. Forward each slot callback through workspace wrappers and resolve slot JSX once before testing presence or rendering; detached duplicate slots cannot own the control. Keyboard focus returns to the triggering button. Narrow Files layouts keep this control above the directory drawer. Repository identity and sync actions share the top row. Git navigation spans the complete workspace above both review panes; it never belongs to a separate sidebar or drawer. The review divider resizes the file rail and matching mode slot together. Branch/history selectors stay below the navigation. Narrow file inspection uses retained list/detail steps with a back action.
 
 Changes defaults to All, grouping the existing bounded Changes/Staged/Conflicted pages. Section filters retain their authoritative scopes; selecting a file preserves its exact section even when a path appears in both index and worktree. Initial All reads serialize through the existing owner; refresh revalidates nonempty sections, mutations refresh affected sections, and repository/client changes cancel the remaining read sequence. Section errors expose explicit retry. The file rail owns search, collapsed trees, scope actions and a retained commit draft. Whole-index review remains mandatory before commit.
 
@@ -68,7 +68,7 @@ Layout persistence proves no content freshness. Workbench target stability canno
 # Evidence
 
 - `redeven:internal/envapp/ui_src/src/ui/widgets/GitWorkspaceTree.test.tsx`, `gitWorkspaceTreeModel.test.ts` — lazy pagination, stale replies, exact paths and keyboard navigation.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/GitWorkspaceRedesign.browser.test.tsx`, `FileBrowserWorkspace.navigation.browser.test.tsx` — retained rail/draft, independent horizontal scrolling, light/dark themes and adaptive widths.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/GitWorkspaceRedesign.browser.test.tsx`, `FileBrowserWorkspace.navigation.browser.test.tsx` — retained rail/draft, independent horizontal scrolling, light/dark themes and adaptive widths. `RemoteFileBrowser.paths.browser.test.tsx` exercises cold Files/Git entry and visible native control identity through real Activity/Workbench workspace wrappers.
 
 - `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts` - Source.
 
