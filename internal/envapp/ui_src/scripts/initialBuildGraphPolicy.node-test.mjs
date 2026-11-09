@@ -205,8 +205,8 @@ test('keeps the presentation engine out of every initial chunk', () => {
 });
 
 
-test('loads plugin creation pages only through dynamic navigation', () => {
-  for (const page of ['PluginCreationWorkspace.tsx', 'PluginCreationViewport.tsx', 'PluginCreationCanvasBackground.tsx', 'PluginDraftLibrary.tsx']) {
+test('loads plugin management and creation pages only through dynamic navigation', () => {
+  for (const page of ['PluginCenterView.tsx', 'PluginCreationWorkspace.tsx', 'PluginCreationViewport.tsx', 'PluginCreationCanvasBackground.tsx', 'PluginDraftLibrary.tsx']) {
     const module = '/workspace/redeven/internal/envapp/ui_src/src/ui/plugins/' + page;
     const manifest = {
       'index.html': entry('assets/index.js', { dynamicImports: ['creation'] }),

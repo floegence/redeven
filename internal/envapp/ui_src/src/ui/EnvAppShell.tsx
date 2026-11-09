@@ -110,7 +110,6 @@ import type { createFlowerLinkedContextNavigation } from './flower/linkedContext
 import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import { startPluginAutomaticUpdates } from './plugins/pluginAutomaticUpdates';
-import { PluginCenterView } from './plugins/PluginCenterView';
 import { PluginCenterDrawer } from './plugins/PluginCenterDrawer';
 import { pluginInstalledSettingsResource } from './plugins/pluginSettingsTarget';
 import { PluginPanel } from './plugins/PluginPanel';
@@ -307,6 +306,9 @@ const FLOWER_RELATED_SURFACE_SELECTOR = [
   '.flower-working-dir-picker',
   '.flower-provider-dialog',
   '.flower-settings-dialog',
+  // IMPORTANT: The global Settings host replaces Flower's old local form. Its
+  // controls and backdrop must not dismiss the retained companion underneath.
+  '.redeven-unified-settings-dialog',
   '.flower-model-selection-dialog',
   '[data-flower-floating-layer]',
 ].join(', ');
@@ -333,6 +335,10 @@ function pluginActivityComponentID(inventoryKey: string): string {
   return `${PLUGIN_ACTIVITY_COMPONENT_PREFIX}${encodeURIComponent(inventoryKey)}`;
 }
 const MobileShellTools = lazy(() => import('./MobileShellTools').then(module => ({ default: module.MobileShellTools })));
+// IMPORTANT: Plugin management loads only after its independent drawer is first
+// opened. Keep Suspense inside the retained drawer so loading cannot suspend
+// the work surface or replace the modal placement owner.
+const PluginCenterView = lazy(() => import('./plugins/PluginCenterView').then(module => ({ default: module.PluginCenterView })));
 const PluginCreationWorkspace = lazy(() => import('./plugins/PluginCreationWorkspace').then(module => ({ default: module.PluginCreationWorkspace })));
 const PluginCreationViewport = lazy(() => import('./plugins/PluginCreationViewport').then(module => ({ default: module.PluginCreationViewport })));
 const PluginDraftLibrary = lazy(() => import('./plugins/PluginDraftLibrary').then(module => ({ default: module.PluginDraftLibrary })));
@@ -5755,7 +5761,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                 refetchMaintenanceContext: refetchRuntimeMaintenanceContext,
               }}
             >
-              <Show when={pluginCenterVisited()}><PluginCenterDrawer open={pluginCenterOpen()} onOpenChange={setPluginCenterOpen} onPresenceChange={setPluginCenterPresent} title={i18n.t('uiCopy.plugin.centerTitle')}>{renderPluginCenter()}</PluginCenterDrawer></Show>
+              <Show when={pluginCenterVisited()}><PluginCenterDrawer open={pluginCenterOpen()} onOpenChange={setPluginCenterOpen} onPresenceChange={setPluginCenterPresent} title={i18n.t('uiCopy.plugin.centerTitle')}><Suspense fallback={<ActivityPageLoading />}>{renderPluginCenter()}</Suspense></PluginCenterDrawer></Show>
               <Show when={settingsVisited()}><Suspense><EnvSettingsDialog session={settingsSession} panels={settingsPanels()} pluginSettings={{
                 get items() { return pluginInventoryProjection()?.items ?? []; }, get ownerScope() { return pluginInventorySource(); },
                 get loading() { return pluginInventoryInitialPending(); }, get canManage() { return Boolean(pluginInventorySource() && canAdmin() && env()?.permissions?.can_read && env()?.permissions?.can_write && env()?.permissions?.can_execute); },
@@ -5771,7 +5777,10 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                     <h1 class="floe-window-status__title">{i18n.t(restartRestoreFailed() ? 'sessionRestart.failed' : 'sessionRestart.restoring')}</h1>
                   </div></section>
                 )}>
-                  <div class="h-full min-h-0" inert={restartPreparing()} aria-hidden={restartPreparing() ? 'true' : undefined}>
+                  {/* IMPORTANT: Settings covers every retained work surface, including
+                      Flower portals. Keep their DOM and geometry, but block interaction
+                      until modal exit completes; the global dialog remains a sibling. */}
+                  <div data-env-work-surfaces class="h-full min-h-0" inert={restartPreparing() || settingsSession.present()} aria-hidden={restartPreparing() || settingsSession.present() ? 'true' : undefined}>
                     {standalone ? renderStandalone() : renderMainShell()}
                     <Show when={!standaloneTessiven}>
                       <div

@@ -1108,6 +1108,9 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
 
     await composer.fill('Retained settings transition draft');
     await composer.evaluate(element => element.setSelectionRange(2, 8));
+    await page.getByRole('button', { name: 'Flower settings', exact: true }).evaluate(element => {
+      globalThis.__redevenBuiltFlowerSettingsTrigger = element;
+    });
     await page.getByRole('button', { name: 'Flower settings', exact: true }).click();
     // IMPORTANT: Env configuration belongs to the one global Settings dialog.
     // A retained Flower side panel must not substitute for the product owner.
@@ -1139,6 +1142,10 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     }
     await settingsDialog.locator('.redeven-env-settings-dialog-close').click();
     await settingsDialog.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => (
+      globalThis.document.activeElement === globalThis.__redevenBuiltFlowerSettingsTrigger
+      && !globalThis.__redevenBuiltFlowerSettingsTrigger.closest('[inert], [aria-hidden="true"]')
+    ));
     await page.locator('[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'File Browser', exact: true }).click();
     await page.waitForFunction(() => (
       globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
@@ -1165,6 +1172,20 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     await settingsDialog.locator('.redeven-env-settings-dialog-close').click();
     await settingsDialog.waitFor({ state: 'hidden' });
     assert.equal(await composer.inputValue(), 'Retained settings transition draft');
+    // Floe hides an exiting dialog from accessibility before its presence ends.
+    // Background interaction intentionally resumes only after that exit.
+    await page.waitForFunction(() => !globalThis.document.querySelector('[data-env-work-surfaces]')?.inert);
+    const restoredCompanion = await page.evaluate(() => ({
+      phase: globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase'),
+      placement: globalThis.document.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation'),
+      collapseControls: [...globalThis.document.querySelectorAll('[aria-label="Collapse Flower"]')].map(element => ({
+        visible: element.getClientRects().length > 0, parent: element.parentElement?.className,
+        companion: Boolean(element.closest('#redeven-activity-flower-companion')), inert: Boolean(element.closest('[inert]')),
+      })),
+    }));
+    if (restoredCompanion.phase !== 'expanded' || !restoredCompanion.collapseControls.some(control => control.visible && control.companion && !control.inert)) {
+      throw new Error(`built Settings must restore the expanded Flower companion: ${JSON.stringify(restoredCompanion)}`);
+    }
     await companion.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
     await page.waitForFunction(() => (
       globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'

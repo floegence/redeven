@@ -1958,6 +1958,50 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it.each(['activity', 'workbench'])('isolates retained work surfaces until Settings exits in %s', async mode => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', mode);
+    const host = document.createElement('div'); document.body.append(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="activity-flower-composer"]')), 60);
+      if (mode === 'activity') {
+        host.querySelector<HTMLButtonElement>('[data-activity-id="ai"]')!.click();
+        await flushUntil(() => host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation') === 'full_page');
+      }
+      const editor = host.querySelector<HTMLTextAreaElement>('[data-testid="activity-flower-composer"]')!;
+      editor.value = 'Retain the draft behind Settings'; editor.setSelectionRange(2, 8);
+      const product = editor.closest<HTMLElement>('#redeven-activity-flower-product')!;
+      const page = editor.closest<HTMLElement>('[data-testid="ai-page"]')!;
+      const hiddenBefore = product.hidden;
+      const transcriptBefore = page.dataset.transcriptVisible;
+      const openSettings = host.querySelector<HTMLButtonElement>('[data-testid="mock-open-flower-settings"]')!;
+      openSettings.click();
+      await flushUntil(() => Boolean(host.querySelector('.redeven-unified-settings-dialog')));
+      // JSDOM does not reflect the native inert property to its HTML attribute.
+      // Packaged Chromium separately checks the reflected attribute and focus.
+      const coveredRoot = editor.closest<HTMLElement>('[data-env-work-surfaces]');
+      expect(coveredRoot?.inert).toBe(true);
+      expect(coveredRoot?.contains(editor)).toBe(true);
+      expect(product.hidden).toBe(hiddenBefore);
+      expect(page.dataset.transcriptVisible).toBe('false');
+      const close = host.querySelector<HTMLButtonElement>('.redeven-env-settings-dialog-close')!;
+      expect(close.closest('[inert], [aria-hidden="true"]')).toBeNull();
+      settingsPresenceState.holdExit = true; close.click();
+      await flushUntil(() => Boolean(settingsPresenceState.finishExit));
+      expect(coveredRoot?.inert).toBe(true);
+      settingsPresenceState.finishExit!(); await flushAsync();
+      expect(coveredRoot?.inert).toBe(false);
+      expect(coveredRoot?.getAttribute('aria-hidden')).toBeNull();
+      expect(host.querySelector('[data-testid="activity-flower-composer"]')).toBe(editor);
+      expect(editor.value).toBe('Retain the draft behind Settings');
+      expect([editor.selectionStart, editor.selectionEnd]).toEqual([2, 8]);
+      expect(page.dataset.transcriptVisible).toBe(transcriptBefore);
+    } finally { dispose(); }
+  }, 10000);
+
   it('shows the browser language command in the palette while keeping runtime settings separate', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 

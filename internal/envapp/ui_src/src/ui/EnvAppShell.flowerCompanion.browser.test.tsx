@@ -390,7 +390,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
       state: () => (options.open() ? 'entered' : 'exited'),
     }),
     Dialog: (props: any) => (
-      String(props.class ?? '').includes('dialog-placement-browser-contract')
+      /dialog-placement-browser-contract|redeven-unified-settings-dialog/.test(String(props.class ?? ''))
         ? <RealDialog {...props} />
         : (
             <Show when={props.open}>
@@ -948,9 +948,13 @@ vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
 }));
 vi.mock('./notes/NotesOverlay', () => ({ NotesOverlay: () => <div /> }));
 vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
-vi.mock('./pages/settings/EnvSettingsDialog', () => ({ EnvSettingsDialog: (props: any) => <Show when={props.session.target()}>
-  <section role="dialog" data-testid="settings-overlay" style={{ position: 'fixed', top: '80px', left: '80px', 'z-index': 1000 }}><button onClick={() => props.session.close()}>Close settings</button></section>
-</Show> }));
+vi.mock('./pages/settings/EnvSettingsDialog', async () => {
+  const { SettingsDialog } = await import('../../../../settings_ui/src/SettingsDialog');
+  return { EnvSettingsDialog: (props: any) => <SettingsDialog open={Boolean(props.session.target())} present={props.session.present()}
+    title="Settings" closeLabel="Close" onClose={props.session.close} onPresenceChange={props.session.setPresent} globalZIndex={4000}>
+    <section data-testid="settings-overlay"><button onClick={() => props.session.close()}>Close settings</button></section>
+  </SettingsDialog> };
+});
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div data-testid="file-preview-host" /> }));
@@ -1333,7 +1337,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       expect(rail.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
     }
     await userEvent.click(button('settings'));
-    await vi.waitFor(() => expect(fixture.host.querySelector('[data-testid="settings-overlay"]')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="settings-overlay"]')).not.toBeNull());
     expect(button('settings').getAttribute('aria-pressed')).toBe('false');
     expect(button('connections').getAttribute('aria-pressed')).toBe('true');
     await page.getByRole('button', { name: 'Close settings', exact: true }).click();
@@ -2053,6 +2057,27 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(fixture.product.getAttribute('aria-hidden')).toBeNull();
     expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
     expect(envAIPageMountSequence).toBe(1);
+  });
+
+  it.each(['activity', 'workbench'] as const)('retains %s Flower presentation and focus through global Settings', async mode => {
+    await page.viewport(1280, 800);
+    const fixture = await mountShell();
+    if (mode === 'workbench') await userEvent.click(document.querySelector<HTMLButtonElement>('[data-testid="activity-switch-workbench"]')!);
+    else await userEvent.click(fixture.input);
+    await vi.waitFor(() => expect(fixture.product.dataset.presentation).toBe(mode === 'activity' ? 'expanded' : 'workbench'));
+    await userEvent.fill(fixture.input, 'Retain draft, selection and presentation');
+    fixture.input.setSelectionRange(2, 8);
+    if (mode === 'activity') await vi.waitFor(() => expect(fixture.companion.dataset.companionPhase).toBe('expanded'));
+    registeredCommands.find(command => command.id === 'redeven.env.openRuntimeSettings')!.execute();
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="settings-overlay"]')).not.toBeNull(), { timeout: 5000 });
+    expect(fixture.input.closest('[inert][aria-hidden="true"]')).not.toBeNull();
+    expect(fixture.input.getClientRects().length).toBeGreaterThan(0);
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await vi.waitFor(() => expect(document.activeElement).toBe(fixture.input));
+    expect(fixture.input.closest('[inert], [aria-hidden="true"]')).toBeNull();
+    expect(fixture.product.dataset.presentation).toBe(mode === 'activity' ? 'expanded' : 'workbench');
+    expect(fixture.input.value).toBe('Retain draft, selection and presentation');
+    expect([fixture.input.selectionStart, fixture.input.selectionEnd]).toEqual([2, 8]);
   });
 
   it('uses the global product modal boundary for ordinary Activity page dialogs', async () => {

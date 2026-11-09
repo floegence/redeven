@@ -372,6 +372,66 @@ it('keeps newer permission edits across delayed autosave acknowledgement', async
   expect(fixture.settings().permission_policy!.by_user?.[original + '_first']).toBeUndefined();
 });
 
+
+it.each((['user', 'app'] as const).flatMap(scope => (['add', 'rename', 'normalize'] as const).map(kind => ({ scope, kind }))))('preserves $scope permission input order and focus when an acknowledgement must $kind a subject', async ({ scope, kind }) => {
+  await mount(1440);
+  const panel = await openCategory('permission_policy');
+  if (scope === 'app') {
+    const current = fixture.settings();
+    fixture.context.mutateSettings({ ...current, permission_policy: { ...current.permission_policy!, by_app: { app_existing: { read: true, write: false, execute: false } } } });
+  }
+  const copy = createTestI18nHelpers('en-US');
+  const inputName = copy.t(scope === 'user' ? 'permissionPolicy.userHeader' : 'permissionPolicy.appHeader');
+  const rules = () => scope === 'user' ? fixture.settings().permission_policy!.by_user : fixture.settings().permission_policy!.by_app;
+  const table = panel.querySelectorAll<HTMLElement>('.settings-permission-table')[scope === 'user' ? 0 : 1];
+  const first = table.querySelector<HTMLInputElement>('input[data-floe-control=input]')!;
+  const originalKey = first.value;
+  await page.getByRole('button', { name: copy.t('permissionPolicy.addRule'), exact: true }).nth(scope === 'user' ? 0 : 1).click();
+  const added = table.querySelectorAll<HTMLInputElement>('input[data-floe-control=input]')[1];
+  const subject = kind === 'add' ? 'aaa_added' : 'user_second';
+  const addedLocator = page.getByRole('textbox', { name: inputName, exact: true }).nth(1);
+  await userEvent.type(addedLocator, subject);
+  let field = added;
+  let canonical = subject;
+  if (kind !== 'add') {
+    const firstLocator = page.getByRole('textbox', { name: inputName, exact: true }).first();
+    canonical = kind === 'rename' ? 'zzz_renamed' : 'user_changed';
+    await firstLocator.fill(kind === 'normalize' ? ` ${canonical} ` : canonical);
+    field = first;
+  }
+  await expect.poll(() => rules()?.[canonical]).toBeDefined();
+  expect([...table.querySelectorAll('input[data-floe-control=input]')], 'an acknowledgement never reorders existing live rules').toEqual([first, added]);
+  expect(field.isConnected).toBe(true);
+  expect(field.value).toBe(canonical);
+  expect(document.activeElement, 'the acknowledged subject retains keyboard focus').toBe(field);
+  await userEvent.keyboard('_continued');
+  expect(field.value).toBe(canonical + '_continued');
+  await expect.poll(() => rules()?.[canonical + '_continued']).toBeDefined();
+  expect(field.isConnected).toBe(true); expect(document.activeElement).toBe(field);
+  expect([...table.querySelectorAll('input[data-floe-control=input]')]).toEqual([first, added]);
+  expect(rules()?.[canonical]).toBeUndefined();
+  expect(kind === 'add' ? first.value : added.value).toBe(kind === 'add' ? originalKey : subject);
+});
+
+it('keeps surviving permission controls in place while appending sorted external subjects and removing absent rules', async () => {
+  await mount(1440);
+  const panel = await openCategory('permission_policy');
+  const table = panel.querySelector<HTMLElement>('.settings-permission-table')!;
+  const field = table.querySelector<HTMLInputElement>('input[data-floe-control=input]')!;
+  field.focus();
+  const readOnly = { read: true, write: false, execute: false };
+  const current = fixture.settings();
+  fixture.context.mutateSettings({ ...current, permission_policy: { ...current.permission_policy!, by_user: { zzz_external: readOnly, [field.value]: { ...readOnly, execute: true }, aaa_external: readOnly } } });
+  const rows = [...table.querySelectorAll<HTMLInputElement>('input[data-floe-control=input]')];
+  expect(rows.map(input => input.value)).toEqual([field.value, 'aaa_external', 'zzz_external']);
+  expect(rows[0]).toBe(field); expect(document.activeElement).toBe(field);
+  expect(field.closest('tr')!.querySelectorAll<HTMLInputElement>('input[type=checkbox]')[2].checked).toBe(true);
+  const absent = rows[2];
+  fixture.context.mutateSettings({ ...fixture.settings(), permission_policy: { ...fixture.settings().permission_policy!, by_user: { [field.value]: readOnly, aaa_external: readOnly } } });
+  expect([...table.querySelectorAll('input[data-floe-control=input]')]).toEqual([field, rows[1]]);
+  expect(absent.isConnected).toBe(false); expect(document.activeElement).toBe(field);
+});
+
 it('saves real picture selections immediately and never writes from category navigation', async () => {
   await mount(1024);
   const panel = await openCategory('applications');

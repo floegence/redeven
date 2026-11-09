@@ -1,5 +1,5 @@
-import { For, Show, batch, createSignal, createEffect, onCleanup } from 'solid-js';
-import { createStore, produce, reconcile } from 'solid-js/store';
+import { For, Show, batch, createSignal, createEffect, onCleanup, untrack } from 'solid-js';
+import { createStore, produce, type SetStoreFunction } from 'solid-js/store';
 import { Shield, Trash, ShieldCheck } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -43,6 +43,25 @@ export function PermissionPolicySection() {
     localExecute() && !localWrite() ? i18n.t('terminal.executePermissionDescription') : '',
   ].filter(Boolean).join(' ');
 
+  const syncRules = (rows: PermissionRow[], setRows: SetStoreFunction<PermissionRow[]>, value: Record<string, PermissionSet> | undefined) => untrack(() => {
+    const remaining = new Map(mapToPermissionRows(value).map(row => [row.key, row]));
+    const next: PermissionRow[] = [];
+    // IMPORTANT: Acknowledgements canonicalize subjects without moving their
+    // existing controls. Even moving the same focused DOM node can blur it.
+    // Read local rows untracked: typing must not trigger server reconciliation
+    // before the input handler marks its revision dirty.
+    batch(() => {
+      rows.forEach((row, index) => {
+        const canonical = remaining.get(row.key.trim());
+        if (!canonical) return;
+        setRows(index, canonical);
+        next.push(row);
+        remaining.delete(canonical.key);
+      });
+      setRows([...next, ...remaining.values()]);
+    });
+  });
+
   createEffect(() => {
     const s = ctx.settings();
     if (!s) return;
@@ -51,8 +70,8 @@ export function PermissionPolicySection() {
       setLocalRead(p?.local_max?.read ?? true);
       setLocalWrite(p?.local_max?.write ?? false);
       setLocalExecute(p?.local_max?.execute ?? true);
-      setByUser(reconcile(mapToPermissionRows(p?.by_user as any), { key: 'key' }));
-      setByApp(reconcile(mapToPermissionRows(p?.by_app as any), { key: 'key' }));
+      syncRules(byUser, setByUser, p?.by_user);
+      syncRules(byApp, setByApp, p?.by_app);
     }
   });
 
