@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { stageDesktopAccess, desktopAccessIdentity, desktopAccessInfo } from './stage_desktop_access.mjs';
+import { resolveDesktopAccessSigningIdentity } from './desktop_access_signing.mjs';
 
 test('desktop access uses a stable distinct application identity', () => {
   assert.deepEqual(desktopAccessIdentity(false), { name: 'Redeven Desktop Access', identifier: 'com.floegence.redeven.desktop-access' });
@@ -13,13 +14,13 @@ test('desktop access uses a stable distinct application identity', () => {
   assert.equal(info.LSEnvironment, undefined);
 });
 
-test('desktop access rejects ad-hoc or missing signing before creating files', () => {
+test('desktop access rejects explicit empty or ad-hoc signing before creating files', () => {
   for (const identity of ['', '-']) assert.throws(() => stageDesktopAccess({binary: '/nonexistent/helper', destination: '/nonexistent/Desktop Access.app', icon: '/nonexistent/icon.icns', identity}), /Apple Development or Developer ID/);
   assert.equal(desktopAccessInfo(false, '1.2.3').CFBundleVersion, '1.2.3');
   assert.match(desktopAccessInfo(false).NSScreenCaptureUsageDescription, /choose to share/);
 });
 
-test('staged signed helper retains its resource seal when the enclosing app is signed', {skip: process.platform !== 'darwin' || !process.env.REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY}, async t => {
+test('staged signed helper retains its resource seal when the enclosing app is signed', {skip: process.platform !== 'darwin' || (!process.env.REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY && process.env.REDEVEN_DESKTOP_ACCESS_SIGNING_QUALIFICATION !== '1')}, async t => {
   const fs = await import('node:fs');
   const os = await import('node:os');
   const path = await import('node:path');
@@ -36,9 +37,14 @@ test('staged signed helper retains its resource seal when the enclosing app is s
   const plist = path.join(outer, 'Contents/Info.plist');
   fs.writeFileSync(plist, JSON.stringify({CFBundleIdentifier:'com.floegence.fixture.container',CFBundleExecutable:'container',CFBundlePackageType:'APPL',CFBundleName:'Container',CFBundleVersion:'1'}));
   execFileSync('plutil', ['-convert','xml1',plist]);
+  const signingIdentity = resolveDesktopAccessSigningIdentity();
   const helper = stageDesktopAccess({binary:'/usr/bin/true', destination:path.join(resources, 'Redeven Desktop Access Dev.app'),icon:path.join(source, 'desktop/build/desktop-access.icns')});
+  const rebuilt = stageDesktopAccess({binary:'/usr/bin/true', destination:path.join(root, 'Rebuilt.app'), icon:path.join(source, 'desktop/build/desktop-access.icns')});
+  const requirements = bundle => execFileSync('codesign', ['-d', '-r-', bundle], {encoding:'utf8', stdio:['ignore','pipe','ignore']}).trim();
+  assert.ok(requirements(helper).includes(desktopAccessIdentity(true).identifier));
+  assert.equal(requirements(helper), requirements(rebuilt));
   const seal = fs.readFileSync(path.join(helper, 'Contents/_CodeSignature/CodeResources'));
-  execFileSync('codesign', ['--force','--sign',process.env.REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY,outer]);
+  execFileSync('codesign', ['--force','--sign',signingIdentity,outer]);
   execFileSync('codesign', ['--verify','--deep','--strict',outer]);
   assert.deepEqual(fs.readFileSync(path.join(helper, 'Contents/_CodeSignature/CodeResources')),seal);
   const info = JSON.parse(execFileSync('plutil',['-convert','json','-o','-',path.join(helper,'Contents/Info.plist')],{encoding:'utf8'}));

@@ -1,6 +1,7 @@
 import { copyFileSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { resolveDesktopAccessSigningIdentity } from './desktop_access_signing.mjs';
 import { fileURLToPath } from 'node:url';
 
 const privacyCopy = JSON.parse(readFileSync(new URL('../desktop/native/computer-host/Resources/Privacy.json', import.meta.url), 'utf8'));
@@ -19,9 +20,9 @@ export function desktopAccessInfo(development, version = '0.1.0') {
     NSScreenCaptureUsageDescription: privacyCopy['en-US'], CFBundleDevelopmentRegion: 'en', NSHighResolutionCapable: true };
 }
 
-export function stageDesktopAccess({ binary, destination, icon, development = true, version = (process.env.REDEVEN_DESKTOP_VERSION || '0.1.0').replace(/^v/u, '').split('-')[0], identity = process.env.REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY || process.env.REDEVEN_DESKTOP_MAC_IDENTITY }) {
+export function stageDesktopAccess({ binary, destination, icon, development = true, version = (process.env.REDEVEN_DESKTOP_VERSION || '0.1.0').replace(/^v/u, '').split('-')[0], identity }) {
   if (![binary, destination, icon].every(path.isAbsolute) || existsSync(destination)) throw new Error('Desktop access requires absolute source paths and a new destination.');
-  if (!identity || identity === '-') throw new Error('Set REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY to an Apple Development or Developer ID Application identity. Ad-hoc signing cannot preserve desktop access permissions.');
+  const signingIdentity = resolveDesktopAccessSigningIdentity({ development, identity });
   if (!/^\d+\.\d+\.\d+$/u.test(version)) throw new Error('Desktop access requires a numeric application version.');
   const contents = path.join(destination, 'Contents');
   mkdirSync(path.join(contents, 'MacOS'), { recursive: true });
@@ -36,7 +37,7 @@ export function stageDesktopAccess({ binary, destination, icon, development = tr
   const info = path.join(contents, 'Info.plist');
   writeFileSync(info, JSON.stringify(desktopAccessInfo(development, version)));
   execFileSync('/usr/bin/plutil', ['-convert', 'xml1', info]);
-  execFileSync('/usr/bin/codesign', ['--force', '--options', 'runtime', '--sign', identity, destination], { stdio: ['ignore', 'ignore', 'inherit'] });
+  execFileSync('/usr/bin/codesign', ['--force', '--options', 'runtime', '--sign', signingIdentity, destination], { stdio: ['ignore', 'ignore', 'inherit'] });
   execFileSync('/usr/bin/codesign', ['--verify', '--strict', destination]);
   return destination;
 }

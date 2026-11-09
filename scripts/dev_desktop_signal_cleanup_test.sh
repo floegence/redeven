@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 if [ "${FAKE_SESSION_CASE:-}" = "" ]; then
-  for session_case in interrupt terminate normal system-proxy electron-download electron-reinstall gateway-failure gateway-interrupt source-drift cache-hit build-failure build-interrupt storage-blocked storage-relocate storage-no-stop storage-stop-only storage-linked; do
+  for session_case in interrupt terminate normal system-proxy electron-download electron-reinstall gateway-failure gateway-interrupt source-drift cache-hit build-failure build-interrupt storage-blocked storage-relocate storage-no-stop storage-stop-only storage-linked signing-unavailable; do
     FAKE_SESSION_CASE="$session_case" "$0"
   done
   exit 0
@@ -41,6 +41,11 @@ cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "
 cp "$ROOT_DIR/scripts/prune_dev_desktop_bundles.mjs" "$ROOT_DIR/scripts/run_parallel_builds.mjs" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/scripts/dev_desktop_gateways.mjs" "$ROOT_DIR/scripts/relocate_prerelease_storage.py" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
+# Signing discovery is covered separately; this lifecycle fixture owns no keys.
+cat > "$FAKE_SCRIPTS/desktop_access_signing.mjs" <<'JS'
+if (process.env.FAKE_SESSION_CASE === 'signing-unavailable') { console.error('No valid Apple Development or Developer ID Application certificate is available.'); process.exit(1); }
+console.log('A'.repeat(40));
+JS
 # Model the Launch Services supervisor while preserving the fake Electron PID.
 cat > "$FAKE_SCRIPTS/dev_desktop_macos.mjs" <<'JS'
 const fs = await import('node:fs'), path = await import('node:path');
@@ -185,6 +190,19 @@ printf '%s\n' 'legacy-runtime-lock' > "$STATE_ROOT/local-environment/agent.lock"
 
 SESSION_ARGS=(--no-devtools)
 case "$FAKE_SESSION_CASE" in
+  signing-unavailable)
+    if [ "$(uname -s)" = Darwin ]; then
+      if "$FAKE_SCRIPTS/dev_desktop.sh" "${SESSION_ARGS[@]}" > "$TEST_ROOT/preflight.log" 2>&1; then
+        printf 'Unavailable signing identity unexpectedly permitted startup\n' >&2; exit 1
+      fi
+      rg -Fq 'No valid Apple Development or Developer ID Application' "$TEST_ROOT/preflight.log"
+      [ ! -f "$FAKE_RUNTIME_STOPPED" ] && [ ! -f "$FAKE_GATEWAY_STOPPED" ]
+      [ ! -f "$FAKE_ELECTRON_STARTED" ] && [ ! -f "$FAKE_BUILD_PID" ]
+      [ ! -e "$STATE_ROOT/desktop/dev-runtime-bundle-v1" ]
+    fi
+    printf 'dev Desktop signing preflight test passed\n'
+    exit 0
+    ;;
   storage-*)
     printf '%s' 'retained opaque plugin state' > "$STATE_ROOT/local-environment/control.sqlite"
     mkdir -p "$STATE_ROOT/local-environment/runtime/managed/bin"
@@ -201,10 +219,10 @@ SH
         storage-no-stop) SESSION_ARGS+=(--relocate-storage --no-stop); expected='cannot be combined with --no-stop' ;;
         storage-stop-only) SESSION_ARGS+=(--relocate-storage --stop-only); expected='cannot be combined with --stop-only' ;;
         storage-linked)
-          SESSION_ARGS+=(--relocate-storage); expected='unsupported filesystem entry'
+          SESSION_ARGS+=(--relocate-storage); expected='absolute author link'
           mkdir -p "$STATE_ROOT/local-environment/author-workspaces/source/node_modules/.bin"
           printf 'retained dependency' > "$STATE_ROOT/local-environment/author-workspaces/source/node_modules/tool.js"
-          ln -s ../tool.js "$STATE_ROOT/local-environment/author-workspaces/source/node_modules/.bin/tool"
+          ln -s "$STATE_ROOT/local-environment/author-workspaces/source/node_modules/tool.js" "$STATE_ROOT/local-environment/author-workspaces/source/node_modules/.bin/tool"
           ;;
       esac
       if "$FAKE_SCRIPTS/dev_desktop.sh" "${SESSION_ARGS[@]}" > "$TEST_ROOT/preflight.log" 2>&1; then

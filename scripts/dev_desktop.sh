@@ -69,6 +69,10 @@ relocation with its normal locks and journal, and then starts Desktop.
 On macOS, dependency and bundle preparation inherit static system proxies when
 no proxy environment variable is set. Explicit environment settings take priority.
 The inferred proxies apply only to preparation, not the launched services.
+On macOS, desktop access uses the unique Apple Development signing certificate,
+or the unique Developer ID Application certificate when no development
+certificate exists. Explicit identity settings take priority; ambiguity fails
+before stopping existing services. Ad-hoc signing is not supported.
 After building, keep the three newest development bundles plus the selected
 bundle and any older bundles still referenced by running processes.
 
@@ -101,6 +105,8 @@ Environment:
   REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG=<vX.Y.Z|v0.0.0-dev>
   REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT=<redeven-checkout>
   REDEVEN_AGENT_FORCE_INSTALL=1
+  REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY=<certificate fingerprint or exact name>
+  REDEVEN_DESKTOP_MAC_IDENTITY=<explicit production signing identity>
   REDEVEN_DEV_SYSTEM_PROXY=0 (disable macOS build proxy discovery)
   HTTPS_PROXY, HTTP_PROXY, ALL_PROXY, NO_PROXY (explicit build network policy)
 USAGE
@@ -1087,6 +1093,19 @@ relocate_development_storage() {
     --state-dir "$DEVELOPMENT_STATE_ROOT/local-environment" --check-plugins
 }
 
+prepare_desktop_access_signing() {
+  [ "$STOP_ONLY" -eq 0 ] || return 0
+  [ "$(uname -s)" = Darwin ] || return 0
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf 'Would resolve and verify the desktop access signing certificate before stopping services.\n'
+    return 0
+  fi
+  local signing_identity
+  signing_identity=$(node "$SCRIPT_DIR/desktop_access_signing.mjs") || return $?
+  export REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY="$signing_identity"
+  ui_pkg_log "Desktop access signing certificate: $signing_identity"
+}
+
 main() {
   parse_args "$@"
   ui_pkg_require_node_26 "$ROOT_DIR"
@@ -1094,6 +1113,7 @@ main() {
 	validate_stop_timeout
   [ "$RELOCATE_STORAGE" -eq 0 ] || [ "$STOP_ONLY" -eq 0 ] || die_usage "--relocate-storage cannot be combined with --stop-only"
   check_development_plugin_storage
+  prepare_desktop_access_signing
 	stop_existing_processes
   relocate_development_storage
 	allocate_development_ports
