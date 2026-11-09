@@ -220,6 +220,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
       repoInfoError={props.repoInfoError}
       repoUnavailableReason={props.repoUnavailableReason}
       subview={props.subview}
+      navigationSubview={props.navigationSubview}
       repoSummary={props.repoSummary}
       repoSummaryLoading={props.repoSummaryLoading}
       repoSummaryError={props.repoSummaryError}

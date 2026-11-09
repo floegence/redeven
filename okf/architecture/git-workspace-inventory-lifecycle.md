@@ -17,6 +17,8 @@ Git queries expose bounded immutable snapshots with revision-bound paging. Git/F
 - Linked-worktree deletion reviews fingerprint removal risks: branch/base commits, merge eligibility, repository/worktree identity, staged/unstaged/untracked/conflicted paths and status classes, ignored path summaries, blockers and required authorizations. Preview and execution use the same risk definition; execution rereads current Git status before comparing the reviewed fingerprint.
 - Use bounded Git status and `ls-files --others --ignored --exclude-standard --directory --no-empty-directory -z`. Collapse ignored directories such as `DerivedData/`; do not add a recursive filesystem inventory, per-file metadata fingerprint or content checksum. Ignored content still requires explicit discard consent. Changes within an already-reviewed ignored directory or content-only edits to an already-reviewed dirty path do not invalidate consent; changed path/status sets or repository/worktree identity do.
 
+Repository summaries expose optional whole-index staged additions/deletions from a budgeted, cancellable Git shortstat read. Directory paging never narrows those totals. Binary-only and pure rename changes have zero text-line deltas; failed reads omit statistics. External index writers remain non-transactional.
+
 ## Mutation scope and branch removal
 
 - Stage/unstage resolve the requested section, directory and literal paths first. Execute only those resolved paths through a private NUL-delimited pathspec file; a changes action cannot stage conflicts, and unstaging cannot clear conflict stages outside its selection.

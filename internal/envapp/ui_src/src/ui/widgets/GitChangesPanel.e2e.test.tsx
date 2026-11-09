@@ -801,7 +801,7 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      const commitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Commit...'));
+      const commitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Commit');
       expect(commitButton).toBeTruthy();
       commitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -821,6 +821,31 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('keeps commit totals whole-index when staged pages are scoped or incomplete', async () => {
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const dispose = renderChangesPanel(host, {
+      repoSummary: { repoRootPath: '/repo', workspaceSummary: { stagedCount: 12 }, stagedStats: { additions: 232, deletions: 60 } },
+      workspace: { repoRootPath: '/repo', summary: { stagedCount: 12 }, staged: [], unstaged: [], untracked: [], conflicted: [] },
+      workspacePages: { staged: { directoryPath: 'src', items: [{ section: 'staged', path: 'src/one.ts', additions: 3, deletions: 1 }], totalCount: 2, scopeFileCount: 2, nextOffset: 1, hasMore: true, loading: false, error: '', initialized: true } },
+      selectedSection: 'staged',
+    });
+    try {
+      const summary = host.querySelector('[data-git-commit-summary]')!;
+      expect(summary.textContent).toContain('12 files to commit');
+      expect(summary.textContent).toContain('+232');
+      expect(summary.textContent).toContain('−60');
+    } finally { dispose(); }
+  });
+
+  it('leaves unavailable line totals absent without guessing from directory rows', () => {
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const dispose = renderChangesPanel(host, {
+      workspace: { repoRootPath: '/repo', summary: { stagedCount: 12 }, staged: [{ section: 'staged', entryKind: 'directory', path: 'src', descendantFileCount: 12 }], unstaged: [], untracked: [], conflicted: [] },
+    });
+    try { expect(host.querySelector('[data-git-commit-summary]')!.textContent).toBe('12 files to commit'); }
+    finally { dispose(); }
+  });
+
   it('shows directory aggregates as folders in the commit review', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -831,7 +856,7 @@ describe('GitChangesPanel interactions', () => {
       selectedSection: 'staged', commitMessage: 'fix: ship directory',
     });
     try {
-      const button = Array.from(host.querySelectorAll('button')).find(node => node.textContent?.includes('Commit...'))!;
+      const button = Array.from(host.querySelectorAll('button')).find(node => node.textContent?.trim() === 'Commit')!;
       button.click();
       await flush();
       const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
@@ -890,7 +915,7 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      const commitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Commit...'));
+      const commitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Commit');
       expect(commitButton).toBeTruthy();
       commitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();

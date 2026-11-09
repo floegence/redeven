@@ -33,6 +33,7 @@ export type wire_git_get_repo_summary_req = {
 };
 
 export type wire_git_get_repo_summary_resp = {
+  staged_stats?: { additions: number; deletions: number };
   repo_root_path: string;
   worktree_path?: string;
   is_worktree?: boolean;

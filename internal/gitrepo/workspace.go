@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,12 +46,14 @@ func (s *Service) getRepoSummary(ctx context.Context, repo repoContext) (*getRep
 	}
 	defer release()
 	status := snapshot.status
+	stagedStats := s.readStagedStats(ctx, repo.repoRootReal, len(status.Staged))
 	stashCount := s.readStashCount(ctx, repo.repoRootReal)
 	var reattachBranch *gitBranchSummary
 	if status.Detached {
 		reattachBranch = s.findReattachBranch(ctx, repo.repoRootReal)
 	}
 	return &getRepoSummaryResp{
+		StagedStats:       stagedStats,
 		RepoRootPath:      repo.repoRootReal,
 		WorktreePath:      repo.repoRootReal,
 		IsWorktree:        repo.identity.GitDir != repo.identity.CommonDir,
@@ -840,4 +843,36 @@ func (s *Service) readStashCount(ctx context.Context, repoRoot string) int {
 		count += 1
 	}
 	return count
+}
+
+// The whole index owns commit statistics; directory paging must not narrow them.
+// Runtime enforces read admission, cancellation, deadlines and captured-output budgets.
+var stagedShortstatField = regexp.MustCompile(`([0-9]+) (files? changed|insertions?\(\+\)|deletions?\(-\))`)
+
+func (s *Service) readStagedStats(ctx context.Context, repoRoot string, stagedCount int) *gitStagedStats {
+	if stagedCount == 0 {
+		return &gitStagedStats{}
+	}
+	out, err := s.runGitRead(ctx, repoRoot, "diff", "--cached", "--shortstat", "--no-ext-diff", "--no-textconv")
+	if err != nil {
+		return nil
+	}
+	stats := &gitStagedStats{}
+	fields := stagedShortstatField.FindAllStringSubmatch(string(out), -1)
+	if len(fields) == 0 {
+		return nil
+	}
+	for _, field := range fields {
+		count, err := strconv.Atoi(field[1])
+		if err != nil {
+			return nil
+		}
+		if strings.HasPrefix(field[2], "insertion") {
+			stats.Additions = count
+		}
+		if strings.HasPrefix(field[2], "deletion") {
+			stats.Deletions = count
+		}
+	}
+	return stats
 }

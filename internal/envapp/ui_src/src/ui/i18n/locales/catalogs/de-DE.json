@@ -2095,6 +2095,10 @@
       "stageAll": "Stage Alle",
       "unstageAll": "Unstage Alle",
       "trackAll": "Alle verfolgen",
+      "commitFiles": {
+        "one": "{count} Datei zum Commit",
+        "other": "{count} Dateien zum Commit"
+      },
       "commitAction": "Commit erstellen...",
       "stashAction": "Änderungen stashen...",
       "discardFolderAction": "Ordner verwerfen...",

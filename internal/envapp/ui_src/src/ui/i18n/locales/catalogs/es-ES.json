@@ -2095,6 +2095,10 @@
       "stageAll": "Preparar todo",
       "unstageAll": "Desactivar todo",
       "trackAll": "Seguir todo",
+      "commitFiles": {
+        "one": "{count} archivo para confirmar",
+        "other": "{count} archivos para confirmar"
+      },
       "commitAction": "Confirmar...",
       "stashAction": "Guardar cambios...",
       "discardFolderAction": "Descartar carpeta...",

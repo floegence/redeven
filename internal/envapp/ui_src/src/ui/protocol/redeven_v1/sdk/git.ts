@@ -33,6 +33,7 @@ export type GitRepoSummaryRequest = {
 };
 
 export type GitRepoSummaryResponse = {
+  stagedStats?: { additions: number; deletions: number };
   repoRootPath: string;
   worktreePath?: string;
   isWorktree?: boolean;

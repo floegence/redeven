@@ -20,7 +20,13 @@ type gitMutationBlocker struct {
 	CanStashWorkspace bool                `json:"can_stash_workspace,omitempty"`
 }
 
+type gitStagedStats struct {
+	Additions int `json:"additions"`
+	Deletions int `json:"deletions"`
+}
+
 type getRepoSummaryResp struct {
+	StagedStats       *gitStagedStats     `json:"staged_stats,omitempty"`
 	RepoRootPath      string              `json:"repo_root_path"`
 	WorktreePath      string              `json:"worktree_path,omitempty"`
 	IsWorktree        bool                `json:"is_worktree,omitempty"`

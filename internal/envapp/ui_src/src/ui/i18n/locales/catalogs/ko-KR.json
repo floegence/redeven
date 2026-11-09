@@ -2095,6 +2095,10 @@
       "stageAll": "모두 스테이지",
       "unstageAll": "모두 스테이지 해제",
       "trackAll": "모두 추적",
+      "commitFiles": {
+        "one": "커밋할 파일 {count}개",
+        "other": "커밋할 파일 {count}개"
+      },
       "commitAction": "커밋...",
       "stashAction": "스태시...",
       "discardFolderAction": "폴더 삭제...",

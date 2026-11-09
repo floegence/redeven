@@ -155,7 +155,7 @@ async function createBuiltDistTLS() {
   };
 }
 
-async function startFlowersecSmokePeer({ tls, allowedOrigin, httpUpstream, onEvent, gitReady = false, fileContinuity = false }) {
+async function startFlowersecSmokePeer({ tls, allowedOrigin, httpUpstream, onEvent, gitReady = false, visualWorkspace = false, fileContinuity = false }) {
   if (!tls?.certificatePath || !tls?.privateKeyPath) {
     throw new Error('Flowersec smoke peer requires an explicit TLS identity');
   }
@@ -166,6 +166,7 @@ async function startFlowersecSmokePeer({ tls, allowedOrigin, httpUpstream, onEve
     '--allowed-origin', allowedOrigin,
     ...(httpUpstream ? ['--http-upstream', httpUpstream] : []),
     ...(gitReady ? ['--visual-git'] : []),
+    ...(visualWorkspace ? ['--visual-git-workspace'] : []),
     ...(fileContinuity ? ['--file-continuity'] : []),
   ], {
     cwd: flowersecSmokePeerDir,
@@ -430,7 +431,7 @@ function builtPluginInstalledPlugin() {
   };
 }
 
-async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, gitReady = false, fileContinuity = false, tls = null, flowersecPeerFactory = startFlowersecSmokePeer, assetDirectory = distDir, handleRequest, renewPeerOnConnect = false } = {}) {
+async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, gitReady = false, visualWorkspace = false, fileContinuity = false, tls = null, flowersecPeerFactory = startFlowersecSmokePeer, assetDirectory = distDir, handleRequest, renewPeerOnConnect = false } = {}) {
   if (accessReady && (!tls?.certificate || !tls?.privateKey)) {
     throw new Error('connected built Env App dist server requires an explicit TLS identity');
   }
@@ -448,7 +449,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   const renewPeer = () => (peerRenewal = peerRenewal.then(async () => {
     await flowersecPeer?.close();
     flowersecPeer = await flowersecPeerFactory({
-      httpUpstream: `http://127.0.0.1:${proxyUpstream.address().port}`, tls, gitReady, fileContinuity,
+      httpUpstream: `http://127.0.0.1:${proxyUpstream.address().port}`, tls, gitReady, visualWorkspace, fileContinuity,
       allowedOrigin: new URL(baseURL).origin,
       onEvent: (event) => lifecycleEvents.push(event),
     });

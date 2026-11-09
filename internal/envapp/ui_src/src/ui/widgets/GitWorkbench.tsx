@@ -71,6 +71,7 @@ export interface GitWorkbenchProps {
   repoUnavailableReason?: string;
   currentPath: string;
   subview: GitWorkbenchSubview;
+  navigationSubview?: GitWorkbenchSubview;
   repoSummary?: GitRepoSummaryResponse | null;
   repoSummaryLoading?: boolean;
   repoSummaryError?: string;
@@ -496,8 +497,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
       <GitEntityContextMenu controller={repositoryContextMenu} items={repositoryContextMenuItems} />
 
       <div class="git-workspace-body relative" data-with-selector={!props.stashActive && Boolean(props.selectorRail) && activeSubview() !== 'changes'}>
-        <div class="git-workspace-selector" hidden={props.stashActive || activeSubview() === 'changes' || !props.selectorRail}>{props.selectorRail}</div>
-        <div class="relative flex-1 min-h-0 min-w-0 overflow-hidden" hidden={props.stashActive}>
+        <div class="git-workspace-selector" style={{ visibility: props.navigationSubview && props.navigationSubview !== activeSubview() ? 'hidden' : undefined }} hidden={props.stashActive || activeSubview() === 'changes' || !props.selectorRail}>{props.selectorRail}</div>
+        <div class="relative flex-1 min-h-0 min-w-0 overflow-hidden" hidden={props.stashActive} style={{ visibility: props.navigationSubview && props.navigationSubview !== activeSubview() ? 'hidden' : undefined }}>
         <UIFirstKeepAlivePanel active={activeSubview() === 'changes'} class="absolute inset-0" testId="git-main-subview-changes" render={() => (
           <div
             role="tabpanel"

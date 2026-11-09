@@ -376,6 +376,7 @@ export const enUSWidgetChrome = defineDictionary({
       unstageAll: 'Unstage All',
       unstageFolder: 'Unstage Folder',
       trackAll: 'Track All',
+      commitFiles: { one: '{count} file to commit', other: '{count} files to commit' },
       commitAction: 'Commit...',
       stashAction: 'Stash...',
       discardFolderAction: 'Discard Folder...',

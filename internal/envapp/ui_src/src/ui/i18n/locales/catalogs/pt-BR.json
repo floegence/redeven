@@ -2095,6 +2095,10 @@
       "stageAll": "Stage Todos",
       "unstageAll": "Unstage Todos",
       "trackAll": "Rastrear tudo",
+      "commitFiles": {
+        "one": "{count} arquivo para commit",
+        "other": "{count} arquivos para commit"
+      },
       "commitAction": "Criar commit...",
       "stashAction": "Guardar alterações...",
       "discardFolderAction": "Descartar pasta...",

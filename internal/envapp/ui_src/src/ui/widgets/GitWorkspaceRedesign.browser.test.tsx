@@ -39,7 +39,7 @@ function mount(width: number, all = false, localized = false) {
       showAllWorkspaceSections={allSections()} onShowAllWorkspaceSections={() => setAllSections(true)} selectedWorkspaceSection={section()} onSelectWorkspaceSection={value => { setAllSections(false); setSection(value); }}
       stashActive={stashActive()} onShowStashes={() => setStashActive(true)} stashContent={<GitStashWindow embedded open={stashActive()} onOpenChange={setStashActive} tab="stashes" onTabChange={() => {}} repoRootPath="/workspace/redeven" stashes={[{ id: 'stash-demo', ref: 'stash@{0}', message: 'Review workspace layout', createdAtUnixMs: 1 }]} selectedStashId="stash-demo" stashDetail={{ id: 'stash-demo', message: 'Review workspace layout', files: [{ path: 'src/review.ts', changeType: 'modified' }] }} />}
       showMobileSidebarButton onToggleSidebar={() => setOpen(value => !value)} currentPath="/workspace/redeven" repoInfo={{ available: true, repoRootPath: '/workspace/redeven' }}
-      repoSummary={{ repoRootPath: '/workspace/redeven', headRef: 'codex/git-browser-redesign', aheadCount: 2, behindCount: 1, workspaceSummary: { unstagedCount: 4, untrackedCount: 1, stagedCount: 1 } }}
+      repoSummary={{ stagedStats: { additions: 232, deletions: 60 }, repoRootPath: '/workspace/redeven', headRef: 'codex/git-browser-redesign', aheadCount: 2, behindCount: 1, workspaceSummary: { unstagedCount: 4, untrackedCount: 1, stagedCount: 1 } }}
       workspace={{ repoRootPath: '/workspace/redeven', summary: { unstagedCount: 4, untrackedCount: 1, stagedCount: 1 }, unstaged: files.filter(file => file.section === 'unstaged'), untracked: files.filter(file => file.section === 'untracked'), staged: [{ section: 'staged', path: 'README.md', changeType: 'modified' }], conflicted: [] }}
       commitMessage={message()} onCommitMessageChange={setMessage} onStageWorkspaceItem={item => stage.push(item.path ?? '')} onUnstageWorkspaceItem={item => unstage.push(item.path ?? '')} onDiscardWorkspaceItem={() => {}}
       onFetch={() => {}} onPull={() => {}} onPush={() => {}} onRefresh={() => {}} onOpenStash={() => {}} onAskFlower={() => {}}
@@ -55,6 +55,36 @@ function expandTree(host: HTMLElement) {
   }
 }
 describe('Git workspace redesign acceptance', () => {
+  it('disables collapse for a collapsed tree and keeps the commit action explicit', async () => {
+    const { host } = mount(1180, true);
+    const collapse = host.querySelector<HTMLButtonElement>('button[aria-label="Collapse all folders"]')!;
+    expect(collapse).toBeTruthy();
+    expect(collapse.disabled).toBe(true);
+    expandTree(host);
+    await expect.poll(() => collapse.disabled).toBe(false);
+    await userEvent.click(collapse);
+    expect(host.querySelectorAll('.git-workspace-all [role="treeitem"][aria-expanded="true"]')).toHaveLength(0);
+    expect(collapse.disabled).toBe(true);
+    const draft = host.querySelector('[data-git-commit-draft]')!;
+    expect(draft.querySelector('button')?.textContent).not.toMatch(/\.\.\.|…/);
+    expect(draft.querySelector('[data-git-commit-summary]')?.textContent).toContain('1 file to commit');
+    expect(draft.querySelector('[data-git-commit-summary]')?.textContent).toContain('+232');
+    expect(draft.querySelector('[data-git-commit-summary]')?.textContent).toContain('−60');
+  });
+  it('keeps nested desktop diff modes inside the toolbar', async () => {
+    await page.viewport(1280, 900);
+    const { host } = mount(680);
+    host.querySelector<HTMLButtonElement>('[data-git-tree-select="README.md"]')!.click();
+    await expect.poll(() => host.querySelector<HTMLElement>('.git-diff-panel__toolbar')?.getBoundingClientRect().height ?? 0).toBeGreaterThan(0);
+    const toolbar = host.querySelector<HTMLElement>('.git-diff-panel__toolbar')!;
+    const bounds = toolbar.getBoundingClientRect();
+    for (const button of toolbar.querySelectorAll<HTMLElement>('button')) {
+      const box = button.getBoundingClientRect();
+      expect(box.height).toBeLessThanOrEqual(32);
+      expect(box.top).toBeGreaterThanOrEqual(bounds.top);
+      expect(box.bottom).toBeLessThanOrEqual(bounds.bottom);
+    }
+  });
   it.each([680, 1180])('uses compact mouse tree rows and grouping at %i px', async width => {
     await page.viewport(width + 20, 820);
     const { host } = mount(width, true);

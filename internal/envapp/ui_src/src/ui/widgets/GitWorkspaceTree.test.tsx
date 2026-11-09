@@ -20,6 +20,24 @@ function mount(load = vi.fn().mockResolvedValue(response())) {
   return { host, setGeneration, click, select };
 }
 describe('GitWorkspaceTree directory reads', () => {
+  it('reports visible expansion, filtering and removal for collapse controls', () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const [items, setItems] = createSignal([file]);
+    const [filter, setFilter] = createSignal('');
+    const [collapseToken, setCollapseToken] = createSignal(0);
+    const expanded = vi.fn();
+    dispose = render(() => <GitWorkspaceTree items={items()} directoryPath="" section="changes" generation={0} filter={filter()} collapseToken={collapseToken()} onExpandedChange={expanded} />, host);
+    expect(expanded).toHaveBeenLastCalledWith(false);
+    host.querySelector<HTMLButtonElement>('[data-git-tree-select="src"]')!.click();
+    expect(expanded).toHaveBeenLastCalledWith(true);
+    setCollapseToken(1);
+    expect(expanded).toHaveBeenLastCalledWith(false);
+    setFilter('component');
+    expect(expanded).toHaveBeenLastCalledWith(true);
+    setItems([]);
+    expect(expanded).toHaveBeenLastCalledWith(false);
+  });
+
   it('starts collapsed, loads on demand, retains exact leaf actions and omits verbose counts', async () => {
     const load = vi.fn().mockResolvedValue(response());
     const { host, click, select } = mount(load);

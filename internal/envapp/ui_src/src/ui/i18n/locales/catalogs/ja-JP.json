@@ -2095,6 +2095,10 @@
       "stageAll": "すべてステージング",
       "unstageAll": "すべてステージング解除",
       "trackAll": "すべてトラック",
+      "commitFiles": {
+        "one": "コミット予定のファイル {count} 件",
+        "other": "コミット予定のファイル {count} 件"
+      },
       "commitAction": "コミット...",
       "stashAction": "スタッシュ...",
       "discardFolderAction": "フォルダーを破棄...",

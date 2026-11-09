@@ -3505,9 +3505,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const gitSubviewSelection = createUIFirstSelection<GitWorkbenchSubview>({
     committed: gitSubview,
+    // Selecting the retained view still exits its overlaid stash inspection.
+    commitEqualRequests: true,
     commit: (view) => {
       const next = normalizeGitSubview(view);
       setGitSubview(next);
+      if (stashEmbedded()) handleStashWindowOpenChange(false);
       const id = envId();
       if (id) writePersistedGitSubview(id, next);
     },
@@ -3581,7 +3584,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handleGitSubviewChange = (view: GitWorkbenchSubview) => {
-    if (stashEmbedded()) handleStashWindowOpenChange(false);
     gitAskFlowerReqSeq += 1;
     gitSubviewSelection.request(normalizeGitSubview(view));
   };

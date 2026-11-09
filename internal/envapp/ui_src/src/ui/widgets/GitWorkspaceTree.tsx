@@ -27,6 +27,7 @@ export interface GitWorkspaceTreeProps {
   generation: unknown;
   filter?: string;
   collapseToken?: number;
+  onExpandedChange?: (expanded: boolean) => void;
   selectedKey?: string;
   itemKey?: (item: GitWorkspaceChange) => string;
   busyWorkspaceKey?: string;
@@ -59,6 +60,8 @@ export function GitWorkspaceTree(props: GitWorkspaceTreeProps) {
   // Unread directories remain navigable during filtering; a filter never scans the repository.
   const matches = (node: GitWorkspaceTreeNode): boolean => !query() || node.path.toLowerCase().includes(query()) || Boolean(node.directory && node.item) || node.children.some(matches);
   const open = (node: GitWorkspaceTreeNode) => expanded().has(node.path) || Boolean(query() && !node.item && node.children.some(matches));
+  createEffect(() => props.onExpandedChange?.(tree().some(node => node.directory && matches(node) && open(node))));
+  onCleanup(() => props.onExpandedChange?.(false));
   const load = async (path: string, append = false) => {
     const previous = pages()[path];
     if (!props.loadDirectory || previous?.loading || (!append && previous?.initialized && !previous.failed)) return;

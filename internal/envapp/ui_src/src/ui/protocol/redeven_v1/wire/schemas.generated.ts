@@ -1366,6 +1366,21 @@ export const redevenWireSchemas = {
   "wire_git_get_repo_summary_resp": {
     "kind": "object",
     "properties": {
+      "staged_stats": {
+        "kind": "object",
+        "properties": {
+          "additions": {
+            "kind": "number"
+          },
+          "deletions": {
+            "kind": "number"
+          }
+        },
+        "required": [
+          "additions",
+          "deletions"
+        ]
+      },
       "repo_root_path": {
         "kind": "string"
       },

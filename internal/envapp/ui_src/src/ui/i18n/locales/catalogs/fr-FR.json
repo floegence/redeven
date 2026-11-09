@@ -2095,6 +2095,10 @@
       "stageAll": "Mettre en scène tout",
       "unstageAll": "Annuler la mise en scène de tout",
       "trackAll": "Suivre tout",
+      "commitFiles": {
+        "one": "{count} fichier à committer",
+        "other": "{count} fichiers à committer"
+      },
       "commitAction": "Valider...",
       "stashAction": "Remiser les modifications...",
       "discardFolderAction": "Supprimer le dossier...",

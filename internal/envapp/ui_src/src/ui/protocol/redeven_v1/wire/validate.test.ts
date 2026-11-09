@@ -71,6 +71,13 @@ describe('validateRedevenWireValue', () => {
     })).toThrow(/legacyFrame is not allowed/u);
   });
 
+  it('validates optional whole-index line statistics at the RPC boundary', () => {
+    const response = { repo_root_path: '/workspace/repo', workspace_summary: {}, staged_stats: { additions: 0, deletions: 4 } };
+    expect(validateRedevenWireValue('wire_git_get_repo_summary_resp', response)).toEqual(response);
+    expect(() => validateRedevenWireValue('wire_git_get_repo_summary_resp', { ...response, staged_stats: { additions: 2 } })).toThrow(/deletions is required/u);
+    expect(() => validateRedevenWireValue('wire_git_get_repo_summary_resp', { ...response, staged_stats: { additions: '2', deletions: 0 } })).toThrow(/additions must be a finite number/u);
+  });
+
   it('requires explicit arrays for empty Git workspace responses', () => {
     const workspacePage = {
       repo_root_path: '/workspace/repo',

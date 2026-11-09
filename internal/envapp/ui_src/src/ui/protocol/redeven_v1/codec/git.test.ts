@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  fromWireGitGetRepoSummaryResponse,
   toWireGitGetDiffContentRequest,
   toWireGitListCommitsRequest,
   toWireGitListWorkspacePageRequest,
@@ -82,5 +83,16 @@ describe('Git request wire encoding', () => {
         path: 'src/app.ts',
       },
     });
+  });
+});
+
+
+describe('Git staged statistics decoding', () => {
+  it('preserves unavailable statistics instead of fabricating zero lines', () => {
+    expect(fromWireGitGetRepoSummaryResponse({ workspace_summary: {}, repo_root_path: '/workspace/repo' }).stagedStats).toBeUndefined();
+  });
+
+  it.each([{ additions: 0, deletions: 0 }, { additions: 232, deletions: 60 }])('preserves exact whole-index statistics %o', stats => {
+    expect(fromWireGitGetRepoSummaryResponse({ workspace_summary: {}, repo_root_path: '/workspace/repo', staged_stats: stats }).stagedStats).toEqual(stats);
   });
 });

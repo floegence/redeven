@@ -1,3 +1,4 @@
+import { ChevronsDownUp } from 'lucide-solid';
 import type { GitWorkspaceDirectoryLoader } from './gitWorkspaceTreeModel';
 import { useGitDirectoryFavorites } from './gitDirectoryFavorites';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup } from 'solid-js';
@@ -159,6 +160,7 @@ interface WorkspaceTableProps {
   generation?: number;
   filter?: string;
   collapseToken?: number;
+  onExpandedChange?: (expanded: boolean) => void;
   loadDirectory?: GitWorkspaceDirectoryLoader;
   section: GitWorkspaceViewSection;
   items: GitSeededWorkspaceChange[];
@@ -231,7 +233,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
         )}
       >
         <GitWorkspaceTree items={props.items} section={props.section} directoryPath={props.directoryPath}
-          generation={props.generation} filter={props.filter} collapseToken={props.collapseToken}
+          generation={props.generation} filter={props.filter} collapseToken={props.collapseToken} onExpandedChange={props.onExpandedChange}
           loadDirectory={props.loadDirectory} selectedKey={props.selectedKey}
           busyWorkspaceKey={props.busyWorkspaceKey} busyWorkspaceAction={props.busyWorkspaceAction} sectionActionKey={props.sectionActionKey}
           onSelect={props.onSelectItem} onOpenDirectory={props.onOpenDirectory} onAction={props.onAction} onDiscard={props.onDiscard}
@@ -302,6 +304,16 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const [commitDialogOpen, setCommitDialogOpen] = createSignal(false);
   const [selectedDiffItem, setSelectedDiffItem] = createSignal<GitSeededWorkspaceChange | null>(null);
   const [collapseToken, setCollapseToken] = createSignal(0);
+  const [expandedTrees, setExpandedTrees] = createSignal<ReadonlySet<string>>(new Set());
+  const reportExpanded = (key: string, expanded: boolean) => setExpandedTrees(current => {
+    if (current.has(key) === expanded) return current;
+    const next = new Set(current);
+    if (expanded) next.add(key); else next.delete(key);
+    return next;
+  });
+  const canCollapse = () => props.showAllWorkspaceSections
+    ? [...expandedTrees()].some(key => key !== 'selected' && !collapsedSections().has(key as GitWorkspaceViewSection))
+    : expandedTrees().has('selected');
   const [discardTarget, setDiscardTarget] = createSignal<WorkspaceDiscardTarget>(null);
   const [headerElement, setHeaderElement] = createSignal<HTMLDivElement>();
   const [headerWidth, setHeaderWidth] = createSignal(0);
@@ -359,6 +371,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         : stagedPageState().scopeFileCount ?? stagedPageState().totalCount)
       : workspaceViewSectionCount(summary(), 'staged')
   );
+  const stagedMetrics = () => props.repoSummary?.stagedStats;
   const selectedLoadingMode = () => {
     const state = selectedPageState();
     if (!state.loading) return 'idle';
@@ -1026,7 +1039,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70 disabled:cursor-wait"
                   />
                 </label>
-                <Button size="icon" variant="ghost" class="size-7" aria-label={i18n.t('git.tree.collapseAll')} title={i18n.t('git.tree.collapseAll')} onClick={() => setCollapseToken(value => value + 1)}><Folder class="size-3.5" /></Button>
+                <Button size="icon" variant="ghost" class="size-7" aria-label={i18n.t('git.tree.collapseAll')} title={i18n.t('git.tree.collapseAll')} disabled={!canCollapse()} onClick={() => { setFilterQuery(''); setCollapseToken(value => value + 1); }}><ChevronsDownUp class="size-3.5" /></Button>
               </div>
 
                 <SegmentedControl
@@ -1097,6 +1110,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                 loadDirectory={props.onLoadWorkspaceDirectory}
                 filter={filterQuery()}
                 collapseToken={collapseToken()}
+                onExpandedChange={expanded => reportExpanded('selected', expanded)}
                 totalCount={visibleItemCount()}
                 loadingState={tableLoadingState()}
                 expectedCount={visibleCount()}
@@ -1135,7 +1149,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                         <div class="git-workspace-all__heading"><button type="button" class="flex items-center gap-2 rounded-sm text-left focus-visible:outline focus-visible:outline-1 focus-visible:outline-ring" aria-expanded={!collapsedSections().has(section)} onClick={() => setCollapsedSections(current => { const next = new Set(current); if (next.has(section)) next.delete(section); else next.add(section); return next; })}><ChevronDown class={`size-3.5 ${collapsedSections().has(section) ? '-rotate-90' : ''}`} /><span>{i18n.t(section === 'changes' ? 'git.changes.workspace' : section === 'staged' ? 'git.common.staged' : 'git.common.conflicted')}</span><span class="text-muted-foreground tabular-nums">{count()}</span></button><span class="flex-1" /><Show when={props.onBulkAction && count() > 0}><Button size="icon" variant="ghost" class="size-7" disabled={Boolean(props.busyWorkspaceKey)} aria-label={i18n.t(section === 'staged' ? 'git.changes.unstageAll' : 'git.changes.stageAll')} onClick={() => props.onBulkAction?.(section)}>{section === 'staged' ? <Minus class="size-3.5" /> : <Plus class="size-3.5" />}</Button></Show></div>
                         <div hidden={collapsedSections().has(section)}><Show when={!state().error} fallback={<div role="alert" class="p-2 text-xs text-destructive">{state().error}<Button variant="ghost" size="xs" onClick={() => props.onRetryWorkspaceSection?.(section)}>{i18n.t('common.actions.retry')}</Button></div>}>
                           <Show when={state().initialized || items().length > 0 || !state().loading} fallback={<GitContentSkeleton variant="file-rail" rows={2} label={i18n.t('git.changes.loadingWorkspaceChanges')} />}>
-                            <GitWorkspaceTree scrollMode="content" items={items()} section={section} directoryPath={state().directoryPath ?? ''} generation={props.workspaceGeneration} filter={filterQuery()} collapseToken={collapseToken()} selectedKey={selectedKey()} loadDirectory={props.onLoadWorkspaceDirectory}
+                            <GitWorkspaceTree scrollMode="content" items={items()} section={section} directoryPath={state().directoryPath ?? ''} generation={props.workspaceGeneration} filter={filterQuery()} collapseToken={collapseToken()} onExpandedChange={expanded => reportExpanded(section, expanded)} selectedKey={selectedKey()} loadDirectory={props.onLoadWorkspaceDirectory}
                               busyWorkspaceKey={props.busyWorkspaceKey} busyWorkspaceAction={props.busyWorkspaceAction} sectionActionKey={workspaceViewSectionActionKey(section, state().directoryPath ?? '')}
                               onSelect={openWorkspaceDiff} onAction={item => item.section === 'staged' ? props.onUnstageSelected?.(item) : props.onStageSelected?.(item)}
                               onDiscard={item => setDiscardTarget({ kind: 'item', item })} onContextMenu={(event, item) => contextMenu.openFromContextMenu(event, itemContextTarget(item))} onContextMenuKey={(event, item) => contextMenu.openFromKeyboard(event, itemContextTarget(item))} />
@@ -1153,11 +1167,20 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
               </Show>
             </div>
             <div class="git-changes-commit" data-git-commit-draft>
-              <label class="text-[11px] font-medium" for={commitMessageId}>{i18n.t('git.commitDialog.messageLabel')}</label>
+              <div class="git-commit-summary" data-git-commit-summary>
+                <span>{i18n.tn('git.changes.commitFiles', stagedCount())}</span>
+                <Show when={stagedMetrics()}>{stats => (
+                  <span class="inline-flex gap-2 tabular-nums">
+                    <span class="text-success">+{stats().additions}</span>
+                    <span class="text-error">−{stats().deletions}</span>
+                  </span>
+                )}</Show>
+              </div>
+              <label class="sr-only" for={commitMessageId}>{i18n.t('git.commitDialog.messageLabel')}</label>
               <Textarea id={commitMessageId} value={props.commitMessage ?? ''} onInput={event => props.onCommitMessageChange?.(event.currentTarget.value)}
                 placeholder={i18n.t('git.commitDialog.messagePlaceholder')} disabled={props.commitBusy} rows={3} class="min-h-16 resize-y text-xs" />
               <Button size="sm" class="w-full" disabled={stagedCount() === 0 || props.commitBusy} loading={props.commitBusy} onClick={() => runHeaderAction('commit')}>
-                {i18n.t('git.changes.commitAction')}<Show when={stagedCount() > 0}><span class="ml-1 tabular-nums">· {stagedCount()}</span></Show>
+                {i18n.t('git.commitDialog.commit')}
               </Button>
             </div>
           </GitDiffSplit>

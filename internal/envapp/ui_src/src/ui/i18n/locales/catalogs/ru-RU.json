@@ -2171,6 +2171,12 @@
       "stageAll": "Все этапы",
       "unstageAll": "Удалить все",
       "trackAll": "Отследить все",
+      "commitFiles": {
+        "one": "{count} файл для коммита",
+        "few": "{count} файла для коммита",
+        "many": "{count} файлов для коммита",
+        "other": "{count} файла для коммита"
+      },
       "commitAction": "Создать коммит...",
       "stashAction": "Отложить изменения...",
       "discardFolderAction": "Удалить папку...",

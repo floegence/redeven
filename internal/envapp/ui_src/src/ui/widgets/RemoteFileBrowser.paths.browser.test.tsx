@@ -19,7 +19,7 @@ import { writeStoredLanguagePreference } from '../i18n/storage';
 
 const home = '/Users/tangjianyin';
 const target = '/Volumes/JianDisk/code/floegence/floebrowser-projection-lifecycle';
-const transport = vi.hoisted(() => ({ session: {}, list: vi.fn(), context: vi.fn(), repo: vi.fn(), capabilities: vi.fn(), summary: vi.fn(), workspace: vi.fn(), branches: vi.fn(), commits: vi.fn(), statuses: vi.fn() }));
+const transport = vi.hoisted(() => ({ session: {}, list: vi.fn(), context: vi.fn(), repo: vi.fn(), capabilities: vi.fn(), summary: vi.fn(), workspace: vi.fn(), branches: vi.fn(), commits: vi.fn(), stashes: vi.fn(), statuses: vi.fn() }));
 vi.mock('@floegence/floe-webapp-protocol', async () => ({
   ...await vi.importActual<typeof import('@floegence/floe-webapp-protocol')>('@floegence/floe-webapp-protocol'),
   useProtocol: () => ({ session: () => transport.session, status: () => 'connected', rpcTransport: () => null }),
@@ -28,7 +28,7 @@ vi.mock('../protocol/redeven_v1', async () => ({
   ...await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1'),
   useRedevenRpc: () => ({
     fs: { list: transport.list, getPathContext: transport.context },
-    git: { resolveRepo: transport.repo, getCapabilities: transport.capabilities, getRepoSummary: transport.summary, listWorkspacePage: transport.workspace, listBranches: transport.branches, listCommits: transport.commits, listWorkspacePathStatuses: transport.statuses },
+    git: { resolveRepo: transport.repo, getCapabilities: transport.capabilities, getRepoSummary: transport.summary, listWorkspacePage: transport.workspace, listBranches: transport.branches, listCommits: transport.commits, listStashes: transport.stashes, listWorkspacePathStatuses: transport.statuses },
   }),
 }));
 
@@ -130,12 +130,33 @@ describe('Native Files/Git control through the real retained workspaces', () => 
     transport.statuses.mockResolvedValue({ repoRootPath: target, workspaceRevision: 'mode-test', items: [] });
     transport.branches.mockResolvedValue({ repoRootPath: target, currentRef: 'main', local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }], remote: [] });
     transport.commits.mockResolvedValue({ repoRootPath: target, commits: [], hasMore: false, nextOffset: 0 });
+    transport.stashes.mockResolvedValue({ repoRootPath: target, stashes: [] });
     const { host } = await mountFiles(target, placement, { width, initialMode });
     await expect.poll(() => host.querySelectorAll('[data-browser-mode-switch]').length).toBe(1);
     const control = host.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
     const buttons = [...control.querySelectorAll<HTMLButtonElement>('button')];
     const visibleMode = () => control.closest('[data-browser-mode-panel][data-state="active"]')?.getAttribute('data-browser-mode-panel');
     await expect.poll(visibleMode).toBe(initialMode);
+    await userEvent.click(buttons[1]);
+    const changesTab = page.getByRole('tab', { name: 'Changes', exact: true });
+    for (const source of ['Commit Graph', 'Stashes', 'Branches']) {
+      if (source === 'Stashes') {
+        await userEvent.click(host.querySelector<HTMLButtonElement>('.git-workspace-stashes')!);
+        await expect.poll(() => host.querySelector<HTMLElement>('[data-git-stash-embedded]')?.checkVisibility({ checkVisibilityCSS: true })).toBe(true);
+      } else {
+        await page.getByRole('tab', { name: source, exact: true }).click();
+        const id = source === 'Branches' ? 'branches' : 'history';
+        await expect.poll(() => host.querySelector<HTMLElement>(`[data-testid="git-main-subview-${id}"]`)?.checkVisibility({ checkVisibilityCSS: true })).toBe(true);
+      }
+      changesTab.element().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const frames: string[][] = [];
+      for (let frame = 0; frame < 8; frame++) {
+        frames.push([...host.querySelectorAll<HTMLElement>('[data-testid^="git-main-subview-"]')].filter(el => el.checkVisibility({ checkVisibilityCSS: true })).map(el => el.dataset.testid!));
+        await new Promise(requestAnimationFrame);
+      }
+      expect(frames.every(visible => !visible.includes('git-main-subview-history') && !visible.includes('git-main-subview-branches'))).toBe(true);
+      await expect.poll(() => host.querySelector<HTMLElement>('[data-testid="git-main-subview-changes"]')?.checkVisibility({ checkVisibilityCSS: true })).toBe(true);
+    }
     for (const mode of ['git', 'files', 'git', 'files'] as const) {
       const button = buttons[mode === 'git' ? 1 : 0];
       await expect.poll(() => button.disabled).toBe(false);

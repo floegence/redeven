@@ -40,16 +40,17 @@ func main() {
 	nativeCode := flag.Bool("native-codespace", false, "serve the native CodeSpace HTTP fixture")
 	fileContinuity := flag.Bool("file-continuity", false, "forward file RPCs to the controlled continuity fixture")
 	visualGit := flag.Bool("visual-git", false, "serve read-only Git appearance fixtures")
+	visualWorkspace := flag.Bool("visual-git-workspace", false, "include staged workspace reads in the Git appearance fixture")
 	allowedOrigin := flag.String("allowed-origin", "", "exact browser origin")
 	httpUpstream := flag.String("http-upstream", "", "fixture HTTP upstream for session requests")
 	flag.Parse()
-	if err := run(*certificatePath, *privateKeyPath, *allowedOrigin, *httpUpstream, *nativeCode, *visualGit, *fileContinuity); err != nil {
+	if err := run(*certificatePath, *privateKeyPath, *allowedOrigin, *httpUpstream, *nativeCode, *visualGit, *fileContinuity, *visualWorkspace); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(certificatePath, privateKeyPath, allowedOrigin, httpUpstream string, nativeCode, visualGit, fileContinuity bool) error {
+func run(certificatePath, privateKeyPath, allowedOrigin, httpUpstream string, nativeCode, visualGit, fileContinuity, visualWorkspace bool) error {
 	if strings.TrimSpace(certificatePath) == "" || strings.TrimSpace(privateKeyPath) == "" || strings.TrimSpace(allowedOrigin) == "" {
 		return errors.New("certificate, private key, and allowed origin are required")
 	}
@@ -95,7 +96,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin, httpUpstream string, na
 		return fmt.Errorf("issue direct artifact: %w", err)
 	}
 
-	handlers, err := newHandlers(nativeCode, visualGit, fileContinuity, httpUpstream)
+	handlers, err := newHandlers(nativeCode, visualGit, fileContinuity, visualWorkspace, httpUpstream)
 	if err != nil {
 		return err
 	}
@@ -193,7 +194,7 @@ func run(certificatePath, privateKeyPath, allowedOrigin, httpUpstream string, na
 	return nil
 }
 
-func newHandlers(nativeCode, visualGit, fileContinuity bool, httpUpstream string) (*flowersec.SessionHandlers, error) {
+func newHandlers(nativeCode, visualGit, fileContinuity, visualWorkspace bool, httpUpstream string) (*flowersec.SessionHandlers, error) {
 	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{})
 	if err != nil {
 		return nil, err
@@ -307,6 +308,47 @@ func newHandlers(nativeCode, visualGit, fileContinuity bool, httpUpstream string
 			registrations[typeID] = func(context.Context, json.RawMessage) (any, *flowersec.RPCError) { return response, nil }
 		}
 	}
+	if visualWorkspace {
+		if !visualGit {
+			return nil, errors.New("visual Git workspace requires visual Git")
+		}
+		summary := map[string]any{"staged_count": 3, "unstaged_count": 2}
+		registrations[1104] = func(context.Context, json.RawMessage) (any, *flowersec.RPCError) {
+			return map[string]any{"repo_root_path": "/workspace", "worktree_path": "/workspace", "head_ref": "main", "head_commit": "abcdef1234567890", "workspace_summary": summary, "workspace_revision": "visual-1", "staged_stats": map[string]int{"additions": 232, "deletions": 60}}, nil
+		}
+		registrations[1128] = func(_ context.Context, body json.RawMessage) (any, *flowersec.RPCError) {
+			var request struct {
+				Section   string `json:"section"`
+				Directory string `json:"directory_path"`
+			}
+			if err := json.Unmarshal(body, &request); err != nil {
+				return nil, &flowersec.RPCError{Code: 400, Message: "Invalid workspace fixture request"}
+			}
+			items := []any{}
+			count := 0
+			if request.Section == "changes" || request.Section == "staged" {
+				section := "unstaged"
+				count = 2
+				if request.Section == "staged" {
+					section = "staged"
+					count = 3
+				}
+				if request.Directory == "" {
+					items = append(items, map[string]any{"section": section, "entry_kind": "directory", "path": "src", "directory_path": "src", "descendant_file_count": count})
+				} else {
+					for index := 0; index < count; index++ {
+						name := fmt.Sprintf("src/feature-%d.ts", index)
+						if index == count-1 {
+							name = "src/" + strings.Repeat("LongComponentName", 10) + ".tsx"
+						}
+						items = append(items, map[string]any{"section": section, "path": name, "change_type": "modified", "additions": 70, "deletions": 1})
+					}
+				}
+			}
+			return map[string]any{"repo_root_path": "/workspace", "section": request.Section, "directory_path": request.Directory, "summary": summary, "items": items, "workspace_revision": "visual-1", "scope_file_count": count, "total_count": len(items), "next_offset": len(items), "has_more": false}, nil
+		}
+	}
+
 	for typeID, handler := range registrations {
 		if err := handlers.HandleRPC(typeID, handler); err != nil {
 			return nil, err

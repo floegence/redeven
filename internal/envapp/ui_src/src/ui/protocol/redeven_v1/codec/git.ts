@@ -382,6 +382,7 @@ export function toWireGitGetRepoSummaryRequest(req: GitRepoSummaryRequest): wire
 
 export function fromWireGitGetRepoSummaryResponse(resp: wire_git_get_repo_summary_resp): GitRepoSummaryResponse {
   return {
+    stagedStats: resp?.staged_stats ? { additions: resp.staged_stats.additions, deletions: resp.staged_stats.deletions } : undefined,
     repoRootPath: String(resp?.repo_root_path ?? ''),
     worktreePath: typeof resp?.worktree_path === 'string' ? resp.worktree_path : undefined,
     isWorktree: typeof resp?.is_worktree === 'boolean' ? resp.is_worktree : undefined,

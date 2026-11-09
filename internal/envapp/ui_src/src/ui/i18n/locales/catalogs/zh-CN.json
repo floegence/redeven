@@ -2095,6 +2095,10 @@
       "stageAll": "全部暂存",
       "unstageAll": "全部取消暂存",
       "trackAll": "全部跟踪",
+      "commitFiles": {
+        "one": "待提交 {count} 个文件",
+        "other": "待提交 {count} 个文件"
+      },
       "commitAction": "提交...",
       "stashAction": "储藏...",
       "discardFolderAction": "放弃文件夹...",
