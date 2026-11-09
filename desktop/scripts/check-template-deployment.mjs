@@ -46,10 +46,10 @@ await session.run(async () => {
   });
   const context = application.context();
   await context.addInitScript(() => localStorage.setItem('redeven_ui_language_preference', 'en-US'));
-  let page, serviceID;
+  let page, welcome, serviceID;
   const report = { status: 'running', manifest, token: false, steps: [] };
   const api = async (suffix, method = 'GET', body) => page.evaluate(async ({ suffix, method, body }) => {
-    const response = await fetch('/_redeven_proxy/api/managed-web-services' + suffix, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    const response = await fetch('/_redeven_proxy/api/managed-web-services' + suffix, { method, credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(15000), headers: { 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const data = await response.json();
     if (!response.ok) throw new Error(`Managed service request ${response.status}: ${JSON.stringify(data)}`);
     return data.data ?? data;
@@ -65,10 +65,11 @@ await session.run(async () => {
     await waitFor(async () => !(await api('')).services.some(service => service.service_id === serviceID), 90000, 'owned service uninstall');
   };
   try {
-    const welcome = await waitFor(() => context.pages().find(page => page.url().includes('/welcome/')), 60000, 'production Welcome');
+    welcome = await waitFor(() => context.pages().find(page => page.url().includes('/welcome/')), 60000, 'production Welcome');
     await welcome.getByRole('button', { name: /^((Open|Show) window|(打开|显示)窗口)$/ }).first().click({ timeout: 90000 });
     page = await waitFor(() => context.pages().find(page => page.url().includes('/_redeven_proxy/env/')), 60000, 'production Environment');
     page.setDefaultTimeout(30000);
+    await application.evaluate(({ BrowserWindow }) => { for (const window of BrowserWindow.getAllWindows()) window.hide(); });
     await page.getByRole('tab', { name: 'Activity', exact: true }).click();
     await page.getByRole('button', { name: 'Web Services', exact: true }).click();
     await page.getByRole('button', { name: 'Service templates', exact: true }).click();
@@ -105,25 +106,34 @@ await session.run(async () => {
     report.steps.push('install form -> preflight -> container running');
     await page.screenshot({ path: path.join(evidence, 'product-running.png') });
     const service = page.locator(`[data-testid="managed-service-row"][data-managed-service-id="${serviceID}"]`);
+    await page.getByRole('button', { name: 'Web Services', exact: true }).click();
+    console.log('Opening owned service');
     await service.getByRole('button', { name: 'Open', exact: true }).click();
-    const opened = await waitFor(() => context.pages().find(candidate => candidate !== page && candidate !== welcome && !candidate.url().startsWith('devtools:')), 30000, 'actual service browser');
-    await opened.waitForFunction(() => document.body.innerText.trim().length > 0);
-    await opened.reload(); await opened.waitForFunction(() => document.body.innerText.trim().length > 0);
+    console.log('Open action clicked');
+    const opened = await waitFor(() => context.pages().find(candidate => candidate !== page && candidate !== welcome && /^https?:/.test(candidate.url())), 30000, 'actual service browser');
+    await opened.waitForFunction(() => Boolean(document.body?.innerText.trim()));
+    await opened.reload(); await opened.waitForFunction(() => Boolean(document.body?.innerText.trim()));
     await opened.screenshot({ path: path.join(evidence, 'product-service-open.png') });
     await opened.close();
     report.steps.push('actual Desktop service window open and reload');
+    console.log('Cleaning up owned service');
     await cleanup();
     report.steps.push('uninstall owned service, workspace and data');
     report.status = 'passed';
   } catch (error) {
     report.status = 'failed'; report.error = String(error);
+    console.error('Product assertion failed', report.error);
+    await writeFile(path.join(evidence, 'failure-before-cleanup.json'), JSON.stringify(report, null, 2));
+    report.pages = context.pages().map(candidate => candidate.url());
+    if (welcome && !welcome.isClosed()) { report.welcome = await welcome.locator('body').innerText(); await welcome.screenshot({path:path.join(evidence, 'welcome-failure.png')}); }
     if (serviceID && page && !page.isClosed()) report.inventory = await api('');
     if (page && !page.isClosed()) { await page.screenshot({ path: path.join(evidence, 'product-failure.png') }); report.visible = await page.locator('body').innerText(); }
     throw error;
   } finally {
-    await cleanup();
-    await session.writeEvidence(path.join(evidence, 'product-deployment.json'), report);
+    try { await cleanup(); } catch (error) { report.cleanup_error = String(error); report.status = 'failed'; }
+    await session.writeEvidence(path.join(evidence, 'product-deployment.json'), { ...report });
     await session.closeElectron(application);
   }
+  assert.equal(report.status, 'passed', report.cleanup_error);
   console.log('Assertions complete: actual Desktop template review, deploy, open and cleanup');
 });
