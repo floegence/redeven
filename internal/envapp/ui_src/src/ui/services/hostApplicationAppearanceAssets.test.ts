@@ -8,7 +8,10 @@ it('embeds current public theme assets and complete explicit locale catalogs', (
   const css = readFileSync(resolve('../../codeapp/appserver/host_application_viewer/appearance.generated.css'), 'utf8');
   // Keep the standalone document independent of full component/utility CSS and
   // network font loading. Formal builds use released packages, never siblings.
-  expect(Buffer.byteLength(css)).toBeLessThan(100_000);
+  // Budget the published CSS payload; the generator's provenance line is metadata.
+  const provenance = '/* Generated from published Floe standalone.css; run buildHostApplicationAppearance.mjs. */\n';
+  expect(css.startsWith(provenance)).toBe(true);
+  expect(Buffer.byteLength(css.slice(provenance.length))).toBeLessThan(100_000);
   expect(css).not.toContain('@import');
   expect(css).not.toContain('url(');
 });
