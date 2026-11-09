@@ -72,7 +72,7 @@ func TestSourceBindingMigrationPreservesUnknownInstancesAtomically(t *testing.T)
 			defer migrated.Close()
 			var version int
 			migrated.QueryRow(`PRAGMA user_version`).Scan(&version)
-			want := 7
+			want := registryCurrentSchemaVersion
 			if fail {
 				want = 6
 			}

@@ -183,7 +183,7 @@ func (r *Registry) DeleteManagedTemplateSource(ctx context.Context, id string) e
 	if _, err := tx.Exec(`DELETE FROM managed_web_service_template_sources WHERE template_id=?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM managed_web_service_source_versions WHERE template_id=?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM managed_web_service_source_versions WHERE template_id=? AND NOT EXISTS(SELECT 1 FROM managed_web_service_template_bases b WHERE b.source_template_id=managed_web_service_source_versions.template_id AND b.sha256=managed_web_service_source_versions.sha256)`, id); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -4243,7 +4243,7 @@
       "moreActions": "Plus",
       "moreTemplateActions": "Autres actions sur le modèle",
       "duplicateTemplate": "Dupliquer le modèle",
-      "duplicateNote": "Seule la définition du modèle est copiée. Les instances, données et secrets ne le sont pas ; la copie est un modèle personnalisé indépendant et modifiable.",
+      "duplicateNote": "Créez un modèle indépendant avec ses fichiers sources vérifiés. Les instances, les données et les secrets ne sont pas copiés.",
       "copyName": "Copie de {name}",
       "editTemplate": "Modifier le modèle",
       "deleteTemplate": "Supprimer le modèle",
@@ -4734,7 +4734,10 @@
       "installSubmissionUnknown": "État de l’envoi inconnu",
       "installSubmissionUnknownDetail": "L’envoi n’a pas pu être confirmé. Vérifiez son état avant de réessayer.",
       "installReviewAgain": "Vérifier l’installation",
-      "installCheckStatus": "Vérifier l’état"
+      "installCheckStatus": "Vérifier l’état",
+      "createPersonal": "Créer mon modèle",
+      "continueCopy": "Continuer la copie",
+      "reviewedRuntimeLocked": "La configuration de ce bureau a été vérifiée et reste inchangée. Vous pouvez renommer la copie, modifier sa description et personnaliser les paramètres de l’instance après le déploiement."
     },
     "errors": {
       "loadFailedPrefix": "Échec du chargement des services web",

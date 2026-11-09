@@ -52,6 +52,55 @@ describe('EnvPortForwardsPage browser presentation', () => {
     document.documentElement.classList.remove('dark');
   });
 
+  it.each(['host','container','compose'].flatMap(kind => [390,1440].map(width => ({kind,width}))))('completes personal $kind copy and editor at $width px without overlap', async ({kind,width}) => {
+    await page.viewport(width,900);
+    cacheBrowser.scope=`personal-${kind}-${width}-${crypto.randomUUID()}`;
+    const source={repository:'owner/templates',repository_id:123,ref:'main',path:'templates/example',commit_sha:'a'.repeat(40)};
+    const spec={schema_version:7,kind,endpoint:{scheme:'http',path:'/',health_path:'/',container_port:8080},
+      ...(kind==='host'?{host:{start_script:'exec server'}}:kind==='container'?{container:{image:'example/app:1',mounts:[]}}:{compose:{main_service:'web',yaml:'services:\n  web:\n    image: example/app:1\n'}})};
+    const template={template_id:'git_browser',service_family_id:'remote',name:'Remote service',description:'Source description',source:'git',deployment:kind,revision:1,editable:false,duplicateable:true,available:true,default_workspace_path:'/workspace',workspace_roots:[],deployments:[{deployment:kind,available:true}],spec};
+    const candidate={candidate_id:'browser-copy',sha256:'b'.repeat(64),expected_sha256:'',changed:true,template,files:[],affected_service_ids:[],source_document_version:4,source_spec_version:7};
+    const item={template_id:template.template_id,document_template_id:'browser',service_family_id:'browser',source,sha256:candidate.sha256,deployment:kind,revision:1,default_locale:'en-US',localizations:{'en-US':{name:template.name,description:template.description}},classification:'community',status:'available'};
+    let personal: any;
+    let writes=0;
+    cacheBrowser.fetch.mockImplementation(async (url:string,init?:RequestInit)=>{
+      if(url.endsWith('/market-catalog'))return {items:[item],stale:false,generation:1,checked_at:Date.now()};
+      if(url.endsWith('/source-previews'))return candidate;
+      if(url.endsWith('/source-previews/browser-copy'))return {};
+      if(url.endsWith('/catalog'))return {templates:personal?[personal]:[]};
+      if(url.endsWith('/forwards'))return {forwards:[]};
+      if(url.endsWith('/managed-web-services'))return {services:[]};
+      if(url.endsWith('/duplicate')){personal={...template,template_id:'tmpl_browser',service_family_id:'personal',source:'custom',name:JSON.parse(String(init?.body)).name,editable:true};return personal;}
+      if(url.endsWith('/tmpl_browser')&&init?.method==='PUT'){writes++;personal={...personal,...JSON.parse(String(init.body))};return personal;}
+      throw new Error(`Unexpected API: ${url}`);
+    });
+    const host=document.createElement('div');document.body.append(host);
+    dispose=render(()=><EnvPortForwardsPage/>,host);
+    await userEvent.click(page.getByTestId('service-templates-button'));
+    await userEvent.click(page.getByRole('button',{name:'Create my template',exact:true}));
+    await userEvent.click(page.getByRole('button',{name:'Review template',exact:true}));
+    await userEvent.click(page.getByRole('button',{name:'Continue to copy',exact:true}));
+    await userEvent.fill(document.querySelector<HTMLInputElement>('#template-copy-name')!,'My browser service');
+    await userEvent.click(page.getByRole('button',{name:'Duplicate',exact:true}));
+    await expect.poll(()=>document.querySelector('[data-testid="service-template-drawer"]')?.getAttribute('data-view')).toBe('editor');
+    const name=document.querySelector<HTMLInputElement>('#template-editor-name')!;
+    const description=document.querySelector<HTMLTextAreaElement>('#template-editor-description')!;
+    expect(name.value).toBe('My browser service');
+    await userEvent.fill(description,'Edited in browser');
+    const controls=Array.from(document.querySelectorAll<HTMLElement>('.service-template-editor input,.service-template-editor textarea'));
+    for(const control of controls){const rect=control.getBoundingClientRect();expect(rect.left).toBeGreaterThanOrEqual(0);expect(rect.right).toBeLessThanOrEqual(width+1);}
+    const bounds=[name,description].map(control=>control.getBoundingClientRect());
+    expect(bounds[0].bottom).toBeLessThan(bounds[1].top);
+    await expect.poll(()=>Array.from(document.querySelectorAll('[data-floe-dialog-panel]')).some(panel=>panel.textContent?.includes('Duplicate template'))).toBe(false);
+    await page.screenshot({path:`__screenshots__/personal-${kind}-${width}.png`});
+    await userEvent.click(page.getByRole('button',{name:'Save template',exact:true}));
+    await expect.poll(()=>writes).toBe(1);
+    await expect.element(page.getByText('My browser service',{exact:true}).first()).toBeVisible();
+    await userEvent.click(page.getByTestId('service-template-more'));
+    await userEvent.click(page.getByRole('menuitem',{name:'Edit template',exact:true}));
+    await expect.poll(()=>document.querySelector<HTMLTextAreaElement>('#template-editor-description')?.value).toBe('Edited in browser');
+  });
+
   it.each([390, 1440])('keeps the Web Service header, address and toolbar geometry stable at %s px', async width => {
     const { Suspense, lazy } = await import('solid-js');
     const { WebServicesPageSkeleton } = await import('./WebServicesPresentation');
@@ -965,7 +1014,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(progress.textContent).toContain('Pulling image');
     expect(progress.textContent).toContain('Retry · Pulling image');
     expect(row.querySelector('.service-operation-fraction')?.textContent).toBe('2/7');
-    expect(row.querySelectorAll('.service-operation-track > span')).toHaveLength(7);
+    expect(row.querySelectorAll('.service-operation-track > span')).toHaveLength(8);
     const operationHeaderHeight = operationHeader.getBoundingClientRect().height;
     expect(operationHeaderHeight).toBeGreaterThan(0);
     expect(row.querySelector('.web-service-status-trigger')?.textContent).toContain('Pulling');
@@ -983,7 +1032,7 @@ describe('EnvPortForwardsPage browser presentation', () => {
     expect(stageDetail.querySelector('[data-testid="managed-operation-command-output"]')).toBeTruthy();
     expect(stageDetail.querySelector('[data-testid="managed-operation-output"]')?.textContent).toContain('No output yet.');
     expect(details.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2000');
-    expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(7);
+    expect(details.querySelectorAll('[data-managed-operation-step]')).toHaveLength(8);
     expect(details.closest('[role="dialog"]')).toBeNull();
     const detailsRect = details.getBoundingClientRect();
     expect(detailsRect.left).toBeGreaterThanOrEqual(0);

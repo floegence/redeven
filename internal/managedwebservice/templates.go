@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -117,9 +116,6 @@ func (m *Manager) UpdateTemplate(ctx context.Context, templateID string, req Tem
 	if err := validateRequestID(req.RequestID); err != nil {
 		return nil, err
 	}
-	if err := validateTemplateWriteRequest(req); err != nil {
-		return nil, err
-	}
 	m.requestMu.Lock()
 	defer m.requestMu.Unlock()
 	record, err := m.registry.GetManagedTemplate(ctx, templateID)
@@ -131,6 +127,20 @@ func (m *Manager) UpdateTemplate(ctx context.Context, templateID string, req Tem
 			return nil, serviceError("BUILTIN_TEMPLATE_IMMUTABLE", "Built-in templates cannot be edited. Duplicate the template first.", 409, false, nil)
 		}
 		return nil, serviceError("TEMPLATE_NOT_FOUND", "The managed Web Service template was not found.", 404, false, nil)
+	}
+	current, err := m.templateRecord(ctx, *record, false)
+	if err != nil {
+		return nil, err
+	}
+	if current.RuntimeLocked {
+		if err := validatePersonalRuntime(*current.Spec, req.Spec); err != nil {
+			return nil, err
+		}
+		if err := validateTemplateMetadata(req); err != nil {
+			return nil, err
+		}
+	} else if err := validateTemplateWriteRequest(req); err != nil {
+		return nil, err
 	}
 	specJSON, specHash, err := canonicalTemplateSpec(req.Spec)
 	if err != nil {
@@ -180,9 +190,8 @@ func (m *Manager) DeleteTemplate(ctx context.Context, templateID string) error {
 		if err := m.registry.DeleteManagedTemplateSource(ctx, templateID); err != nil {
 			return templateRegistryError(err)
 		}
-		if directory, err := m.sourceDirectory(*source); err == nil {
-			_ = os.RemoveAll(directory)
-		}
+		// Immutable originals can still belong to personal templates or instances.
+		// Startup collection removes only unreferenced source versions and files.
 		return nil
 	}
 	if err := m.registry.DeleteManagedTemplate(ctx, templateID); err != nil {
@@ -201,7 +210,16 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 	}
 	m.requestMu.Lock()
 	defer m.requestMu.Unlock()
-	source, err := m.Template(ctx, templateID)
+	fingerprint := requestFingerprint("template-duplicate", templateID, name, sourceSelectionFingerprint(req.Source, req.SourceOwner))
+	if existing, err := m.registry.GetManagedTemplateRequest(ctx, req.RequestID); err != nil {
+		return nil, err
+	} else if existing != nil {
+		if existing.RequestFingerprint != fingerprint {
+			return nil, serviceError("IDEMPOTENCY_CONFLICT", "request_id was already used for a different template request.", 409, false, nil)
+		}
+		return m.Template(ctx, existing.TemplateID)
+	}
+	source, err := m.installTemplate(ctx, templateID, req.Source, req.SourceOwner)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +230,6 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 		return nil, serviceError("TEMPLATE_DUPLICATION_UNAVAILABLE", "This template must retain its original source and cannot be duplicated into an editable definition.", 409, false, nil)
 	}
 	spec := *source.Spec
-	spec.SchemaVersion = templateSpecSchemaVersion
 	spec.Kind = source.Deployment
 	if source.Source == "builtin" && !completeBuiltInDuplicateSpec(spec) {
 		return nil, serviceError("TEMPLATE_UNAVAILABLE", "This built-in template cannot be duplicated until its exact audited deployment definition is available.", 409, true, nil)
@@ -221,14 +238,17 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 	if err != nil {
 		return nil, err
 	}
-	fingerprint := requestFingerprint("template-duplicate", source.TemplateID, fmt.Sprint(source.Revision), name, specHash)
-	if existing, err := m.registry.GetManagedTemplateRequest(ctx, req.RequestID); err != nil {
+
+	var base *pfregistry.ManagedTemplateSource
+	if req.Source != nil {
+		base, err = m.stageInstallSource(ctx, templateID, req.Source, req.SourceOwner)
+	} else if source.Source == "git" {
+		base = source.GitSource
+	} else {
+		base, err = m.registry.GetManagedTemplateBase(ctx, templateID)
+	}
+	if err != nil {
 		return nil, err
-	} else if existing != nil {
-		if existing.RequestFingerprint != fingerprint {
-			return nil, serviceError("IDEMPOTENCY_CONFLICT", "request_id was already used for a different template request.", 409, false, nil)
-		}
-		return m.Template(ctx, existing.TemplateID)
 	}
 	copyID, err := randomID("tmpl")
 	if err != nil {
@@ -243,7 +263,7 @@ func (m *Manager) DuplicateTemplate(ctx context.Context, templateID string, req 
 		Revision: 1, SpecJSON: specJSON, SpecSHA256: specHash, DerivedFromTemplateID: source.TemplateID, DerivedFromRevision: source.Revision, ServiceFamilyID: familyID,
 	}
 	request := pfregistry.ManagedTemplateRequest{RequestID: strings.TrimSpace(req.RequestID), RequestFingerprint: fingerprint, TemplateID: copyID, Action: "duplicate"}
-	if err := m.registry.CreateManagedTemplateWithRequest(ctx, record, request); err != nil {
+	if err := m.registry.CreateManagedTemplateWithBase(ctx, record, request, base); err != nil {
 		return nil, templateRegistryError(err)
 	}
 	return m.templateFromRecord(ctx, record)
@@ -288,6 +308,9 @@ func (m *Manager) templateRecord(ctx context.Context, record pfregistry.ManagedT
 		Deployments: []DeploymentAvailability{{Deployment: spec.Kind, Available: available, ReasonCode: code, Reason: reason}}, DefaultWorkspacePath: defaultWorkspacePath, WorkspaceRoots: m.workspaceRoots(), Spec: &spec, EffectiveSpec: &effectiveSpec,
 		HostLifecyclePlan: hostLifecyclePlan(spec),
 		DefaultAccessMode: pfregistry.AccessModeUnifiedProxy,
+	}
+	if err := m.applyPersonalTemplateBase(ctx, result, probeRuntime); err != nil {
+		return nil, err
 	}
 	result.RecommendedRelease = recommendedReleaseForTemplate(*result)
 	if result.RecommendedRelease != nil {
@@ -335,16 +358,22 @@ func containerMode(kind Deployment) string {
 }
 
 func validateTemplateWriteRequest(req TemplateWriteRequest) error {
+	if err := validateTemplateMetadata(req); err != nil {
+		return err
+	}
+	if req.Spec.Container != nil && req.Spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop {
+		return serviceError("TEMPLATE_RUNTIME_PROFILE_RESERVED", "The interactive desktop runtime profile is reserved for reviewed Redeven templates.", 400, false, nil)
+	}
+	return validateTemplateSpec(req.Spec)
+}
+func validateTemplateMetadata(req TemplateWriteRequest) error {
 	if !templateNamePattern.MatchString(strings.TrimSpace(req.Name)) {
 		return serviceError("TEMPLATE_NAME_INVALID", "Template name must contain 1 to 80 printable characters.", 400, false, nil)
 	}
 	if len(req.Description) > 1000 {
 		return serviceError("TEMPLATE_METADATA_INVALID", "Template description is too long.", 400, false, nil)
 	}
-	if req.Spec.Container != nil && req.Spec.Container.RuntimeProfile == ContainerRuntimeProfileInteractiveDesktop {
-		return serviceError("TEMPLATE_RUNTIME_PROFILE_RESERVED", "The interactive desktop runtime profile is reserved for reviewed Redeven templates.", 400, false, nil)
-	}
-	return validateTemplateSpec(req.Spec)
+	return nil
 }
 
 func templateContractError(err error) error {

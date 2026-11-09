@@ -14,7 +14,8 @@ import {
   Lock,
   Package,
 } from '@floegence/floe-webapp-core/icons';
-import { Button, Dialog, Input } from '@floegence/floe-webapp-core/ui';
+import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { Dialog } from '../primitives/EnvAppModal';
 import type { GitSource, Snapshot, SourceCatalog, SourceExpectation } from '@floegence/redeven-service-templates';
 import { useI18n } from '../i18n';
 import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
@@ -76,6 +77,7 @@ export function GitTemplateImport(props: {
   reviewIdentity?: unknown;
   marketSource?: { source: GitSource; expected: SourceExpectation };
   onReviewed?: (preview: SourcePreview) => void;
+  reviewPurpose?: 'deploy' | 'copy';
   environmentName?: string;
   template?: ManagedCatalogTemplate;
   onClose: () => void;
@@ -381,7 +383,7 @@ export function GitTemplateImport(props: {
           >
             {i18n.t(
               preview()
-                ? props.onReviewed ? 'webServices.market.continueDeploy' : preview()?.expected_sha256
+                ? props.onReviewed ? props.reviewPurpose === 'copy' ? 'webServices.managed.continueCopy' : 'webServices.market.continueDeploy' : preview()?.expected_sha256
                   ? 'webServices.sources.confirmUpdate'
                   : 'webServices.sources.confirmImport'
                 : catalog()

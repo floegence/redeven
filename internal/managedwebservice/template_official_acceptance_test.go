@@ -130,6 +130,26 @@ func TestOfficialTemplateMarketLifecycle(t *testing.T) {
 				t.Fatal("review wrote executable source")
 			}
 			t.Logf("verified path=%s revision=%d commit=%s sha256=%s locales=%d", item.Source.Path, item.Revision, item.Source.CommitSHA, item.SHA256, len(evidence.Localizations))
+			if os.Getenv("REDEVEN_OFFICIAL_TEMPLATE_PERSONAL") == "1" {
+				copy, err := m.DuplicateTemplate(ctx, preview.Template.TemplateID, TemplateDuplicateRequest{RequestID: "official-personal-copy", Name: "My " + item.DocumentTemplateID, Source: req.Source, SourceOwner: "official-acceptance"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				copy, err = m.UpdateTemplate(ctx, copy.TemplateID, TemplateWriteRequest{RequestID: "official-personal-edit", Name: copy.Name, Description: "Personal official-template acceptance", Spec: *copy.Spec})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(copy.Localizations) != 10 || len(copy.Notices) != len(preview.Template.Notices) || copy.SourceSHA256 != item.SHA256 {
+					t.Fatal("personal copy lost provenance or declarations")
+				}
+				preview.Template = *copy
+				req.TemplateID, req.Source = copy.TemplateID, nil
+				plan, err = m.PreflightInstall(ctx, req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Logf("personal template=%s editable=%t runtime_locked=%t", copy.TemplateID, copy.Editable, copy.RuntimeLocked)
+			}
 			if os.Getenv("REDEVEN_OFFICIAL_TEMPLATE_NATIVE") != "1" {
 				return
 			}
@@ -178,7 +198,12 @@ func TestOfficialTemplateMarketLifecycle(t *testing.T) {
 			}
 
 			bound, verified, err := m.registry.GetServiceTemplateSource(ctx, id)
-			if err != nil || !verified || bound.SHA256 != item.SHA256 {
+			if os.Getenv("REDEVEN_OFFICIAL_TEMPLATE_PERSONAL") == "1" {
+				resolved, resolveErr := m.resolveCurrentRuntime(ctx, service)
+				if err != nil || bound != nil || resolveErr != nil || resolved.Template.SourceSHA256 != item.SHA256 {
+					t.Fatal("personal instance lost pinned base", err, resolveErr)
+				}
+			} else if err != nil || !verified || bound.SHA256 != item.SHA256 {
 				t.Fatal("instance lost reviewed source", err)
 			}
 
@@ -187,7 +212,7 @@ func TestOfficialTemplateMarketLifecycle(t *testing.T) {
 				t.Fatal("saved source lost its reviewed profile", err)
 			}
 			restarted := &Manager{registry: m.registry, scope: m.scope, stateDir: m.stateDir}
-			if _, _, err := restarted.readSourceTemplateWithAvailability(ctx, *bound, false); err != nil {
+			if _, err := restarted.serviceTemplate(ctx, service); err != nil {
 				t.Fatal("restart could not restore reviewed source", err)
 			}
 			view, err := m.Inspect(ctx, id)

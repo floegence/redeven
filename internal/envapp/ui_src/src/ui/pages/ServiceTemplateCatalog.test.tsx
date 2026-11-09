@@ -190,17 +190,17 @@ describe('ServiceTemplateCatalog', () => {
     expect(host.querySelector('[data-testid="service-template-details"]')?.textContent).toContain('More');
   });
 
-  it('groups GitHub templates and exposes manual source review without editable copies', () => {
+  it('exposes source review and independent personal copies for GitHub templates', () => {
     const onCheckSource = vi.fn();
     const onImport = vi.fn();
-    mount({ templates: [{ ...builtIn, id: 'git_example', source: 'git', installed: true, duplicateable: false }], onCheckSource, onImport });
+    mount({ templates: [{ ...builtIn, id: 'git_example', source: 'git', installed: true, duplicateable: true }], onCheckSource, onImport });
     const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
     buttons.find((button) => button.textContent === 'Import from GitHub')!.click();
     buttons.find((button) => button.textContent === 'Check template updates')!.click();
     expect(onImport).toHaveBeenCalledOnce();
     expect(onCheckSource).toHaveBeenCalledWith('git_example');
     expect(buttons.find((button) => button.textContent === 'Delete template')?.disabled).toBe(true);
-    expect(buttons.find((button) => button.textContent === 'Duplicate')).toBeUndefined();
+    expect(buttons.find((button) => button.textContent === 'Create my template')?.disabled).toBe(false);
     expect(host.textContent).toContain('GitHub templates');
   });
 

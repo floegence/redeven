@@ -4243,7 +4243,7 @@
       "moreActions": "その他",
       "moreTemplateActions": "その他のテンプレート操作",
       "duplicateTemplate": "テンプレートを複製",
-      "duplicateNote": "テンプレート定義だけをコピーします。インスタンス、データ、シークレットはコピーされず、複製は独立して編集可能なカスタムテンプレートになります。",
+      "duplicateNote": "確認済みのソースファイルを保持した独立したテンプレートを作成します。インスタンス、データ、シークレットはコピーされません。",
       "copyName": "{name} のコピー",
       "editTemplate": "テンプレートを編集",
       "deleteTemplate": "テンプレートを削除",
@@ -4734,7 +4734,10 @@
       "installSubmissionUnknown": "送信結果を確認できません",
       "installSubmissionUnknownDetail": "送信結果を確認できませんでした。再試行する前に状態を確認してください。",
       "installReviewAgain": "インストール内容を再確認",
-      "installCheckStatus": "状態を確認"
+      "installCheckStatus": "状態を確認",
+      "createPersonal": "自分のテンプレートを作成",
+      "continueCopy": "コピーの作成へ進む",
+      "reviewedRuntimeLocked": "このデスクトップの実行設定は審査済みのため変更できません。コピーの名前と説明を編集し、デプロイ後にインスタンス設定をカスタマイズできます。"
     },
     "errors": {
       "loadFailedPrefix": "Web サービスの読み込みに失敗しました",

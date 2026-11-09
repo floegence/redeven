@@ -1982,6 +1982,109 @@ describe('EnvPortForwardsPage', () => {
     } finally { dispose(); }
   });
 
+  it.each(['official', 'community'].flatMap(classification => ['host', 'container', 'compose'].map(kind => ({classification, kind}))))('copies $classification $kind into an editable personal template and preserves its definition', async ({classification, kind}) => {
+    const fixture = installHandoffFixture();
+    const normalFetch = localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    const source = {repository:'owner/templates',repository_id:123,ref:'main',path:'templates/personal',commit_sha:'a'.repeat(40)};
+    const spec = {schema_version:7,kind,endpoint:{scheme:'http',path:'/',health_path:'/',container_port:8080,startup_timeout_sec:40},startup_url:{line_prefix:'Server URL: '},parameters:[],
+      ...(kind === 'host' ? {host:{start_script:'exec "$REDEVEN_TEMPLATE_DIR/scripts/start.sh"',environment:{CUSTOM:'preserved'}}} : kind === 'container' ? {container:{image:'example/app:1',entrypoint:['/bin/sh','-c'],command:['exec app'],environment:{EXAMPLE:'true'},mounts:[],pids_limit:1024,shm_size_bytes:12345678,network_mode:'bridge',labels:{owner:'personal'}}} : {compose:{main_service:'web',yaml:'services:\n  web:\n    image: example/app:1\n'}})};
+    const candidate = {candidate_id:'personal-preview',sha256:'b'.repeat(64),expected_sha256:'',changed:true,template:{...fixture.template,template_id:'git_original',source:'git',deployment:kind,git_source:source,spec},files:[],affected_service_ids:[],source_document_version:4,source_spec_version:7};
+    const item = {template_id:'git_original',document_template_id:'personal',service_family_id:'personal',revision:1,source,sha256:candidate.sha256,deployment:kind,default_locale:'en-US',localizations:{'en-US':{name:'Remote service',description:'Remote description'}},classification,status:'available'};
+    let saved: any;
+    let personal: any;
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/market-catalog')) return Promise.resolve({items:[item],stale:false,generation:1,checked_at:Date.now()});
+      if (url.endsWith('/source-previews')) return Promise.resolve(candidate);
+      if (url.endsWith('/catalog')) return Promise.resolve({templates:personal ? [personal] : []});
+      if (url.endsWith('/git_original/duplicate')) {
+        expect(JSON.parse(String(init?.body))).toMatchObject({name:'My personal service',source:{candidate_id:candidate.candidate_id,sha256:candidate.sha256,expected_sha256:''}});
+        personal={...candidate.template,template_id:'tmpl_personal',source:'custom',editable:true,service_family_id:'family_personal',name:'My personal service'};
+        return Promise.resolve(personal);
+      }
+      if (url.endsWith('/source-previews/personal-preview') && init?.method === 'DELETE') return Promise.resolve({});
+      if (url.endsWith('/tmpl_personal') && init?.method === 'PUT') {saved=JSON.parse(String(init.body));personal={...personal,...saved};return Promise.resolve(personal);}
+      return normalFetch(url,init);
+    });
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+    try {
+      await flushPage();host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();await flushPage();
+      fixture.findButton('Create my template').click();await flushPage();fixture.findButton('Review template').click();await flushPage();
+      fixture.findButton('Continue to copy').click();await flushPage();
+      const name=host.querySelector<HTMLInputElement>('#template-copy-name')!;
+      name.value='My personal service';name.dispatchEvent(new InputEvent('input',{bubbles:true}));
+      fixture.findButton('Duplicate').click();await flushPage();
+      expect(host.querySelector('[data-testid="service-template-drawer"]')?.getAttribute('data-view')).toBe('editor');
+      const description=host.querySelector<HTMLTextAreaElement>('#template-editor-description')!;
+      description.value='My changes';description.dispatchEvent(new InputEvent('input',{bubbles:true}));
+      fixture.findButton('Save template').click();await flushPage();
+      expect(saved.description).toBe('My changes');expect(saved.spec).toMatchObject(spec);
+      expect(host.querySelector('[data-testid="service-template-drawer"]')?.getAttribute('data-view')).toBe('catalog');
+      expect(host.textContent).toContain('My personal service');
+      fixture.findButton('Edit template').click();await flushPage();
+      expect(host.querySelector<HTMLTextAreaElement>('#template-editor-description')?.value).toBe('My changes');
+      expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([url])=>String(url).endsWith('/source-confirmations'))).toBe(false);
+    } finally {dispose();}
+  });
+
+  it.each(['cancel','retry','environment'])('keeps personal copy review ownership during %s', async mode => {
+    const [access,setAccess]=createSignal({phase:'ready' as const,generation:0,scope:''});envContextMocks.resourceCacheAccess=access;
+    const fixture=installHandoffFixture();const normalFetch=localApiMocks.fetchLocalApiJSON.getMockImplementation()!;
+    const source={repository:'owner/templates',repository_id:123,ref:'main',path:'templates/copy',commit_sha:'a'.repeat(40)};
+    const candidate={candidate_id:'copy-owner',sha256:'b'.repeat(64),expected_sha256:'',changed:true,template:{...fixture.template,source:'git'},files:[],affected_service_ids:[],source_document_version:4,source_spec_version:7};
+    const item={template_id:fixture.template.template_id,document_template_id:'copy',service_family_id:'copy',source,sha256:candidate.sha256,deployment:'host',revision:1,default_locale:'en-US',localizations:{'en-US':{name:'Remote service',description:'Remote'}},classification:'community',status:'available'};
+    const response=deferred<unknown>();let rejectCopy!: (error:Error)=>void;const pendingCopy=new Promise((_resolve,reject)=>{rejectCopy=reject;});const requests: any[]=[];
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url:string,init?:RequestInit)=>{
+      if(url.endsWith('/market-catalog'))return Promise.resolve({items:[item],stale:false,generation:1,checked_at:Date.now()});
+      if(url.endsWith('/source-previews'))return Promise.resolve(candidate);
+      if(url.endsWith('/source-previews/copy-owner'))return Promise.resolve({});
+      if(url.endsWith('/duplicate')){requests.push(JSON.parse(String(init?.body)));return mode==='retry'?pendingCopy:response.promise;}
+      return normalFetch(url,init);
+    });
+    const dispose=render(()=><EnvPortForwardsPage/>,host);
+    try{
+      await flushPage();host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();await flushPage();
+      fixture.findButton('Create my template').click();await flushPage();fixture.findButton('Review template').click();await flushPage();fixture.findButton('Continue to copy').click();await flushPage();
+      if(mode==='cancel'){
+        fixture.findButton('Cancel').click();await flushPage();
+        expect(requests).toHaveLength(0);
+        expect(localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url,init])=>String(url).endsWith('/source-previews/copy-owner')&&init?.method==='DELETE')).toHaveLength(1);
+      }else{
+        fixture.findButton('Duplicate').click();await flushPage();
+        expect(host.querySelector<HTMLInputElement>('#template-copy-name')?.disabled).toBe(true);
+        if(mode==='environment'){
+          setAccess({phase:'ready',generation:1,scope:''});await flushPage();
+          response.resolve({...fixture.template,template_id:'tmpl_wrong_environment'});await flushPage();
+          expect(host.querySelector('[data-testid="service-template-drawer"]')).toBeNull();
+          expect(localApiMocks.fetchLocalApiJSON.mock.calls.some(([,init])=>init?.method==='DELETE')).toBe(false);
+        }else{
+          rejectCopy(new Error('connection lost'));await flushPage();fixture.findButton('Duplicate').click();await flushPage();
+          expect(requests).toHaveLength(2);expect(requests[1]).toEqual(requests[0]);
+          expect(host.querySelector('#template-copy-name')).not.toBeNull();
+        }
+      }
+    }finally{dispose();}
+  });
+
+  it('explains and preserves the reviewed desktop runtime while editing personal metadata', async () => {
+    const fixture=installHandoffFixture();
+    const spec={schema_version:7,kind:'container',endpoint:{scheme:'http',container_port:3000},container:{image:'example/desktop:1',runtime_profile:'interactive_desktop',pids_limit:2048,environment:{DISPLAY_NAME:'Desktop'}}};
+    Object.assign(fixture.template,{source:'custom',deployment:'container',runtime_locked:true,spec});
+    const normalFetch=localApiMocks.fetchLocalApiJSON.getMockImplementation()!;let saved: any;
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url:string,init?:RequestInit)=>{
+      if(url.endsWith('/handoff-host')&&init?.method==='PUT'){saved=JSON.parse(String(init.body));return Promise.resolve({...fixture.template,...saved});}
+      return normalFetch(url,init);
+    });
+    const dispose=render(()=><EnvPortForwardsPage/>,host);
+    try{
+      await flushPage();host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();await flushPage();fixture.findButton('My templates').click();await flushPage();fixture.findButton('Edit template').click();await flushPage();
+      expect(host.querySelector('fieldset')?.disabled).toBe(true);
+      expect(host.textContent).toContain('This desktop runtime is reviewed and stays unchanged');
+      const name=host.querySelector<HTMLInputElement>('#template-editor-name')!;name.value='My desktop';name.dispatchEvent(new InputEvent('input',{bubbles:true}));
+      fixture.findButton('Save template').click();await flushPage();
+      expect(saved.name).toBe('My desktop');expect(saved.spec).toEqual(spec);
+    }finally{dispose();}
+  });
+
   it('discovers all official templates by default and retires builtins from the library', async () => {
     const fixture = installHandoffFixture();
     Object.assign(fixture.template, {source:'builtin',name:'Bundled handoff'});

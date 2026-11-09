@@ -4243,7 +4243,7 @@
       "moreActions": "Mais",
       "moreTemplateActions": "Mais ações do modelo",
       "duplicateTemplate": "Duplicar modelo",
-      "duplicateNote": "Somente a definição do modelo é copiada. Instâncias, dados e segredos não são copiados; a duplicata é um modelo personalizado independente e editável.",
+      "duplicateNote": "Crie um modelo independente com seus arquivos de origem revisados. Instâncias, dados e segredos não são copiados.",
       "copyName": "Cópia de {name}",
       "editTemplate": "Editar modelo",
       "deleteTemplate": "Excluir modelo",
@@ -4734,7 +4734,10 @@
       "installSubmissionUnknown": "Status do envio desconhecido",
       "installSubmissionUnknownDetail": "Não foi possível confirmar o envio. Verifique o status antes de tentar novamente.",
       "installReviewAgain": "Revisar instalação",
-      "installCheckStatus": "Verificar status"
+      "installCheckStatus": "Verificar status",
+      "createPersonal": "Criar meu modelo",
+      "continueCopy": "Continuar a cópia",
+      "reviewedRuntimeLocked": "A configuração de execução deste desktop foi revisada e permanece inalterada. Você pode renomear a cópia, editar sua descrição e personalizar as configurações da instância após a implantação."
     },
     "errors": {
       "loadFailedPrefix": "Falha ao carregar serviços web",

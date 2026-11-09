@@ -14,6 +14,7 @@ Repository knowledge derived from current source, generated contracts and releas
 - [Applications viewing, display and resource lifetime](architecture/host-application-viewer.md)
 - [service release discovery and version selection](architecture/managed-service-release-discovery.md)
 - [service template publication, acquisition and formats](architecture/managed-web-service-templates.md)
+- [Personal service templates and pinned source derivation](architecture/personal-service-templates.md)
 - [Service management recovery and resource ownership](architecture/service-management-recovery.md)
 - [Web service browser routing and authorization](architecture/web-service-browser-sessions.md)
 - [Independent Web Environment Center](architecture/web-environment-center.md)

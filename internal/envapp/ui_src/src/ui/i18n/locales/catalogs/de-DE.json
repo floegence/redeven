@@ -4243,7 +4243,7 @@
       "moreActions": "Mehr",
       "moreTemplateActions": "Weitere Vorlagenaktionen",
       "duplicateTemplate": "Vorlage duplizieren",
-      "duplicateNote": "Nur die Vorlagendefinition wird kopiert. Instanzen, Daten und Geheimnisse werden nicht kopiert; das Duplikat ist eine unabhängige, bearbeitbare benutzerdefinierte Vorlage.",
+      "duplicateNote": "Erstellen Sie eine unabhängige Vorlage mit den geprüften Quelldateien. Instanzen, Daten und Geheimnisse werden nicht kopiert.",
       "copyName": "{name} – Kopie",
       "editTemplate": "Vorlage bearbeiten",
       "deleteTemplate": "Vorlage löschen",
@@ -4734,7 +4734,10 @@
       "installSubmissionUnknown": "Übermittlungsstatus unbekannt",
       "installSubmissionUnknownDetail": "Die Übermittlung konnte nicht bestätigt werden. Prüfen Sie den Status, bevor Sie es erneut versuchen.",
       "installReviewAgain": "Installation prüfen",
-      "installCheckStatus": "Status prüfen"
+      "installCheckStatus": "Status prüfen",
+      "createPersonal": "Eigene Vorlage erstellen",
+      "continueCopy": "Weiter zur Kopie",
+      "reviewedRuntimeLocked": "Diese geprüfte Desktop-Laufzeit bleibt unverändert. Sie können die Kopie umbenennen, ihre Beschreibung bearbeiten und nach der Bereitstellung die Instanzeinstellungen anpassen."
     },
     "errors": {
       "loadFailedPrefix": "Webdienste konnten nicht geladen werden",

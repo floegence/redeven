@@ -4243,7 +4243,7 @@
       "moreActions": "更多",
       "moreTemplateActions": "更多模板操作",
       "duplicateTemplate": "创建模板副本",
-      "duplicateNote": "仅复制模板定义，不复制实例、数据或密钥；副本是独立且可编辑的自定义模板。",
+      "duplicateNote": "使用已审核的源文件创建独立模板，不会复制实例、数据或密钥。",
       "copyName": "{name} 副本",
       "editTemplate": "编辑模板",
       "deleteTemplate": "删除模板",
@@ -4734,7 +4734,10 @@
       "installSubmissionUnknown": "提交结果待确认",
       "installSubmissionUnknownDetail": "尚无法确认提交结果。请先检查状态，再决定后续操作。",
       "installReviewAgain": "重新审查安装",
-      "installCheckStatus": "检查状态"
+      "installCheckStatus": "检查状态",
+      "createPersonal": "创建我的模板",
+      "continueCopy": "继续创建副本",
+      "reviewedRuntimeLocked": "此桌面运行配置已经过审核，保持不变。你可以修改副本名称和描述，并在部署后自定义实例设置。"
     },
     "errors": {
       "loadFailedPrefix": "加载 Web 服务失败",

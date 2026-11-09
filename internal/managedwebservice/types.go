@@ -92,6 +92,7 @@ type HostLifecyclePlan struct {
 }
 
 type Template struct {
+	RuntimeLocked         bool                              `json:"runtime_locked,omitempty"`
 	DefaultLocale         string                            `json:"default_locale,omitempty"`
 	GitSource             *pfregistry.ManagedTemplateSource `json:"git_source,omitempty"`
 	SourceRuntimeSHA256   string                            `json:"-"`
@@ -181,8 +182,10 @@ type TemplateWriteRequest struct {
 }
 
 type TemplateDuplicateRequest struct {
-	RequestID string `json:"request_id"`
-	Name      string `json:"name"`
+	Source      *SourceSelection `json:"source,omitempty"`
+	SourceOwner string           `json:"-"`
+	RequestID   string           `json:"request_id"`
+	Name        string           `json:"name"`
 }
 
 type OperationRequest struct {

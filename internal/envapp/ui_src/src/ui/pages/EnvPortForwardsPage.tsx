@@ -335,6 +335,7 @@ export type ManagedCatalogTemplate = Readonly<{
   revision: number;
   editable: boolean;
   duplicateable: boolean;
+  runtime_locked?: boolean;
   derived_from_template_id?: string;
   service_family_id: string;
   available: boolean;
@@ -446,6 +447,7 @@ export type TemplateEditorDraft = {
   composeYAML: string;
   mainService: string;
   originalSpec?: ManagedTemplateSpec;
+  runtimeLocked?: boolean;
   hostLifecyclePlan?: HostLifecyclePlan;
 };
 
@@ -470,7 +472,7 @@ export function validateTemplateDraft(draft: TemplateEditorDraft): Partial<Recor
 
   if (draft.kind === 'host') {
     if (!draft.startScript.trim()) errors.startScript = 'required';
-    const hasNPM = [draft.npmPackageName, draft.npmPackageVersion, draft.npmRegistryURL, draft.npmExecutable, draft.npmAuthTokenParameter].some((value) => value.trim());
+    const hasNPM = [draft.npmPackageName, draft.npmPackageVersion, draft.npmExecutable, draft.npmAuthTokenParameter].some((value) => value.trim());
     if (hasNPM) {
       if (!/^(@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/u.test(draft.npmPackageName.trim())) errors.npmPackageName = 'npmPackageInvalid';
       if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(draft.npmPackageVersion.trim())) errors.npmPackageVersion = 'npmVersionInvalid';
@@ -558,6 +560,7 @@ function draftFromTemplate(template: ManagedCatalogTemplate): TemplateEditorDraf
     composeYAML: spec?.compose?.yaml ?? draft.composeYAML,
     mainService: spec?.compose?.main_service ?? draft.mainService,
     originalSpec: spec,
+    runtimeLocked: template.runtime_locked,
     hostLifecyclePlan: template.host_lifecycle_plan,
   };
 }
@@ -599,6 +602,7 @@ function TemplateEditorGuidance(props: Readonly<{
 
 function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string) {
   const original = draft.originalSpec;
+  if (draft.runtimeLocked && original) return {request_id:requestID,name:draft.name.trim(),description:draft.description.trim(),spec:original};
   const hasNPM = draft.kind === 'host' && [draft.npmPackageName, draft.npmPackageVersion, draft.npmExecutable, draft.npmAuthTokenParameter].some((value) => value.trim());
   const parameters = [...(original?.parameters ?? [])];
   const authTokenParameter = draft.npmAuthTokenParameter.trim();
@@ -613,12 +617,12 @@ function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string)
     startup_timeout_sec: original?.endpoint.startup_timeout_sec || 60,
     ...(draft.kind === 'host' ? {} : { container_port: Number(draft.containerPort) }),
   };
-  const common = { schema_version: 6 as const, kind: draft.kind, endpoint, parameters };
+  const common = { ...original, schema_version: Math.max(original?.schema_version ?? 6, 6) as 6 | 7, kind: draft.kind, endpoint, parameters };
   const spec: ManagedTemplateSpec = draft.kind === 'host'
-    ? { ...common, host: { install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(original?.host?.environment ? { environment: original.host.environment } : {}), after_start_script: draft.afterStartScript, open_script: draft.openScript, output_mode: draft.outputMode, ...(!hasNPM && original?.host?.artifact ? { artifact: original.host.artifact } : {}), ...(hasNPM ? { npm: { package_name: draft.npmPackageName.trim(), version: draft.npmPackageVersion.trim(), registry_url: draft.npmRegistryURL.trim(), executable: draft.npmExecutable.trim(), ...(authTokenParameter ? { auth_token_parameter: authTokenParameter } : {}) } } : {}) } }
+    ? { ...common, host: { ...original?.host, install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(original?.host?.environment ? { environment: original.host.environment } : {}), after_start_script: draft.afterStartScript, open_script: draft.openScript, output_mode: draft.outputMode, artifact: !hasNPM ? original?.host?.artifact : undefined, npm: hasNPM ? { package_name: draft.npmPackageName.trim(), version: draft.npmPackageVersion.trim(), registry_url: draft.npmRegistryURL.trim(), executable: draft.npmExecutable.trim(), ...(authTokenParameter ? { auth_token_parameter: authTokenParameter } : {}) } : undefined } }
     : draft.kind === 'container'
-	  ? { ...common, container: { image: draft.image.trim(), entrypoint: draft.entrypoint.trim() ? [draft.entrypoint.trim()] : [], command: draft.command.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean), environment: parseTemplateEnvironment(draft.environment), mounts: original?.container?.mounts ?? [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'data', target: '/data' }, { type: 'tmpfs', target: '/tmp' }], user: original?.container?.user ?? '', read_only_root: true, memory_bytes: original?.container?.memory_bytes, cpus: original?.container?.cpus, pids_limit: original?.container?.pids_limit || 512 } }
-      : { ...common, compose: { yaml: draft.composeYAML, main_service: draft.mainService.trim() } };
+	  ? { ...common, container: { ...original?.container, image: draft.image.trim(), entrypoint: draft.entrypoint === (original?.container?.entrypoint?.[0] ?? '') ? original?.container?.entrypoint : draft.entrypoint.trim() ? [draft.entrypoint.trim()] : [], command: draft.command === (original?.container?.command?.join('\n') ?? '') ? original?.container?.command : draft.command.split(/\r?\n/u).filter(Boolean), environment: parseTemplateEnvironment(draft.environment), mounts: original?.container?.mounts ?? [{ type: 'workspace', target: '/workspace' }, { type: 'volume', source: 'data', target: '/data' }, { type: 'tmpfs', target: '/tmp' }], user: original?.container?.user ?? '', read_only_root: original?.container?.read_only_root ?? true, memory_bytes: original?.container?.memory_bytes, cpus: original?.container?.cpus, pids_limit: original?.container?.pids_limit } }
+      : { ...common, compose: { ...original?.compose, yaml: draft.composeYAML, main_service: draft.mainService.trim() } };
   return { request_id: requestID, name: draft.name.trim(), description: draft.description.trim(), spec };
 }
 
@@ -2376,6 +2380,15 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const market = createServiceTemplateMarket(() => templateDrawerOpen() && templateCollection() !== 'library', () => JSON.stringify([managedResource.identity(), ctx.resourceCacheAccess?.().generation]), canManageManagedService);
   const marketItems = market.items, marketLoading = market.loading, marketStale = market.stale, marketError = market.error;
   const [marketSource, setMarketSource] = createSignal<{source: MarketTemplate['source'];expected:{repository_id:number;commit_sha:string;sha256:string}}>();
+  const [sourceReviewPurpose, setSourceReviewPurpose] = createSignal<'deploy' | 'copy'>('deploy');
+  const [copySourcePreview, setCopySourcePreview] = createSignal<SourcePreview>();
+  let copyRequestID = '';
+  let copyGeneration = 0;
+  const clearCopySource = () => {
+    const previous = copySourcePreview(); setCopySourcePreview(undefined);
+    if (previous) void fetchLocalApiJSON(`/_redeven_proxy/api/managed-web-service-templates/source-previews/${encodeURIComponent(previous.candidate_id)}`, {method:'DELETE'}).catch(() => undefined);
+  };
+  const cancelTemplateDuplicate = () => {setTemplateDuplicate(null); clearCopySource();};
   const [installSourcePreview, setInstallSourcePreview] = createSignal<SourcePreview>();
   const clearInstallSource = () => {
     const previous = installSourcePreview(); setInstallSourcePreview(undefined);
@@ -2596,6 +2609,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   const [installReviewSession, setInstallReviewSession] = createSignal(0);
   const closeTemplateDrawer = () => {
     clearInstallSource();
+    cancelTemplateDuplicate();
     setInstallReviewSession(value => value + 1);
     setManagedInstallSubmitting(false);
 	setInstallParameters({});
@@ -2818,6 +2832,10 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     // Review candidates belong to the previous authenticated environment. Let
     // them expire there instead of sending cleanup through a new connection.
     setInstallSourcePreview(undefined);
+    copyGeneration += 1;
+    setCopySourcePreview(undefined);
+    setTemplateSaving(false);
+    setTemplateDuplicate(null);
     setGitImportOpen(false);
     setMarketSource(undefined);
     closeTemplateDrawer();
@@ -2884,7 +2902,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       const locale = item.localizations[i18n.locale()] ?? item.localizations[item.default_locale];
       const installed = managedTemplates().find(template => template.template_id === item.template_id);
       const installedPresentation = installed ? templatePresentation(installed) : undefined;
-      return {id:item.template_id,name:locale?.name ?? item.document_template_id,description:locale?.description ?? '',source:'git',classification:item.classification,marketplace:true,kind:item.deployment as ServiceTemplateKind,icon:item.icon?.media_type === 'image/svg+xml' ? {...item.icon,media_type:'image/svg+xml'} : undefined,deploymentLabel:managedDeploymentLabel(item.deployment as ManagedDeployment, i18n),revision:item.revision,defaultReleaseLabel:item.recommended_version,developerPreview:item.developer_preview,available:item.status === 'available',availabilityReason:item.status !== 'available' ? i18n.t('webServices.market.unavailable') : undefined,installed:installedPresentation?.installed ?? false,openable:installedPresentation?.openable,openUnavailableReason:installedPresentation?.openUnavailableReason,duplicateable:false,editable:false,sourceURL:`https://github.com/${item.source.repository}/tree/${item.source.commit_sha}/${item.source.path}`,supportedPlatforms:item.supported_platforms,searchText:[item.document_template_id,item.source.repository,...Object.values(item.localizations).flatMap(locale => [locale.name,locale.description])].join(' ')};
+      return {id:item.template_id,name:locale?.name ?? item.document_template_id,description:locale?.description ?? '',source:'git',classification:item.classification,marketplace:true,kind:item.deployment as ServiceTemplateKind,icon:item.icon?.media_type === 'image/svg+xml' ? {...item.icon,media_type:'image/svg+xml'} : undefined,deploymentLabel:managedDeploymentLabel(item.deployment as ManagedDeployment, i18n),revision:item.revision,defaultReleaseLabel:item.recommended_version,developerPreview:item.developer_preview,available:item.status === 'available',availabilityReason:item.status !== 'available' ? i18n.t('webServices.market.unavailable') : undefined,installed:installedPresentation?.installed ?? false,openable:installedPresentation?.openable,openUnavailableReason:installedPresentation?.openUnavailableReason,duplicateable:item.status === 'available',editable:false,sourceURL:`https://github.com/${item.source.repository}/tree/${item.source.commit_sha}/${item.source.path}`,supportedPlatforms:item.supported_platforms,searchText:[item.document_template_id,item.source.repository,...Object.values(item.localizations).flatMap(locale => [locale.name,locale.description])].join(' ')};
     });
     return discovered.filter(item => templateCollection() === 'discover' || item.classification === templateCollection());
   });
@@ -3265,6 +3283,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
 
   const beginTemplateDuplicate = (template: ManagedCatalogTemplate) => {
     const identity = managedTemplateLocalizedIdentity(template, i18n);
+    copyRequestID = managedRequestID();
     setTemplateDuplicate(template);
     setTemplateDuplicateName(i18n.t('webServices.managed.copyName', { name: identity.name }));
   };
@@ -3317,15 +3336,26 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
     const source = templateDuplicate();
     if (!source || !templateDuplicateName().trim() || !canManageManagedService()) return;
     setTemplateSaving(true);
+    const identity = JSON.stringify([managedResource.identity(), ctx.resourceCacheAccess?.().generation]);
+    const generation = copyGeneration;
+    const active = () => !disposed && generation === copyGeneration && identity === JSON.stringify([managedResource.identity(), ctx.resourceCacheAccess?.().generation]);
     try {
-      await fetchLocalApiJSON(`/_redeven_proxy/api/managed-web-service-templates/${encodeURIComponent(source.template_id)}/duplicate`, { method: 'POST', body: JSON.stringify({ request_id: managedRequestID(), name: templateDuplicateName().trim() }) });
+      const preview = copySourcePreview();
+      const copied = await fetchLocalApiJSON<ManagedCatalogTemplate>(`/_redeven_proxy/api/managed-web-service-templates/${encodeURIComponent(source.template_id)}/duplicate`, { method: 'POST', body: JSON.stringify({ request_id: copyRequestID || managedRequestID(), name: templateDuplicateName().trim(), ...(preview ? {source:{candidate_id:preview.candidate_id,sha256:preview.sha256,expected_sha256:preview.expected_sha256}} : {}) }) });
+      if (!active()) return;
+      clearCopySource();
+      setTemplateCollection('library'); setTemplateCategory('all'); setTemplateSearch('');
+      setCatalogTemplateID(copied.template_id);
+      beginTemplateEdit(copied);
       setTemplateDuplicate(null);
       setTemplateDuplicateName('');
       await loadManaged(true);
+      if (!active()) return;
       notify.success(i18n.t('webServices.managed.templateDuplicated'), i18n.t('webServices.managed.templateDuplicatedMessage'));
     } catch (error) {
+      if (!active()) return;
       notify.error(i18n.t('webServices.managed.templateDuplicateFailed'), error instanceof Error ? error.message : String(error));
-    } finally { setTemplateSaving(false); }
+    } finally { if (active()) setTemplateSaving(false); }
   };
 
   const deleteTemplate = async () => {
@@ -3425,6 +3455,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   });
   onCleanup(() => {
     managedLoadGeneration += 1;
+    clearCopySource();
     managedOperations.dispose();
     managedOperationPresentation.dispose();
   });
@@ -4077,8 +4108,8 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
           const template = service ? managedTemplates().find((item) => item.template_id === service.template_id) : null;
           if (!template) return;
           settingsHost?.open({ section: 'services' }); setManagedSettingsService(null);
-          setTemplateDuplicate(template);
-          setTemplateDuplicateName(i18n.t('webServices.managed.copyName', { name: template.name }));
+          beginTemplateDuplicate(template);
+          setTemplateDrawerOpen(true);
         }}
       /></div>;
       }}</For></Show>
@@ -4127,16 +4158,21 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
               onQueryChange={setTemplateSearch}
               onResetFilters={() => {setTemplateSearch('');setTemplateCategory('all');setTemplateCollection('discover');}}
               onCreate={beginTemplateCreate}
-              onImport={() => {setMarketSource(undefined);setGitImportTemplate(undefined);setGitImportOpen(true);}}
-              onCheckSource={(id) => {setMarketSource(undefined);setGitImportTemplate(templateByID(id));setGitImportOpen(true);}}
+              onImport={() => {setSourceReviewPurpose('deploy');setMarketSource(undefined);setGitImportTemplate(undefined);setGitImportOpen(true);}}
+              onCheckSource={(id) => {setSourceReviewPurpose('deploy');setMarketSource(undefined);setGitImportTemplate(templateByID(id));setGitImportOpen(true);}}
               onDeploy={(templateID) => {
+                setSourceReviewPurpose('deploy');
                 const item = templateCollection() !== 'library' ? marketItems().find(item => item.template_id === templateID) : undefined;
                 if (item) { setGitImportTemplate(undefined); setMarketSource({source:item.source,expected:{repository_id:item.source.repository_id,commit_sha:item.source.commit_sha,sha256:item.sha256}});setGitImportOpen(true); }
                 else { const template = templateByID(templateID); if (template) beginTemplateInstall(template); }
               }}
               onOpen={openInstalledTemplate}
 			  onVersions={openTemplateReleasePicker}
-              onDuplicate={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateDuplicate(template); }}
+              onDuplicate={(templateID) => {
+                const item = templateCollection() !== 'library' ? marketItems().find(item => item.template_id === templateID) : undefined;
+                if (item) {clearCopySource();setSourceReviewPurpose('copy');setGitImportTemplate(undefined);setMarketSource({source:item.source,expected:{repository_id:item.source.repository_id,commit_sha:item.source.commit_sha,sha256:item.sha256}});setGitImportOpen(true);}
+                else { const template = templateByID(templateID); if (template) beginTemplateDuplicate(template); }
+              }}
               onEdit={(templateID) => { const template = templateByID(templateID); if (template) beginTemplateEdit(template); }}
               onDelete={(templateID) => { const template = templateByID(templateID); if (template) setTemplateDelete(template); }}
             />
@@ -4238,6 +4274,8 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                   </div>
                 </section>
 
+                <Show when={draft().runtimeLocked}><p role="note" class="text-xs leading-5 text-muted-foreground">{i18n.t('webServices.managed.reviewedRuntimeLocked')}</p></Show>
+                <fieldset disabled={draft().runtimeLocked} class="min-w-0 space-y-5 disabled:opacity-60">
                 <section class="service-template-editor__section">
                   <h3 class="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{i18n.t('webServices.managed.endpointSettings')}</h3>
                   <div class="mt-3 grid gap-x-4 gap-y-3 sm:grid-cols-[180px_1fr_1fr]">
@@ -4398,6 +4436,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
                     </div>
                   </Show>
                 </section>
+                </fieldset>
               </div>
             );
           }}</Show>
@@ -4421,7 +4460,11 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         template={gitImportTemplate()}
         marketSource={marketSource()}
         reviewIdentity={JSON.stringify([managedResource.identity(), ctx.resourceCacheAccess?.().generation])}
-        onReviewed={marketSource() ? (preview) => {clearInstallSource();setInstallSourcePreview(preview);beginTemplateInstall(preview.template);} : undefined}
+        reviewPurpose={sourceReviewPurpose()}
+        onReviewed={marketSource() ? (preview) => {
+          if (sourceReviewPurpose() === 'copy') {clearCopySource();setCopySourcePreview(preview);beginTemplateDuplicate(preview.template);}
+          else {clearInstallSource();setInstallSourcePreview(preview);beginTemplateInstall(preview.template);}
+        } : undefined}
         onClose={() => setGitImportOpen(false)}
         onImported={() => {
           setTemplateCollection('library');
@@ -4432,7 +4475,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         }}
         serviceName={(id) => managedState().find((item) => item.service_id === id)?.name || id}
       />
-      <Dialog open={presented() && (templateDuplicate() !== null)} onOpenChange={(open) => { if (!open && !templateSaving()) setTemplateDuplicate(null); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => setTemplateDuplicate(null)} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input value={templateDuplicateName()} onInput={(event) => setTemplateDuplicateName(event.currentTarget.value)} autofocus /></div></div></Dialog>
+      <Dialog open={presented() && (templateDuplicate() !== null)} onOpenChange={(open) => { if (!open && !templateSaving()) cancelTemplateDuplicate(); }} title={i18n.t('webServices.managed.duplicateTemplate')} footer={<div class="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={cancelTemplateDuplicate} disabled={templateSaving()}>{i18n.t('webServices.actions.cancel')}</Button><Button size="sm" variant="default" onClick={() => void duplicateTemplate()} disabled={templateSaving() || !templateDuplicateName().trim()}>{i18n.t('webServices.managed.duplicate')}</Button></div>}><div class="space-y-3"><p class="text-[length:var(--floe-type-body)] text-muted-foreground">{i18n.t('webServices.managed.duplicateNote')}</p><div><label for="template-copy-name" class="mb-1 block text-xs font-medium">{i18n.t('webServices.managed.templateName')}</label><Input id="template-copy-name" disabled={templateSaving()} maxlength={80} value={templateDuplicateName()} onInput={(event) => {copyRequestID=managedRequestID();setTemplateDuplicateName(event.currentTarget.value);}} autofocus /></div></div></Dialog>
 
       <ConfirmDialog open={presented() && (templateDelete() !== null)} onOpenChange={(open) => { if (!open) setTemplateDelete(null); }} title={i18n.t('webServices.managed.deleteTemplate')} confirmText={i18n.t('webServices.actions.delete')} variant="destructive" loading={templateSaving()} onConfirm={() => void deleteTemplate()}><p class="text-[length:var(--floe-type-body)]">{i18n.t('webServices.managed.deleteTemplateQuestion', { name: templateDelete()?.name ?? '' })}</p></ConfirmDialog>
 

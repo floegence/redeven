@@ -315,14 +315,14 @@ func scanManagedTemplate(row rowScanner, value *ManagedTemplate) error {
 }
 
 func (r *Registry) CreateManagedTemplate(ctx context.Context, value ManagedTemplate) error {
-	return r.createManagedTemplate(ctx, value, nil)
+	return r.createManagedTemplate(ctx, value, nil, nil)
 }
 
 func (r *Registry) CreateManagedTemplateWithRequest(ctx context.Context, value ManagedTemplate, request ManagedTemplateRequest) error {
-	return r.createManagedTemplate(ctx, value, &request)
+	return r.createManagedTemplate(ctx, value, &request, nil)
 }
 
-func (r *Registry) createManagedTemplate(ctx context.Context, value ManagedTemplate, request *ManagedTemplateRequest) error {
+func (r *Registry) createManagedTemplate(ctx context.Context, value ManagedTemplate, request *ManagedTemplateRequest, base *ManagedTemplateSource) error {
 	if r == nil || r.db == nil {
 		return errors.New("registry not initialized")
 	}
@@ -348,6 +348,14 @@ func (r *Registry) createManagedTemplate(ctx context.Context, value ManagedTempl
 	_, err = tx.Exec(`INSERT INTO managed_web_service_templates(template_id,name,description,source,deployment,revision,spec_json,spec_sha256,derived_from_template_id,derived_from_revision,service_family_id,created_at_unix_ms,updated_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, value.TemplateID, value.Name, value.Description, value.Source, value.Deployment, value.Revision, value.SpecJSON, value.SpecSHA256, value.DerivedFromTemplateID, value.DerivedFromRevision, value.ServiceFamilyID, value.CreatedAtUnixMs, value.UpdatedAtUnixMs)
 	if err != nil {
 		return err
+	}
+	if base != nil {
+		if err := retainSourceVersion(tx, *base); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO managed_web_service_template_bases(template_id,source_template_id,sha256) VALUES(?,?,?)`, value.TemplateID, base.TemplateID, base.SHA256); err != nil {
+			return err
+		}
 	}
 	if request != nil {
 		created := request.CreatedAtUnixMs

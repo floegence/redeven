@@ -280,7 +280,7 @@ func TestManagedTemplateDuplicateRequiresLifecyclePermission(t *testing.T) {
 	t.Parallel()
 	backend := &managedBackendStub{}
 	channelID := "ch_managed_template_duplicate"
-	requestBody := `{"request_id":"request-template-copy","name":"Preview copy"}`
+	requestBody := `{"request_id":"request-template-copy","name":"Preview copy","source":{"candidate_id":"preview-candidate","sha256":"reviewed-digest"}}`
 
 	readServer := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true})}
 	request := httptest.NewRequest(http.MethodPost, managedTemplatesAPIBase+"/tmpl_source/duplicate", strings.NewReader(requestBody))
@@ -296,7 +296,7 @@ func TestManagedTemplateDuplicateRequiresLifecyclePermission(t *testing.T) {
 	request.Header.Set("Origin", envOriginWithChannel(channelID))
 	response = httptest.NewRecorder()
 	fullServer.handleManagedWebServicesAPI(response, request)
-	if response.Code != http.StatusCreated || backend.duplicateCalls != 1 || backend.lastDuplicate.Name != "Preview copy" {
+	if response.Code != http.StatusCreated || backend.duplicateCalls != 1 || backend.lastDuplicate.Name != "Preview copy" || backend.lastDuplicate.SourceOwner == "" || backend.lastDuplicate.Source == nil || backend.lastDuplicate.Source.CandidateID != "preview-candidate" {
 		t.Fatalf("full duplicate status=%d calls=%d request=%+v body=%s", response.Code, backend.duplicateCalls, backend.lastDuplicate, response.Body.String())
 	}
 }

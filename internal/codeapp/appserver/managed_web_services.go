@@ -271,6 +271,7 @@ func (g *Server) handleManagedTemplateRoute(w http.ResponseWriter, r *http.Reque
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: "REQUEST_INVALID"})
 			return true
 		}
+		req.SourceOwner = strings.Join([]string{meta.NamespacePublicID, meta.UserPublicID, meta.EndpointID, meta.ChannelID}, "\x00")
 		detail := map[string]any{"source_template_id": strings.TrimSpace(parts[0]), "name": truncateString(req.Name, 80)}
 		template, err := g.managed.DuplicateTemplate(r.Context(), parts[0], req)
 		if err != nil {

@@ -4243,7 +4243,7 @@
       "moreActions": "Más",
       "moreTemplateActions": "Más acciones de plantilla",
       "duplicateTemplate": "Duplicar plantilla",
-      "duplicateNote": "Solo se copia la definición de la plantilla. No se copian instancias, datos ni secretos; el duplicado es una plantilla personalizada independiente y editable.",
+      "duplicateNote": "Crea una plantilla independiente con sus archivos de origen revisados. Las instancias, los datos y los secretos no se copian.",
       "copyName": "Copia de {name}",
       "editTemplate": "Editar plantilla",
       "deleteTemplate": "Eliminar plantilla",
@@ -4734,7 +4734,10 @@
       "installSubmissionUnknown": "Estado del envío desconocido",
       "installSubmissionUnknownDetail": "No se pudo confirmar el envío. Comprueba su estado antes de volver a intentarlo.",
       "installReviewAgain": "Revisar instalación",
-      "installCheckStatus": "Comprobar estado"
+      "installCheckStatus": "Comprobar estado",
+      "createPersonal": "Crear mi plantilla",
+      "continueCopy": "Continuar con la copia",
+      "reviewedRuntimeLocked": "La configuración de ejecución de este escritorio está revisada y no se modifica. Puedes cambiar el nombre y la descripción de la copia y personalizar la instancia después del despliegue."
     },
     "errors": {
       "loadFailedPrefix": "No se pudieron cargar los servicios web",

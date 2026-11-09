@@ -33,7 +33,7 @@ type DeepReadonly<T> = T extends ReadonlyArray<infer Item> ? ReadonlyArray<DeepR
 // Form controls narrow the choices accepted by Runtime while the published
 // SDK remains the sole owner of execution fields and transfer shapes.
 export type ServiceTemplateRuntimeSpec = DeepReadonly<Omit<Spec, 'schema_version' | 'endpoint' | 'parameters' | 'host' | 'container'> & {
-  schema_version: 6;
+  schema_version: 6 | 7;
   endpoint: Spec['endpoint'] & {scheme: 'http' | 'https'};
   parameters?: Array<Omit<TemplateParameter, 'type'> & {type: 'text' | 'number' | 'boolean' | 'secret' | 'path'}>;
   host?: Omit<HostTemplateSpec, 'output_mode'> & {output_mode?: 'discard' | 'private_file'};
@@ -736,6 +736,11 @@ export function ServiceTemplateDetailsPane(props: {
       </div>
 
       <ServiceTemplateActions class="service-template-details__actions" secondary={<>
+        <Show when={props.template.source === 'git'}>
+          <Button size="lg" variant="outline" onClick={props.onDuplicate} disabled={!props.template.duplicateable || !props.canManage}>
+            {i18n.t('webServices.managed.createPersonal')}
+          </Button>
+        </Show>
         <Show when={!props.template.marketplace && (props.template.kind === 'container' || Boolean(props.template.runtimeSpec?.host?.npm))}>
           <Button size="lg" variant="outline" onClick={() => props.onVersions?.()} disabled={!props.canManage || props.template.marketplace}>
             <Package class="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />{i18n.t('webServices.managed.versions')}

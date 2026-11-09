@@ -4243,7 +4243,7 @@
       "moreActions": "更多",
       "moreTemplateActions": "更多範本操作",
       "duplicateTemplate": "建立範本副本",
-      "duplicateNote": "只會複製範本定義，不會複製執行個體、資料或金鑰；副本是獨立且可編輯的自訂範本。",
+      "duplicateNote": "使用已審核的來源檔案建立獨立範本，不會複製執行個體、資料或密鑰。",
       "copyName": "{name} 副本",
       "editTemplate": "編輯範本",
       "deleteTemplate": "刪除範本",
@@ -4734,7 +4734,10 @@
       "installSubmissionUnknown": "提交結果待確認",
       "installSubmissionUnknownDetail": "目前無法確認提交結果。請先檢查狀態，再決定後續操作。",
       "installReviewAgain": "重新檢視安裝",
-      "installCheckStatus": "檢查狀態"
+      "installCheckStatus": "檢查狀態",
+      "createPersonal": "建立我的範本",
+      "continueCopy": "繼續建立副本",
+      "reviewedRuntimeLocked": "此桌面執行設定已通過審核，會保持不變。你可以修改副本名稱和描述，並在部署後自訂執行個體設定。"
     },
     "errors": {
       "loadFailedPrefix": "載入 Web 服務失敗",

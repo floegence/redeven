@@ -4243,7 +4243,7 @@
       "moreActions": "더 보기",
       "moreTemplateActions": "추가 템플릿 작업",
       "duplicateTemplate": "템플릿 복제",
-      "duplicateNote": "템플릿 정의만 복사합니다. 인스턴스, 데이터, 비밀 값은 복사되지 않으며 복제본은 독립적으로 편집 가능한 사용자 지정 템플릿입니다.",
+      "duplicateNote": "검토된 소스 파일을 포함하는 독립 템플릿을 만듭니다. 인스턴스, 데이터, 비밀 정보는 복사되지 않습니다.",
       "copyName": "{name} 사본",
       "editTemplate": "템플릿 편집",
       "deleteTemplate": "템플릿 삭제",
@@ -4734,7 +4734,10 @@
       "installSubmissionUnknown": "제출 상태를 확인할 수 없음",
       "installSubmissionUnknownDetail": "제출 결과를 확인하지 못했습니다. 다시 시도하기 전에 상태를 확인하세요.",
       "installReviewAgain": "설치 검토",
-      "installCheckStatus": "상태 확인"
+      "installCheckStatus": "상태 확인",
+      "createPersonal": "내 템플릿 만들기",
+      "continueCopy": "복사 계속하기",
+      "reviewedRuntimeLocked": "검토된 데스크톱 실행 설정은 유지됩니다. 복사본의 이름과 설명을 편집하고 배포 후 인스턴스 설정을 변경할 수 있습니다."
     },
     "errors": {
       "loadFailedPrefix": "Web 서비스를 불러오지 못했습니다",
