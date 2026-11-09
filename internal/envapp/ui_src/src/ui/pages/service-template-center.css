@@ -8,7 +8,7 @@
   .service-template-row__title { overflow-wrap: anywhere; white-space: normal; }
   .service-template-row__description { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .service-template-row .service-template-status { flex: none; }
-  .service-template-drawer-shell { overflow-y: auto; overscroll-behavior: contain; }
+  .service-template-drawer-shell { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
   /* Floe owns category selection, contrast, focus and keyboard navigation. */
   .service-template-switcher { flex: none; max-width: 100%; }
   .service-template-groups { display: grid; gap: 24px; }

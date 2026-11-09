@@ -10,9 +10,10 @@ import {
   MoreHorizontal,
   Package,
   Plus,
+  Refresh,
   Search,
 } from '@floegence/floe-webapp-core/icons';
-import { Button, Dropdown, Input, Tag, Tabs, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown, Input, Tag, Tabs, Tooltip, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
 import { ServiceTemplateActions } from './ServiceTemplateActions';
@@ -393,10 +394,16 @@ export function ServiceTemplateNavigation(props: {
   collection: ServiceTemplateCollection;
   onChange: (collection: ServiceTemplateCollection) => void;
   refreshing: boolean;
+  stale?: boolean;
+  error?: boolean;
   canRefresh: boolean;
   onRefresh: () => void;
 }): JSX.Element {
   const i18n = useI18n();
+  const statusID = createUniqueId();
+  const status = () => props.error ? i18n.t('webServices.market.refreshFailed')
+    : props.refreshing ? i18n.t('common.status.loading')
+    : props.stale ? i18n.t('webServices.market.cached') : '';
   return <div class="service-template-navigation" data-testid="market-navigation">
     <div class="service-template-collections" role="group" aria-label={i18n.t('webServices.market.sourceVersion')}>
       <For each={['discover', 'official', 'community', 'library'] as const}>{collection =>
@@ -407,7 +414,14 @@ export function ServiceTemplateNavigation(props: {
       }</For>
     </div>
     <Show when={props.collection !== 'library'}>
-      <Button size="sm" variant="ghost" disabled={props.refreshing || !props.canRefresh} aria-busy={props.refreshing} onClick={props.onRefresh}>{i18n.t('webServices.actions.refresh')}</Button>
+      <div class="ml-auto shrink-0">
+        <Tooltip content={status() || i18n.t('webServices.actions.refresh')} placement="bottom" class="left-auto right-0 w-max max-w-[min(20rem,calc(100vw-4rem))] translate-x-0 whitespace-normal">
+          <Button size="sm" variant="ghost" data-testid="market-refresh" icon={props.error ? AlertTriangle : Refresh}
+            loading={props.refreshing} disabled={!props.canRefresh} class={props.error ? 'text-warning' : undefined}
+            aria-describedby={statusID} onClick={props.onRefresh}>{i18n.t('webServices.actions.refresh')}</Button>
+        </Tooltip>
+        <span id={statusID} role="status" aria-atomic="true" class="sr-only">{status()}</span>
+      </div>
     </Show>
   </div>;
 }

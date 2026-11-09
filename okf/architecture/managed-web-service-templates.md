@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Managed service template publication, acquisition and formats
 tags: [architecture, templates, managed-services, localization, supply-chain]
 lifecycle: contract
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -26,7 +26,7 @@ Import/check-source and market deployment use the same immutable, owner-scoped 1
 ## Marketplace browsing
 Redeven consumes the published metadata without adding a second registry, GitHub repository, local format or name-based taxonomy. The current categories are the authoritative deployment kinds: All types, Host, Container and Docker Compose. Semantic categories (for example AI or databases) require an explicit upstream format/publication contract before product adoption; they are not inferred from names.
 
-Search combines whitespace-delimited terms, normalizes Unicode width/case, and covers displayed identity, all published localization names/descriptions, document identity, repository/path and default release. Source and deployment facets compose with search; counts reflect the current source/search before deployment filtering. Empty results offer a reset to complete discovery. Refresh replaces passive evidence without clearing the query, category or requested identity. Environment ownership fences pending responses; stale cache remains visible with an explicit status and retry action. Saving or importing a template opens My templates with clear filters.
+Search combines whitespace-delimited terms, normalizes Unicode width/case, and covers displayed identity, all published localization names/descriptions, document identity, repository/path and default release. Source and deployment facets compose with search; counts reflect the current source/search before deployment filtering. Empty results offer a reset to complete discovery. Refresh replaces passive evidence without clearing the query, category or requested identity, including successful empty results. Environment ownership fences pending responses. Stale/error details use the fixed refresh control's tooltip and live description, never a new row; loading, warning and retry follow [page continuity](../ui/page-loading-continuity.md). Saving or importing a template opens My templates with clear filters.
 
 The source navigation, search/actions and deployment facets occupy separate rows. Categories wrap at narrow widths, names wrap, descriptions use two lines, and independent list/detail scrolling keeps deployment reachable on desktop. Remote details show only published evidence (deployment, revision, release, platforms, immutable source link); access mode and execution settings appear after review, never as unexplained empty placeholders. Source grouping uses Official/Community instead of labeling every remote entry GitHub. Shared Floe controls retain keyboard/focus behavior; this layout is a product adapter.
 

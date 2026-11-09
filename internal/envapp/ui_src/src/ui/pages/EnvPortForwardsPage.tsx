@@ -4141,17 +4141,16 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         <div ref={templateDrawerElement} class="service-template-drawer-shell h-full min-h-0 space-y-4 p-1" data-view={templateDrawerView()} data-testid="service-template-drawer">
           <Show when={templateDrawerView() === 'catalog'}>
             <ServiceTemplateCatalog
-              toolbar={<>
-                <ServiceTemplateNavigation collection={templateCollection()} onChange={setTemplateCollection} refreshing={marketLoading()} canRefresh={canManageManagedService()} onRefresh={() => void market.refresh()} />
-                <Show when={templateCollection() !== 'library' && (marketError() || marketStale())}><p role="status" class="text-xs text-muted-foreground">{i18n.t(marketError() ? 'webServices.market.refreshFailed' : 'webServices.market.cached')}</p></Show>
-              </>}
+              toolbar={<ServiceTemplateNavigation collection={templateCollection()} onChange={setTemplateCollection}
+                refreshing={marketLoading()} stale={marketStale()} error={marketError()}
+                canRefresh={canManageManagedService()} onRefresh={() => void market.refresh()} />}
               category={templateCategory()}
               query={templateSearch()}
               hostCount={templateCounts().host}
               containerCount={templateCounts().container}
               composeCount={templateCounts().compose}
               templates={filteredTemplates()}
-              loading={managedLoading() || (templateCollection() !== 'library' && marketLoading() && !marketItems().length)}
+              loading={managedLoading() || (templateCollection() !== 'library' && marketLoading() && !market.hasSnapshot())}
               canManage={canManageManagedService()}
               selection={{templateID: catalogTemplateID(), onChange: setCatalogTemplateID}}
               onCategoryChange={setTemplateCategory}

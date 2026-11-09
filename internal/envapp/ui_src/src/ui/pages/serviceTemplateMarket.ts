@@ -19,6 +19,7 @@ export function createServiceTemplateMarket(
   const [loading, setLoading] = createSignal(false);
   const [stale, setStale] = createSignal(false);
   const [error, setError] = createSignal(false);
+  const [hasSnapshot, setHasSnapshot] = createSignal(false);
   let owner: unknown;
   let initialized = false;
   let controller: AbortController | undefined;
@@ -39,6 +40,7 @@ export function createServiceTemplateMarket(
       if (!Array.isArray(result.items)) throw new Error('Invalid template catalog');
       setItems(result.items);
       setStale(result.stale);
+      setHasSnapshot(true);
     } catch {
       if (request === generation && !abort.signal.aborted) {
         setError(true);
@@ -62,6 +64,7 @@ export function createServiceTemplateMarket(
       setLoading(false);
       setError(false);
       setStale(false);
+      setHasSnapshot(false);
     }
     if (active() && !initialized) {
       initialized = true;
@@ -75,5 +78,5 @@ export function createServiceTemplateMarket(
     generation++;
     controller?.abort();
   });
-  return { items, loading, stale, error, refresh: () => canRefresh() ? load(true) : Promise.resolve() };
+  return { items, loading, stale, error, hasSnapshot, refresh: () => canRefresh() ? load(true) : Promise.resolve() };
 }

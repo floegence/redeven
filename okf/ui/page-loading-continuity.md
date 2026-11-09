@@ -3,7 +3,7 @@ type: UI Contract
 title: Page loading, asynchronous feedback and document recovery
 tags: [ui, startup, lifecycle, workbench]
 lifecycle: contract
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -14,7 +14,7 @@ Retain successful same-resource content through refresh while initial loads occu
 ## Page continuity
 Without a successful result, retain initial presentation until authoritative data/actionable error. Keep mutation, attachment, maintenance and plugin execution progress separate from inventory loading.
 
-Use existing header/action indicators, accessible out-of-flow status or geometry-neutral local overlays, never temporary rows above content.
+Use existing header/action indicators, accessible out-of-flow status or geometry-neutral local overlays. Never insert additional loading, cached-result or refresh-status text into normal flow: pending, stale, failed and recovered states cannot add rows, move existing controls/content or change their width. Do not reserve an empty status row as a workaround.
 
 Initial reads use structural placeholders in final geometry. Editors/previews/settings retain bounded responsive body viewports with reachable headers/close/footer. Use published Floe components/theme tokens without arbitrary delays/height animations.
 
@@ -33,6 +33,8 @@ An admitted same-resource workspace stays mounted and locally interactive throug
 ## Asynchronous layout
 Use published Button loading slot/`icon`; changing labels use `StableText` with every localized transient/completion/failure label. Host preparation has independently scrolling body/persistent action baseline. Unknown image dimensions use bounded 16:9 contain sizing; long diagrams/render errors scroll in reserved viewports.
 
+Template discovery keeps its refresh label and icon slot fixed; loading uses the published Button spinner, failure uses its warning icon, and details remain in an out-of-flow tooltip plus an accessible live description. Retry stays on the same button. Initial reads use the existing catalog skeleton; successful empty catalogs remain empty during refresh. Reserve scrollbar gutters on scrolling bodies so placeholder/content changes cannot shift their chrome horizontally.
+
 ## Reload geometry
 HTML head installs Floe's independent `reload-placeholder` before external modules/styles. It serializes no HTML, resource text, images, inputs, URLs or permissions and invents no resource count. Shared page registry governs reload eligibility; [Activity navigation](activity-navigation-restoration.md) owns selection. Fresh authoritative data may change final layout.
 
@@ -49,6 +51,7 @@ Remembered geometry conveys no resource data/authority; unavailable storage cann
 
 # Evidence
 
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.templateContinuity.browser.test.tsx` - Actual template drawer geometry, input identity/focus, selection, scroll and tooltip bounds through initial/cache/refresh/failure/recovery; Host, Container and Compose at desktop and narrow localized sizes, including empty snapshots.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.settingsDialog.browser.test.tsx` - Tests.
 - `redeven:internal/envapp/ui_src/src/ui/pages/GitTemplateImport.browser.test.tsx` - Fixed preview region and failed different-file retry.
 - `redeven:internal/envapp/ui_src/src/styles/tessiven-runtime-dialog-continuity.browser.test.tsx` - Library card/focus retention through delayed or failed opening.

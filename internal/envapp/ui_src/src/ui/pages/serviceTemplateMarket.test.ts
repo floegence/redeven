@@ -30,4 +30,19 @@ describe('passive template market',()=>{
     expect(market.items()[0].template_id).toBe('second-env');expect(api.request.mock.calls[0][1].signal.aborted).toBe(true);
     await market.refresh();expect(api.request).toHaveBeenCalledTimes(2);
   });
+  it('distinguishes a retained empty snapshot from an unresolved or failed initial read',async()=>{
+    let complete!:(value:unknown)=>void;
+    api.request.mockResolvedValueOnce({items:[],stale:true}).mockImplementationOnce(()=>new Promise(resolve=>{complete=resolve;}));
+    let market!:ReturnType<typeof createServiceTemplateMarket>;
+    const [identity,setIdentity]=createSignal('one');
+    createRoot(d=>{dispose=d;market=createServiceTemplateMarket(()=>true,identity,()=>true);expect(market.hasSnapshot()).toBe(false);});
+    await vi.waitFor(()=>expect(api.request).toHaveBeenCalledTimes(2));
+    expect(market.hasSnapshot()).toBe(true);expect(market.loading()).toBe(true);expect(market.items()).toEqual([]);
+    complete({items:[],stale:false});await vi.waitFor(()=>expect(market.loading()).toBe(false));
+    expect(market.hasSnapshot()).toBe(true);
+    api.request.mockRejectedValue(new Error('offline'));
+    setIdentity('two');
+    await vi.waitFor(()=>expect(market.error()).toBe(true));
+    expect(market.hasSnapshot()).toBe(false);
+  });
 });
