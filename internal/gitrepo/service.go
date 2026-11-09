@@ -1307,8 +1307,6 @@ func classifyGitRPCError(err error) *sessionrpc.Error {
 		return &sessionrpc.Error{Code: GitErrorWorkspacePaginationRequired, Message: "workspace pagination is required"}
 	case errors.Is(err, errWorkspaceResponseBudget):
 		return &sessionrpc.Error{Code: GitErrorWorkspaceResponseBudget, Message: "workspace response exceeds resource budget"}
-	case errors.Is(err, errDestructiveWorkspaceScanLimit):
-		return &sessionrpc.Error{Code: GitErrorDestructiveWorkspaceScanLimit, Message: "destructive workspace scan exceeds safety limit"}
 	case errors.Is(err, gitruntime.ErrResourceLimit):
 		return &sessionrpc.Error{Code: GitErrorResourceLimit, Message: "git runtime resource limit exceeded"}
 	case errors.Is(err, gitruntime.ErrRequestBudget):
@@ -1365,7 +1363,7 @@ func classifyGitMutationRPCError(err error) *sessionrpc.Error {
 		return &sessionrpc.Error{Code: 500, Message: "internal error"}
 	}
 	if errors.Is(err, gitruntime.ErrResourceLimit) || errors.Is(err, gitruntime.ErrRequestBudget) || errors.Is(err, gitruntime.ErrResponseBudget) ||
-		errors.Is(err, errWorkspaceInventoryLimit) || errors.Is(err, errWorkspacePathEncoding) || errors.Is(err, errDestructiveWorkspaceScanLimit) {
+		errors.Is(err, errWorkspaceInventoryLimit) || errors.Is(err, errWorkspacePathEncoding) {
 		return classifyGitRPCError(err)
 	}
 	message := strings.TrimSpace(err.Error())

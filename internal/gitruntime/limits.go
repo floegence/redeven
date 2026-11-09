@@ -10,7 +10,6 @@ const (
 	MaxReadProcesses          = 8
 	MaxWorkspaceCaptures      = 2
 	MaxMutationProcesses      = 4
-	MaxDestructiveScans       = 1
 	MaxRequestDecodes         = 16
 	MaxResponseBuilds         = 8
 	MaxRPCStreams             = 4

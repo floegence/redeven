@@ -118,7 +118,6 @@ type Runtime struct {
 	readProcesses      *limiter
 	captures           *limiter
 	mutationProcesses  *limiter
-	destructiveScans   *limiter
 	requestDecodes     *limiter
 	responseBuilds     *limiter
 	rpcStreams         *limiter
@@ -139,7 +138,6 @@ func New() *Runtime {
 		readProcesses:      newLimiter(MaxReadProcesses),
 		captures:           newLimiter(MaxWorkspaceCaptures),
 		mutationProcesses:  newLimiter(MaxMutationProcesses),
-		destructiveScans:   newLimiter(MaxDestructiveScans),
 		requestDecodes:     newLimiter(MaxRequestDecodes),
 		responseBuilds:     newLimiter(MaxResponseBuilds),
 		rpcStreams:         newLimiter(MaxRPCStreams),
@@ -217,10 +215,6 @@ func (r *Runtime) TryAcquireRPCStream() (*Admission, error) {
 
 func (r *Runtime) AcquireCapture(ctx context.Context) (*Admission, error) {
 	return r.acquire(ctx, r.captures)
-}
-
-func (r *Runtime) AcquireDestructiveScan(ctx context.Context) (*Admission, error) {
-	return r.acquire(ctx, r.destructiveScans)
 }
 
 func (r *Runtime) acquire(ctx context.Context, limiter *limiter) (*Admission, error) {

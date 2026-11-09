@@ -24,10 +24,11 @@ func workspaceBusinessResponseFits(value any) bool {
 }
 
 const (
-	GitErrorWorkspaceSnapshotStale        uint32 = 40901
-	GitErrorWorkspaceInventoryLimit       uint32 = 41301
-	GitErrorWorkspaceResponseBudget       uint32 = 41302
-	GitErrorWorkspacePaginationRequired   uint32 = 41303
+	GitErrorWorkspaceSnapshotStale      uint32 = 40901
+	GitErrorWorkspaceInventoryLimit     uint32 = 41301
+	GitErrorWorkspaceResponseBudget     uint32 = 41302
+	GitErrorWorkspacePaginationRequired uint32 = 41303
+	// Reserved for older runtimes; deletion reviews no longer scan full worktrees.
 	GitErrorDestructiveWorkspaceScanLimit uint32 = 41304
 	GitErrorResponseBudget                uint32 = 41305
 	GitErrorResourceLimit                 uint32 = 41306

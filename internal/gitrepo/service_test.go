@@ -2432,65 +2432,6 @@ func TestPreviewDeleteBranch_ReportsLinkedDirtyWorktree(t *testing.T) {
 	}
 }
 
-func TestDestructiveWorkspaceFingerprintDetectsCleanTrackedContentChanges(t *testing.T) {
-	t.Parallel()
-	fixture := createTestRepoFixture(t)
-	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
-	worktree := filepath.Join(filepath.Dir(fixture.Root), "fingerprint-wt")
-	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
-
-	svc := NewService(filepath.Dir(fixture.Root))
-	before, err := svc.destructiveWorkspaceFingerprint(context.Background(), worktree)
-	if err != nil {
-		t.Fatalf("destructiveWorkspaceFingerprint(before): %v", err)
-	}
-	trackedPath := filepath.Join(worktree, compare.FilePath)
-	if err := os.WriteFile(trackedPath, []byte("rewritten outside git status summary\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", trackedPath, err)
-	}
-	after, err := svc.destructiveWorkspaceFingerprint(context.Background(), worktree)
-	if err != nil {
-		t.Fatalf("destructiveWorkspaceFingerprint(after): %v", err)
-	}
-	if before == after {
-		t.Fatalf("destructive fingerprint did not change after tracked content rewrite: %q", before)
-	}
-}
-
-func TestDestructiveWorkspaceScannerAdmissionIsHardBounded(t *testing.T) {
-	t.Parallel()
-	scanner := &destructiveWorkspaceScanner{ctx: context.Background(), hash: sha256.New()}
-	for index := 0; index < destructiveScanMaxEntries; index++ {
-		if err := scanner.admitEntry("a", "a"); err != nil {
-			t.Fatalf("admitEntry(%d): %v", index, err)
-		}
-		scanner.heapBytes -= destructiveEntryHeapBytes("a", "a")
-	}
-	if err := scanner.admitEntry("overflow", "overflow"); !errors.Is(err, errDestructiveWorkspaceScanLimit) {
-		t.Fatalf("overflow admission error=%v", err)
-	}
-}
-
-func TestDestructiveWorkspaceScannerNoFollowRejectsSymlink(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "target"), []byte("data"), 0o644); err != nil {
-		t.Fatalf("WriteFile(target): %v", err)
-	}
-	if err := os.Symlink("target", filepath.Join(root, "link")); err != nil {
-		t.Fatalf("Symlink(link): %v", err)
-	}
-	directory, err := openRootDirectoryNoFollow(root)
-	if err != nil {
-		t.Skipf("no-follow directory access unavailable: %v", err)
-	}
-	defer directory.Close()
-	if file, err := openRegularAtNoFollow(directory, "link"); err == nil {
-		_ = file.Close()
-		t.Fatal("openRegularAtNoFollow followed a symlink")
-	}
-}
-
 func TestRepositoryIdentityCurrentRejectsGitDirReplacement(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

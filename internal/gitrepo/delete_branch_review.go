@@ -8,28 +8,29 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/floegence/redeven/internal/gitruntime"
 )
 
 type deleteBranchPlan struct {
-	Target                          deleteBranchTarget
-	LinkedWorktree                  *gitDeleteLinkedWorktreePreview
-	RequiresWorktreeRemoval         bool
-	RequiresDiscardConfirmation     bool
-	SafeDeleteAllowed               bool
-	SafeDeleteBaseRef               string
-	SafeDeleteReason                string
-	ForceDeleteAllowed              bool
-	ForceDeleteRequiresConfirm      bool
-	ForceDeleteReason               string
-	BlockingCode                    string
-	BlockingReason                  string
-	TargetHeadCommit                string
-	SafeDeleteBaseCommit            string
-	DestructiveWorkspaceFingerprint string
-	PlanFingerprint                 string
+	Target                      deleteBranchTarget
+	LinkedWorktree              *gitDeleteLinkedWorktreePreview
+	RequiresWorktreeRemoval     bool
+	RequiresDiscardConfirmation bool
+	SafeDeleteAllowed           bool
+	SafeDeleteBaseRef           string
+	SafeDeleteReason            string
+	ForceDeleteAllowed          bool
+	ForceDeleteRequiresConfirm  bool
+	ForceDeleteReason           string
+	BlockingCode                string
+	BlockingReason              string
+	TargetHeadCommit            string
+	SafeDeleteBaseCommit        string
+	WorkspaceRiskFingerprint    string
+	PlanFingerprint             string
 }
 
 type deleteBranchFingerprintPayload struct {
@@ -101,10 +102,10 @@ func sameDeleteBranchTopologyPaths(left []string, right []string) bool {
 }
 
 type deleteBranchFingerprintLinkedWorktree struct {
-	WorktreePath                    string              `json:"worktree_path"`
-	Accessible                      bool                `json:"accessible"`
-	Summary                         gitWorkspaceSummary `json:"summary"`
-	DestructiveWorkspaceFingerprint string              `json:"destructive_workspace_fingerprint,omitempty"`
+	WorktreePath             string              `json:"worktree_path"`
+	Accessible               bool                `json:"accessible"`
+	Summary                  gitWorkspaceSummary `json:"summary"`
+	WorkspaceRiskFingerprint string              `json:"workspace_risk_fingerprint,omitempty"`
 }
 
 func (s *Service) previewDeleteBranch(ctx context.Context, repo repoContext, name string, fullName string, kind string) (*previewDeleteBranchResp, error) {
@@ -181,15 +182,8 @@ func (s *Service) buildDeleteBranchPlan(ctx context.Context, repo repoContext, t
 		plan.RequiresDiscardConfirmation = false
 	}
 	if linkedWorktree != nil && linkedWorktree.Accessible && plan.BlockingReason == "" {
-		ignored, ignoredErr := s.runtime.RunRead(ctx, linkedWorktree.WorktreePath, nil, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "--no-empty-directory", "-z")
-		if ignoredErr != nil {
-			return deleteBranchPlan{}, ignoredErr
-		}
-		plan.RequiresDiscardConfirmation = plan.RequiresDiscardConfirmation || len(ignored.Stdout) > 0
-		plan.DestructiveWorkspaceFingerprint, err = s.destructiveWorkspaceFingerprint(ctx, linkedWorktree.WorktreePath)
-		if err != nil {
-			return deleteBranchPlan{}, err
-		}
+		plan.RequiresDiscardConfirmation = plan.RequiresDiscardConfirmation || linkedWorktree.hasIgnoredContent
+		plan.WorkspaceRiskFingerprint = linkedWorktree.riskFingerprint
 	}
 	plan.PlanFingerprint = buildDeleteBranchPlanFingerprint(repo, plan)
 	return plan, nil
@@ -236,6 +230,7 @@ func (s *Service) readDeleteLinkedWorktreePreview(ctx context.Context, repo repo
 			return blocked("nested_worktree", "This worktree contains another registered worktree. Move or remove the nested worktree first.", true)
 		}
 	}
+	preview := &gitDeleteLinkedWorktreePreview{WorktreePath: identity.WorktreeRoot, Accessible: true}
 	if directWorkspaceRead {
 		linkedRepo, loadErr := s.loadResolvedRepoContext(ctx, identity)
 		if loadErr != nil {
@@ -245,22 +240,48 @@ func (s *Service) readDeleteLinkedWorktreePreview(ctx context.Context, repo repo
 		if statusErr != nil {
 			return nil, statusErr
 		}
-		return &gitDeleteLinkedWorktreePreview{
-			WorktreePath: linkedRepo.repoRootReal,
-			Accessible:   true,
-			Summary:      status.Summary(),
-		}, nil
+		preview.Summary = status.Summary()
+		preview.WorkspaceRevision = workspaceSnapshotRevision(status)
+	} else {
+		snapshot, err := s.readLinkedWorktreeSnapshot(ctx, identity.WorktreeRoot)
+		if err != nil {
+			return nil, err
+		}
+		preview.Summary = snapshot.Summary
+		preview.WorkspaceRevision = snapshot.WorkspaceRevision
 	}
-	snapshot, err := s.readLinkedWorktreeSnapshot(ctx, identity.WorktreeRoot)
+	// Review removal risks, not file contents. Git collapses ignored directories,
+	// so build caches never require a second recursive filesystem inventory.
+	ignored, err := s.runtime.RunRead(ctx, identity.WorktreeRoot, nil, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "--no-empty-directory", "-z")
 	if err != nil {
 		return nil, err
 	}
-	return &gitDeleteLinkedWorktreePreview{
-		WorktreePath:      snapshot.WorktreePath,
-		Accessible:        true,
-		Summary:           snapshot.Summary,
-		WorkspaceRevision: snapshot.WorkspaceRevision,
-	}, nil
+	ignoredPaths := strings.Split(strings.TrimSuffix(string(ignored.Stdout), "\x00"), "\x00")
+	if len(ignored.Stdout) == 0 {
+		ignoredPaths = nil
+	}
+	sort.Strings(ignoredPaths)
+	preview.hasIgnoredContent = len(ignoredPaths) > 0
+	payload, err := json.Marshal(struct {
+		CommonRepoKey     string   `json:"common_repo_key"`
+		WorktreeKey       string   `json:"worktree_key"`
+		WorkspaceRevision string   `json:"workspace_revision"`
+		IgnoredPaths      []string `json:"ignored_paths"`
+	}{
+		CommonRepoKey:     identity.CommonRepoKey,
+		WorktreeKey:       identity.WorktreeKey,
+		WorkspaceRevision: preview.WorkspaceRevision,
+		IgnoredPaths:      ignoredPaths,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !s.runtime.RepositoryIdentityCurrent(identity) {
+		return nil, errWorkspaceSnapshotStale
+	}
+	sum := sha256.Sum256(payload)
+	preview.riskFingerprint = hex.EncodeToString(sum[:])
+	return preview, nil
 }
 
 func (s *Service) resolveSafeDeleteBase(ctx context.Context, repo repoContext, localName string) (string, string) {
@@ -324,10 +345,10 @@ func buildDeleteBranchPlanFingerprint(repo repoContext, plan deleteBranchPlan) s
 	}
 	if plan.LinkedWorktree != nil {
 		payload.LinkedWorktree = &deleteBranchFingerprintLinkedWorktree{
-			WorktreePath:                    plan.LinkedWorktree.WorktreePath,
-			Accessible:                      plan.LinkedWorktree.Accessible,
-			Summary:                         plan.LinkedWorktree.Summary,
-			DestructiveWorkspaceFingerprint: plan.DestructiveWorkspaceFingerprint,
+			WorktreePath:             plan.LinkedWorktree.WorktreePath,
+			Accessible:               plan.LinkedWorktree.Accessible,
+			Summary:                  plan.LinkedWorktree.Summary,
+			WorkspaceRiskFingerprint: plan.WorkspaceRiskFingerprint,
 		}
 	}
 	data, err := json.Marshal(payload)

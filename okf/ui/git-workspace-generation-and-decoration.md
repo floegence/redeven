@@ -25,7 +25,7 @@ Directory navigation and bulk actions retain changes/staged/conflicted section i
 
 Deletion uses the authoritative preview for every consequence, even when entered through a branch-only action. Any worktree blocker disables both safe and force confirmation before merged status is considered. Primary, locked and nested-worktree blockers are localized from structured codes. Show the reviewed removal/discard effects and carry both authorizations; an ignored-only worktree still requires discard review.
 
-Stable public error codes produce localized permission, stale-state, resource, request-rejection or unknown-outcome guidance without private Git/transport diagnostics. Unknown outcomes require refresh and review; never automatically replay a mutation. Deletion-inspection limits (41304) explain the linked-worktree review failure separately from transient resource pressure; never imply that waiting alone resolves an oversized tree.
+Stable public error codes produce localized permission, stale-state, resource, request-rejection or unknown-outcome guidance without private Git/transport diagnostics. Unknown outcomes require refresh and review; never automatically replay a mutation. Keep deletion-inspection limit code 41304 reserved and localized for compatibility with older runtimes; current risk-based deletion reviews do not perform the retired full-tree scan. Legacy guidance distinguishes this failure from transient resource pressure and never implies that waiting alone resolves an oversized tree.
 
 ## Diff requests
 Inline/Activity/Workbench/dialog share one owner. Caller patch snapshots are previews; refresh or authoritative empty/failure cannot revive them. Runtime owns first-parent meaning.

@@ -290,6 +290,8 @@ type previewDeleteBranchReq struct {
 type gitDeleteLinkedWorktreePreview struct {
 	blockingCode      string
 	blockingReason    string
+	hasIgnoredContent bool
+	riskFingerprint   string
 	WorktreePath      string              `json:"worktree_path,omitempty"`
 	Accessible        bool                `json:"accessible"`
 	Summary           gitWorkspaceSummary `json:"summary"`
