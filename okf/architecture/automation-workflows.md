@@ -39,24 +39,24 @@ Fixed HTTP reads use the existing host transport, no ambient headers, no redirec
 
 flowerwork resolves one owner-bound thread profile: plugin authoring, Tessiven design, workflow design/execution or plugin analysis. Profiles supply guidance, tools, skills, result contracts and context references. Product stores retain lifecycle; Floret retains history, without a parallel ledger. Ordinary chats expose no owner-specific tools.
 
-Workflow design can read/save a draft but cannot enable execution. Run threads reject ordinary chat mutations, fork, retry, queue, goals, subagent, computer and upload takeover; the workflow surface owns their controls. Every tool still rechecks runtime permissions and the original run grant. Floret input is explicitly disabled for unattended work; its optional Goal capability also obeys the exact run allowlist. Built-ins cannot widen the final provider surface.
+Design reads/saves drafts without enabling execution. Workflow controls own run threads, rejecting ordinary chat mutation/fork/retry/queue/goal/subagent/computer/upload takeover. Tools recheck permissions and the original grant. Unattended Floret disables user input; optional Goal and all built-ins obey the exact final allowlist.
 
 Installed plugins use published agent.work through the platform bridge. Retain its exact binding; revalidate instance/fingerprint/revisions/permissions/expiry before continuation. Plugin owner fields/new bindings cannot renew authority. Each request creates visible host review and permits at most one run after user model/directory selection and authorization. Analysis uses provided materials without arbitrary tool grants; author preview cannot borrow installed-host authority.
 
 ## Persistence and lifecycle
 
-StateDir/apps/automation/workflows.sqlite is Redeven-owned and process-locked. Schema 1 to 2 preserves grants by publication version; 2 to 3 recovers the draft/publication revision relationship from retained definitions. Changed drafts remain unpublished. Migration is atomic and verified before service readiness; unsupported state remains unchanged. The schedules.sqlite store is opaque and migrated by the published scheduler. Floret thread storage remains opaque.
+Redeven owns/process-locks StateDir/apps/automation/workflows.sqlite. Atomic verified migration precedes readiness: 1→2 retains versioned grants; 2→3 recovers draft/publication revision from definitions, keeping changed drafts unpublished. Unsupported state stays unchanged. Published scheduling migrates opaque schedules.sqlite; Floret storage stays opaque.
 
 Shutdown stops scheduling, drains the controller, stops AI execution, then closes product stores. Model-service generations are acquired through the existing readiness lease, not retained across replacement.
 
 # Boundaries
 
-The independent canvas offers a DAG, inspector, undo/redo, draft recovery, explicit CAS version review, keyboard controls, zoom/fit, narrow layouts, schedule history, run/context inspection and artifacts. Conflicts retain drafts and require reviewing the saved version before rebasing an edit; replacing a draft is undoable, and later concurrent writes still conflict. Delayed loading/saving preserves newer edits; polling cannot regress a run revision. Artifact downloads use authenticated session transport. Local drafts and disconnected intent records grant no execution authority. Every locale owns its copy.
+Independent canvas: DAG/inspector, undo/redo, recovery/CAS review, keyboard/zoom/fit, narrow layouts, schedule/run/context history and artifacts. Conflicts retain drafts; rebasing requires saved-version review, replacement is undoable and concurrent writes still conflict. Late loads/saves preserve edits; polls cannot regress run revision. Authenticated transport downloads artifacts. Local drafts/offline intents grant no execution authority. Each locale owns its copy.
 
 # Evidence
 
-- internal/automation: definitions, migrations, shared context, grants and deterministic engine tests. internal/codeapp/automation_migration_test.go verifies real service startup/restart from schemas 1/2, unpublished drafts, retained publications/grants and byte-identical rejection of unsupported state.
-- internal/flowerwork and internal/ai/automation*: profile resolution, canonical execution, isolation and real-provider qualification.
-- internal/codeapp/automation*: current-policy authorization, fixed tools and scoped scheduled-report qualification.
-- internal/redevpluginintegration/agent_work*: installed-host capability adapter, review and revocation tests.
-- internal/envapp/ui_src/src/ui/automation: canvas, API contracts and browser acceptance tests.
+- internal/automation: definition/context/grant/engine/migration tests. internal/codeapp/automation_migration_test.go covers real startup/restart from schemas 1/2, retained drafts/publications/grants and byte-identical unsupported-state rejection.
+- internal/flowerwork, internal/ai/automation*: profiles, canonical isolation and real-provider qualification.
+- internal/codeapp/automation*: authority, fixed tools and scoped scheduled reports.
+- internal/redevpluginintegration/agent_work*: installed-host review/revocation.
+- internal/envapp/ui_src/src/ui/automation: canvas/API/browser acceptance.
