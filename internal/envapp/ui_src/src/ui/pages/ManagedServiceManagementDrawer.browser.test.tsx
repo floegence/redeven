@@ -213,6 +213,68 @@ describe('Managed service recovery drawer', () => {
     expect(drawer.querySelectorAll('[aria-label="Copy workspace path"]')).toHaveLength(1);
   });
 
+  it.each([
+    {width: 390, locale: 'en-US'}, {width: 1120, locale: 'en-US'},
+    {width: 390, locale: 'zh-CN'}, {width: 1120, locale: 'zh-CN'},
+  ])('reveals the blocked data resource and preserves only that selection at $width px in $locale', async ({width, locale}) => {
+    await page.viewport(width, 800);
+    localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, locale);
+    const labels = locale === 'zh-CN'
+      ? {workspace: '删除工作目录', data: '删除服务数据', problem: '无法验证资源归属', loading: '加载中'}
+      : {workspace: 'Delete workspace', data: 'Delete service data', problem: 'Resource ownership cannot be verified', loading: 'Loading'};
+    const dataPath = '/state/managed-services/families/example/data';
+    const resources = (blocked: boolean) => [
+      {resource_id: 'workspace', kind: 'directory', identity: service.workspace_path, presence: 'present', ownership: 'user_selected'},
+      {resource_id: 'host-data', kind: 'directory', identity: dataPath, presence: 'present', ownership: 'unverified', ...(blocked ? {problem_code: 'RESOURCE_OWNERSHIP_UNVERIFIED'} : {})},
+    ];
+    api.fetch.mockImplementation(async (_url: string, init: RequestInit) => {
+      const request = JSON.parse(String(init.body));
+      return {request, plan_digest: request.delete_data ? 'blocked-plan' : 'reviewed-plan', path: 'uninstall', blockers: request.delete_data ? ['RESOURCE_OWNERSHIP_UNVERIFIED'] : [], facts: {presence: 'present', ownership: 'verified', runtime: 'running', resources: resources(Boolean(request.delete_data))}};
+    });
+    const execute = vi.fn(async (_request: ManagementRequest) => undefined);
+    mount(execute, false, false, false, {service: {...service, status: 'running'}});
+    await settle();
+    expect(document.querySelector<HTMLDetailsElement>('.service-management-resource-details')!.open).toBe(false);
+    await userEvent.click(page.getByRole('checkbox', {name: labels.workspace, exact: true}).element().closest('label')!);
+    await settle();
+    await userEvent.click(page.getByRole('checkbox', {name: labels.data, exact: true}).element().closest('label')!);
+    await settle();
+    const details = document.querySelector<HTMLDetailsElement>('.service-management-resource-details')!;
+    expect(details.open).toBe(true);
+    expect(details.innerText).toContain(dataPath);
+    expect(details.parentElement?.innerText).toContain(labels.problem);
+    const panel = document.querySelector<HTMLElement>('.service-management-panel')!;
+    await document.fonts.ready;
+    expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+    expectSingleLineButtonLabels(panel);
+    const directory = import.meta.env.VITE_REDEVEN_SERVICE_SCREENSHOTS;
+    if (directory) await page.screenshot({path: `${directory}/uninstall-blocked-${width}-${locale}.png`});
+    const confirm = document.querySelector<HTMLButtonElement>('.service-management-execute')!;
+    expect(confirm.disabled).toBe(true);
+    expect(execute).not.toHaveBeenCalled();
+    const footer = document.querySelector<HTMLElement>('[data-testid="service-management-footer"]')!.getBoundingClientRect();
+    let release!: () => void;
+    api.fetch.mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      const request = JSON.parse(String(init.body));
+      return new Promise(resolve => {release = () => resolve({request, plan_digest: 'retained-data-plan', path: 'uninstall', blockers: [], facts: {presence: 'present', ownership: 'verified', runtime: 'running', resources: resources(false)}});});
+    });
+    await userEvent.click(page.getByRole('checkbox', {name: labels.data, exact: true}).element().closest('label')!);
+    await settle();
+    expect(confirm.disabled).toBe(true);
+    expect(document.body.innerText).not.toContain(labels.loading);
+    expect(document.querySelector<HTMLElement>('[data-testid="service-management-footer"]')!.getBoundingClientRect().top).toBe(footer.top);
+    expect(document.querySelector<HTMLElement>('[data-testid="service-management-footer"]')!.getBoundingClientRect().bottom).toBe(footer.bottom);
+    release();
+    await settle();
+    expect(confirm.disabled).toBe(false);
+    expect(document.querySelector<HTMLDetailsElement>('.service-management-resource-details')!.open).toBe(false);
+    expect(page.getByRole('checkbox', {name: labels.workspace, exact: true}).element()).toBeChecked();
+    if (directory) await page.screenshot({path: `${directory}/uninstall-preserve-data-${width}-${locale}.png`});
+    await userEvent.click(page.elementLocator(confirm));
+    await settle();
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({action: 'uninstall', delete_data: false, delete_workspace: true, plan_digest: 'retained-data-plan'}));
+  });
+
   it('cleans a retained archive only after explicit resource selection', async () => {
     api.fetch.mockImplementation(async (_url: string, init: RequestInit) => ({
       request: JSON.parse(String(init.body)),
@@ -239,7 +301,7 @@ describe('Managed service recovery drawer', () => {
       'Unselected resources will be kept.',
     );
     await userEvent.click(
-      page.getByText('Delete service data', { exact: true }),
+      page.getByRole('checkbox', { name: 'Delete service data', exact: true }).element().closest('label')!,
     );
     await settle();
     await userEvent.click(buttons().at(-1)!);
@@ -295,7 +357,7 @@ describe('Managed service recovery drawer', () => {
     mount(execute);
     await settle();
     await userEvent.click(
-      page.getByText('Delete service data', { exact: true }),
+      page.getByRole('checkbox', { name: 'Delete service data', exact: true }).element().closest('label')!,
     );
     await settle();
     expect(execute).not.toHaveBeenCalled();

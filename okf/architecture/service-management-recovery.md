@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Service management recovery and resource ownership
 tags: [architecture, web-services, recovery, ui, persistence]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -26,6 +26,8 @@ Instance-scoped allocation and legacy resource boundaries are owned by [Service 
 Uninstall uses `runtime_manifest_json`, the existing operation coordinator, and the existing event stream.
 
 A resource recreated under the same name cannot acquire the previous deletion authorization.
+
+Uninstall plans attribute deletion blockers to the selected resource, preserving specific inspection errors. The drawer reveals its identity and reason; retaining that resource removes only its deletion requirement. Pending reviews disable confirmation without inserting loading text or moving the footer.
 
 Detachment remains available while it is unresolved.
 
@@ -56,3 +58,5 @@ Existing volume names and directories are not renamed, moved, or recreated durin
 # Evidence
 
 - `redeven:internal/managedwebservice/management_facts.go` - Source.
+- `redeven:internal/managedwebservice/management_host_data_test.go` - Native Host uninstall, retained data, archive and entrance cleanup.
+- `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceManagementDrawer.browser.test.tsx` - Resource disclosure and stable review controls.

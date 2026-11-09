@@ -80,7 +80,7 @@ func (m *Manager) managementPlan(ctx context.Context, service *pfregistry.Manage
 			if raw := strings.TrimSpace(service.RuntimeManifestJSON); raw != "" && raw != "{}" && !pendingUninstall(service) {
 				plan.Blockers = append(plan.Blockers, "LIFECYCLE_TRANSACTION_PENDING")
 			}
-			for _, item := range facts.Resources {
+			for i, item := range facts.Resources {
 				selected := managementResourceSelected(req, item)
 				if !selected || item.Presence == "absent" {
 					continue
@@ -93,6 +93,8 @@ func (m *Manager) managementPlan(ctx context.Context, service *pfregistry.Manage
 					code = "RESOURCE_INSPECTION_UNAVAILABLE"
 				}
 				if code != "" {
+					// Attribute deletion-only blockers without changing recovery facts.
+					plan.Facts.Resources[i].ProblemCode = code
 					plan.Blockers = append(plan.Blockers, code)
 				}
 			}

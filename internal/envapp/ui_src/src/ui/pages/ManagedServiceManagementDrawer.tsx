@@ -438,10 +438,16 @@ export function ManagedServiceManagementDrawer(props: {
             {(resource) => {
               const label = () => text(resource.resource_id === 'workspace' ? 'workspace' : resource.kind === 'network' ? 'network' : 'data');
               const state = () => text(resource.presence === 'absent' ? 'removed' : resource.presence === 'unknown' ? 'unknown' : 'retained');
+              const blockedDeletion = () => request().action === 'uninstall'
+                && resource.presence !== 'absent'
+                && !!resource.problem_code && plan()?.blockers.includes(resource.problem_code)
+                && !request().retain_resource_ids?.includes(resource.resource_id)
+                && (resource.kind === 'network' ? resource.ownership !== 'external'
+                  : resource.resource_id === 'workspace' ? request().delete_workspace : request().delete_data);
               return (
                 <div class="service-management-resource">
                   <Show when={resource.resource_id === 'workspace'} fallback={
-                    <details class="service-management-resource-details">
+                    <details class="service-management-resource-details" open={blockedDeletion()}>
                       <summary><span>{label()}</span><span class="inline-flex items-center gap-2">{state()}<ChevronDown class="h-3 w-3" aria-hidden="true" /></span></summary>
                       <p class="service-management-resource-identity">{resource.identity}</p>
                       <Show when={resource.references?.length}>

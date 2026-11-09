@@ -14512,7 +14512,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-04",
+        "reviewed_at": "2026-11-09",
         "tags": [
           "architecture",
           "persistence",
@@ -14523,15 +14523,15 @@
         "title": "Service management recovery and resource ownership",
         "type": "Runtime Contract"
       },
-      "body_length": 2866,
+      "body_length": 3457,
       "summary": "Registry owns transactions, allocations and identities; fresh backend facts govern recovery and deletion. Unknown ownership is shown honestly. Frontend code never substitutes Retry or Restart for unavailable Start. A failed Host maintenance hook may be bypassed only through an administrator's reviewed plan, and only for verified resources.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Management recovery\n### Facts and actions\n`ServiceFacts` separates presence, ownership, runtime state, inspection completeness, resource references, and check time.\n\n### Review and execution\n`GET /managed-web-services/{id}/inspection` requires read permission, is non-cacheable, and uses the same factual backend projection as the list.\n\nExisting unrelated lifecycle transactions cannot be overwritten by recovery.\n\nInstance-scoped allocation and legacy resource boundaries are owned by [Service resource ownership](#resource-ownership).\n\n### Uninstall transaction\nUninstall uses `runtime_manifest_json`, the existing operation coordinator, and the existing event stream.\n\nA resource recreated under the same name cannot acquire the previous deletion authorization.\n\nDetachment remains available while it is unresolved.\n\n### Management archives and access\nRegistry version 4 adds `active`, `detached`, and `uninstalled`. Only active records participate in template uniqueness and must own an authorized Forward.\n\nNames, ports, or cached reachability never prove ownership.\n\n## Resource ownership\n### Instance allocation\nNew Host bindings use `instances/\u003cservice-id\u003e/data`.\n\nCreation must return the expected service, resource, and generation labels plus native identity.\n\nTemplate permissions remain unchanged: unsupported external Compose capabilities are still rejected by template policy.\n\n### Observation and deletion\nContainer ownership uses exact native ID, standard managed name, and service label.\n\nReference metadata exposes selected container identity, state, ports, and owning service identifiers; arbitrary engine labels and injected secrets never become public inventory fields.",
-          "char_count": 1694
+          "body": "## Management recovery\n### Facts and actions\n`ServiceFacts` separates presence, ownership, runtime state, inspection completeness, resource references, and check time.\n\n### Review and execution\n`GET /managed-web-services/{id}/inspection` requires read permission, is non-cacheable, and uses the same factual backend projection as the list.\n\nExisting unrelated lifecycle transactions cannot be overwritten by recovery.\n\nInstance-scoped allocation and legacy resource boundaries are owned by [Service resource ownership](#resource-ownership).\n\n### Uninstall transaction\nUninstall uses `runtime_manifest_json`, the existing operation coordinator, and the existing event stream.\n\nA resource recreated under the same name cannot acquire the previous deletion authorization.\n\nUninstall plans attribute deletion blockers to the selected resource, preserving specific inspection errors. The drawer reveals its identity and reason; retaining that resource removes only its deletion requirement. Pending reviews disable confirmation without inserting loading text or moving the footer.\n\nDetachment remains available while it is unresolved.\n\n### Management archives and access\nRegistry version 4 adds `active`, `detached`, and `uninstalled`. Only active records participate in template uniqueness and must own an authorized Forward.\n\nNames, ports, or cached reachability never prove ownership.\n\n## Resource ownership\n### Instance allocation\nNew Host bindings use `instances/\u003cservice-id\u003e/data`.\n\nCreation must return the expected service, resource, and generation labels plus native identity.\n\nTemplate permissions remain unchanged: unsupported external Compose capabilities are still rejected by template policy.\n\n### Observation and deletion\nContainer ownership uses exact native ID, standard managed name, and service label.\n\nReference metadata exposes selected container identity, state, ports, and owning service identifiers; arbitrary engine labels and injected secrets never become public inventory fields.",
+          "char_count": 2001
         },
         {
           "id": "boundaries",
@@ -14544,8 +14544,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/managedwebservice/management_facts.go` - Source.",
-          "char_count": 68
+          "body": "- `redeven:internal/managedwebservice/management_facts.go` - Source.\n- `redeven:internal/managedwebservice/management_host_data_test.go` - Native Host uninstall, retained data, archive and entrance cleanup.\n- `redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceManagementDrawer.browser.test.tsx` - Resource disclosure and stable review controls.",
+          "char_count": 352
         }
       ],
       "evidence": [
@@ -14553,6 +14553,16 @@
           "id": "redeven:internal/managedwebservice/management_facts.go:0:source.",
           "source": "redeven:internal/managedwebservice/management_facts.go",
           "description": "Source."
+        },
+        {
+          "id": "redeven:internal/managedwebservice/management_host_data_test.go:0:native host uninstall, retained data, archive and entrance cleanup.",
+          "source": "redeven:internal/managedwebservice/management_host_data_test.go",
+          "description": "Native Host uninstall, retained data, archive and entrance cleanup."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceManagementDrawer.browser.test.tsx:0:resource disclosure and stable review controls.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/ManagedServiceManagementDrawer.browser.test.tsx",
+          "description": "Resource disclosure and stable review controls."
         }
       ],
       "snippet": "Registry owns transactions, allocations and identities; fresh backend facts govern recovery and deletion. Unknown ownership is shown honestly. Frontend code never substitutes Retry or Restart for unavailable Start. A failed Host maintenance",
@@ -25127,5 +25137,5 @@
       ]
     }
   ],
-  "source_sha256": "f1e10d32bb464884a716bf561afb49d7d95ec3d5b4fc3cfe39a56c55af810b69"
+  "source_sha256": "714e7c3e8fa84abc5dcaa7ac8c0e56cc49967b2e3cae56d7ba862dfa6d94d2a2"
 }
