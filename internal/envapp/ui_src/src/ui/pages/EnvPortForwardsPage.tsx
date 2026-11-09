@@ -621,7 +621,8 @@ function templateRequestFromDraft(draft: TemplateEditorDraft, requestID: string)
     startup_timeout_sec: original?.endpoint.startup_timeout_sec || 60,
     ...(draft.kind === 'host' ? {} : { container_port: Number(draft.containerPort) }),
   };
-  const common = { ...original, schema_version: Math.max(original?.schema_version ?? 6, 6) as 6 | 7, kind: draft.kind, endpoint, parameters };
+  // Source compatibility belongs to the SDK; editor writes use its current schema.
+  const common = { ...original, schema_version: 7 as const, kind: draft.kind, endpoint, parameters };
   const spec: ManagedTemplateSpec = draft.kind === 'host'
     ? { ...common, host: { ...original?.host, install_script: draft.installScript, start_script: draft.startScript, stop_script: draft.stopScript, uninstall_script: draft.uninstallScript, ...(original?.host?.environment ? { environment: original.host.environment } : {}), after_start_script: draft.afterStartScript, open_script: draft.openScript, output_mode: draft.outputMode, artifact: !hasNPM ? original?.host?.artifact : undefined, npm: hasNPM ? { package_name: draft.npmPackageName.trim(), version: draft.npmPackageVersion.trim(), registry_url: draft.npmRegistryURL.trim(), executable: draft.npmExecutable.trim(), ...(authTokenParameter ? { auth_token_parameter: authTokenParameter } : {}) } : undefined } }
     : draft.kind === 'container'

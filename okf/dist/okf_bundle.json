@@ -14601,7 +14601,7 @@
         "title": "Service template marketplace discovery and acquisition",
         "type": "Runtime Contract"
       },
-      "body_length": 11680,
+      "body_length": 11798,
       "summary": "The market discovers passive template evidence. Redeven acquires exact originals through Desktop or Runtime before deployment.",
       "sections": [
         {
@@ -14615,8 +14615,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The upstream reader owns acquisition, parsing, compatibility and byte validation. Redeven owns UI, authorization and lifecycle execution. Publication and retained source formats follow [managed service templates](managed-web-service-templates.md).",
-          "char_count": 247
+          "body": "The upstream reader owns acquisition, parsing, compatibility and byte validation. Redeven owns UI, authorization and lifecycle execution. Editor creates and editable updates write current spec v7; old source compatibility does not authorize v6 API writes. Publication and retained source formats follow [managed service templates](managed-web-service-templates.md).",
+          "char_count": 365
         },
         {
           "id": "evidence",
@@ -25127,5 +25127,5 @@
       ]
     }
   ],
-  "source_sha256": "eb1f242002de8cb953c59e483c692f11a9487f722f55198801cfd335b92fc2cb"
+  "source_sha256": "6cce9693a9d21e1f983cb637c563397352295f777aadf653d27ae7943b448176"
 }

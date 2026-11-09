@@ -24,6 +24,7 @@ import {
 import { portForwardFlowerContext } from './webServiceFlowerContext';
 import type { PortForward } from './EnvPortForwardsPage';
 import { LocalApiError } from '../services/localApi';
+import templateSpecSchema from '@floegence/redeven-service-templates/schema/redeven-service-template-spec-v7.schema.json';
 
 function ManagedServiceRow(props: Omit<Parameters<typeof ManagedServiceRowComponent>[0], 'operationExpanded' | 'onOperationExpandedChange'>) {
   const [expanded, setExpanded] = createSignal(false);
@@ -1635,6 +1636,39 @@ describe('EnvPortForwardsPage', () => {
     expect(drawer.querySelector('[data-template-field="startScript"]')?.getAttribute('aria-invalid')).toBe('true');
   });
 
+  it.each(['host', 'container', 'compose'] as const)('saves new %s templates with the published Runtime write schema', async (kind) => {
+    let submitted: {spec: {schema_version: number; kind: string}} | undefined;
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/managed-web-services/catalog') return {templates: []};
+      if (url === '/_redeven_proxy/api/managed-web-services') return {services: []};
+      if (url === '/_redeven_proxy/api/forwards') return {forwards: []};
+      if (url === '/_redeven_proxy/api/managed-web-service-templates' && init?.method === 'POST') {
+        submitted = JSON.parse(String(init.body));
+        return {template_id: 'tmpl-created'};
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+    host.querySelector<HTMLButtonElement>('[data-testid="service-templates-button"]')!.click();
+    await flushPage();
+    const label = {host: 'New host template', container: 'New container template', compose: 'New Compose template'}[kind];
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === label)!.click();
+    await flushPage();
+    const fill = (field: string, value: string) => {
+      const input = host.querySelector<HTMLInputElement>(`[data-template-field="${field}"]`)!;
+      input.value = value;
+      input.dispatchEvent(new InputEvent('input', {bubbles: true}));
+    };
+    fill('name', `My ${kind} service`);
+    if (kind === 'container') fill('image', 'example/service:1');
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => controlText(button)?.trim() === 'Save template')!.click();
+    await waitForAssertion(() => expect(submitted).toBeDefined());
+    expect(submitted?.spec.kind).toBe(kind);
+    expect(submitted?.spec.schema_version).toBe(templateSpecSchema.properties.schema_version.const);
+    await waitForAssertion(() => expect(notificationMocks.success).toHaveBeenCalled());
+  });
+
   it('uses a space-free recommended workspace and preserves a custom path with spaces', async () => {
     const template = {
       template_id: 'example-host', service_family_id: 'example-service', name: 'Example Service · Host', description: 'Host deployment',
@@ -2914,7 +2948,7 @@ describe('EnvPortForwardsPage', () => {
 
     await waitForAssertion(() => expect(updateBody?.spec?.host?.npm).toEqual({ package_name: '@example/service-cli', version: '0.1.1-rc.2', registry_url: 'https://registry.npmjs.org/', executable: 'dsh' }));
     const submitted = updateBody as Record<string, any> | null;
-    expect(submitted?.spec?.schema_version).toBe(6);
+    expect(submitted?.spec?.schema_version).toBe(templateSpecSchema.properties.schema_version.const);
     expect(submitted?.spec?.host?.environment).toEqual({ SERVICE_MODE: 'preserved' });
     expect(updateBody).not.toHaveProperty('host_lifecycle_plan');
   });

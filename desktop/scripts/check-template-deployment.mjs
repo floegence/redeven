@@ -87,7 +87,11 @@ await session.run(async () => {
     image: ${image}
     command: [sh, -c, 'mkdir -p /www; echo compose-product-verified > /www/index.html; exec httpd -f -p 8080 -h /www']
 `);
+      const savedResponse = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/api/managed-web-service-templates'));
       await page.getByRole('button', {name: 'Save template', exact: true}).click();
+      const saved = await savedResponse;
+      report.compose_save = {status: saved.status(), response: await saved.json()};
+      assert.ok(saved.ok(), JSON.stringify(report.compose_save));
       await page.getByRole('option', {name: /Acceptance Compose/}).click();
       report.steps.push('create and save independent Compose template through the real editor');
     } else {

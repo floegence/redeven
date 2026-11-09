@@ -30,7 +30,7 @@ Acceptance covers four official entries without bundled duplicates, composed sea
 
 # Boundaries
 
-The upstream reader owns acquisition, parsing, compatibility and byte validation. Redeven owns UI, authorization and lifecycle execution. Publication and retained source formats follow [managed service templates](managed-web-service-templates.md).
+The upstream reader owns acquisition, parsing, compatibility and byte validation. Redeven owns UI, authorization and lifecycle execution. Editor creates and editable updates write current spec v7; old source compatibility does not authorize v6 API writes. Publication and retained source formats follow [managed service templates](managed-web-service-templates.md).
 
 # Evidence
 
