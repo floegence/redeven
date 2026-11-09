@@ -7,15 +7,15 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Automation owns versioned definitions, business context and artifacts. ReDevPlugin owns durable scheduling and the published agent.work capability. Flower uses canonical Floret admission, execution, approval and observation; neither the canvas nor the workflow engine creates a second model runtime. Tessiven business linkage is outside this feature.
+Automation owns definitions, context and artifacts; ReDevPlugin owns durable scheduling and published agent.work. Canonical Floret owns admission, execution, approval and observation, with no second model runtime. Tessiven business linkage is deferred.
 
 # Contract
 
 ## Definition and authorization
 
-An owner is the authenticated user and Environment, never a request-supplied field. Draft creation grants no execution. Incomplete drafts can be saved with revision compare-and-swap; publication validates the complete DAG, model, directory, tool names and result schemas. Each immutable publication has an explicit expiring grant. Later publication retains earlier run grants; explicit revoke disables every version.
+Ownership comes from the authenticated user and Environment, never request fields. Drafts grant no execution; incomplete drafts use revision compare-and-swap. Publication validates the DAG, model, directory, tools and result schemas and requires an explicit expiring grant. Republishing retains prior run grants; revoke disables every version.
 
-Each run pins a publication, purpose, scheduled time and stable request identity. Repeating the same request returns its receipt; changing its payload conflicts. Reading an admitted receipt does not reauthorize new effects. Saved changes to a published draft require publication before the primary Run action or schedule enablement. Archive preserves history and stops new admission.
+Runs pin publication, purpose, scheduled time and request identity. Repeated requests return their receipt; changed payloads conflict. Receipt reads authorize no new effects. Changed drafts require publication before Run or schedule enablement. Archive retains history and stops admission.
 
 Background authority is reconstructed from the versioned grant and current Environment permission cap before admission and each effect. Channel-free effects require an owner-bound execution thread and matching current delegation; the automation session label alone grants nothing. Ordinary interactive effects still require a channel. No interactive bearer, admin bit, platform model token or Desktop authority is persisted. Background model choices exclude interactive platform and Desktop model sources. Revocation blocks further effects and requests cancellation through the canonical runtime.
 
@@ -23,7 +23,7 @@ Background authority is reconstructed from the versioned grant and current Envir
 
 The published scheduler owns interval, completion-relative and daily IANA-timezone cadence, missed-run policy, overlap policy, bounded queue, durable claim identity and recovery. Product configuration binds one immutable publication. Preview calls the same cadence calculation without enabling a schedule. Pause changes future scheduling independently of unsaved canvas edits and does not cancel admitted work.
 
-The scheduler claim ID is the product run request ID. Dispatch checks current plan revision, publication and authorization. A lost dispatch response is reconciled against the retained product admission; a known run is never resubmitted. Product inspection reports not_committed only when the exclusive local workflow store has no admission under that exact request. Unknown canonical execution effects remain unknown, never inferred safe from an error message.
+Scheduler claim IDs are product run request IDs. Dispatch checks plan revision, publication and authority. Lost responses reconcile against retained admissions; known runs are never resubmitted. Only absence of that exact request in the exclusive workflow store proves not_committed. Unknown canonical effects remain unknown; error wording never establishes retry safety.
 
 ## Execution and context
 
@@ -31,7 +31,7 @@ Nodes support fixed tools, Flower work, bounded parallel items, conditions, join
 
 All nodes share one run-level context revision: goal, pinned definition, scheduled time, findings, decisions, results, user requirements and source uncertainty. Bounded briefs point to paged contributions and provided materials. External contents are data, never authority. Contributions identify the actual attempt and read basis; repeated IDs with changed content conflict. Requirement changes retain historical evidence while invalidating stale results and artifacts. Late work cannot replace the new requirement's outputs.
 
-Each Flower node has its own execution thread and shared workflow context. Canonical ThreadModelContext snapshots and UsedAt/UsedByRequestID identify loaded context; a brief alone is not a read receipt. Mutation acknowledgements are compact; evidence is fetched explicitly. Submitted results remain candidates until canonical execution succeeds and the output schema validates. The engine never manufactures success.
+Flower nodes use separate execution threads with shared workflow context. Canonical ThreadModelContext snapshots and UsedAt/UsedByRequestID prove loaded context; briefs alone do not. Mutation receipts are compact; evidence requires explicit reads. Results remain candidates until canonical success and output-schema validation.
 
 Fixed HTTP reads use the existing host transport, no ambient headers, no redirects, a 25-second deadline and a 48-KiB body bound. Container reads use the existing product resource adapter. HTML rendering uses escaped Go templates with an enforced 2-MiB output bound. Artifacts retain content, digest and context revision; previews use sandboxed frames with restrictive document policy. Delivery currently saves a local retained artifact, not email or remote publication.
 
