@@ -129,12 +129,12 @@ export function HostAccessPermissionIllustration(props: { kind: 'screen' | 'inpu
   );
 }
 
-export function HostAccessStateIllustration(props: { state: HostAccessState | 'remove' }) {
+export function HostAccessStateIllustration(props: { state: HostAccessState }) {
   return (
     <svg class="host-access-state-scene" data-scene={props.state} viewBox="0 0 68 48" fill="none" aria-hidden="true">
       <g class="host-access-art-muted"><rect x="8" y="4" width="39" height="34" rx="4" /></g>
       <g class="host-access-art-selected" data-part="retained-settings">
-        <rect x="3" y="9" width="39" height="34" rx="4" class="host-access-art-paper" stroke-dasharray={props.state === 'unconfigured' || props.state === 'remove' ? '3 3' : undefined} />
+        <rect x="3" y="9" width="39" height="34" rx="4" class="host-access-art-paper" stroke-dasharray={props.state === 'unconfigured' ? '3 3' : undefined} />
         <Show when={props.state !== 'unconfigured'} fallback={<path d="M17 26h12m-6-6v12" />}>
           <path d="M12 20h22m-22 12h22" />
           <rect x="17" y="17" width="4" height="6" rx="1" class="host-access-art-paper" />
@@ -147,7 +147,6 @@ export function HostAccessStateIllustration(props: { state: HostAccessState | 'r
           <Switch>
             <Match when={props.state === 'enabled'}><path d="m45 31 4 4 8-9" /></Match>
             <Match when={props.state === 'paused'}><path d="M47 26v10m8-10v10" stroke-width="3" /></Match>
-            <Match when={props.state === 'remove'}><path d="M45 31h12" /></Match>
           </Switch>
         </g>
       </Show>

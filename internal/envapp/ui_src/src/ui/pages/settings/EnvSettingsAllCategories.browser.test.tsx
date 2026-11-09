@@ -274,7 +274,7 @@ it.each([1440, 390, 320])('gives host settings deliberate feature rows and align
   }
   expect(panel.querySelectorAll('.host-access-feature-control [role=switch]')).toHaveLength(2);
   expect(rows[0].querySelector('.host-access-feature-control [aria-haspopup=menu]')).toBeNull();
-  expect(rows[1].querySelector('.host-access-feature-control [aria-haspopup=menu]')).not.toBeNull();
+  expect(rows[1].querySelector('.host-access-feature-control [aria-haspopup=menu]')).toBeNull();
   const fields = [...panel.querySelectorAll<HTMLElement>('[data-testid=application-picture-settings] [role=combobox]')].map(node => node.getBoundingClientRect());
   expect(fields).toHaveLength(3);
   for (const field of fields) expect(Math.abs(field.width - fields[0].width)).toBeLessThan(1);

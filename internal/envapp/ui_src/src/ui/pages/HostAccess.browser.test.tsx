@@ -142,18 +142,18 @@ it.each([
 it.each(['unconfigured','enabled','paused'] as const)('shows purposeful permissions and %s settings at 320px',async access=>{
  await page.viewport(320,900);await loadEnvAppDictionary('zh-CN');writeStoredLanguagePreference('zh-CN');
  const host=document.createElement('main');host.style.cssText='padding:18px;background:var(--background);color:var(--foreground)';document.body.append(host);
- dispose=render(()=><I18nProvider><HostAccessPermissions screen={access!=='unconfigured'} input={access!=='unconfigured'} needsInput desktop allowed busy={false} onPermission={()=>{}} onRefresh={()=>{}}/><HostAccessManagement feature="desktop" state={access} allowed busy={false} onChange={async()=>{}} onReconfigure={()=>{}} /></I18nProvider>,host);
+ dispose=render(()=><I18nProvider><HostAccessPermissions screen={access!=='unconfigured'} input={access!=='unconfigured'} needsInput desktop allowed busy={false} onPermission={()=>{}} onRefresh={()=>{}}/><HostAccessManagement state={access} allowed busy={false} onChange={async()=>{}} onReconfigure={()=>{}} /></I18nProvider>,host);
  await expect.poll(()=>host.querySelector(`.host-access-state[data-state=${access}]`)).not.toBeNull();
  expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth+1);
  for(const row of host.querySelectorAll('.host-access-permission')){const title=row.querySelector('h3')!.getBoundingClientRect();const visual=row.querySelector('svg')!.getBoundingClientRect();expect(visual.right).toBeLessThanOrEqual(title.left);}
  await page.screenshot({element:host,path:`__screenshots__/host-access-settings-${access}-narrow.png`});
- if(access==='paused'){
-   await userEvent.click(page.getByRole('button',{name:'重置桌面设置…',exact:true}));
-   expect(host.querySelector('[data-scene=remove]')).not.toBeNull();
-   await page.screenshot({element:host,path:'__screenshots__/host-access-settings-remove-narrow.png'});
+ if(access==='enabled'){
+   await userEvent.click(page.getByRole('button',{name:'停用',exact:true}));
+   expect(host.querySelector('[data-scene=paused]')).not.toBeNull();
    await userEvent.click(page.getByRole('button',{name:'取消',exact:true}));
-   expect(host.querySelector('.host-access-state[data-state=paused]')).not.toBeNull();
+   expect(host.querySelector('.host-access-state[data-state=enabled]')).not.toBeNull();
  }
+ expect(host.querySelector('[data-scene=remove]')).toBeNull();
 });
 
 it.each(['zh-CN', 'de-DE', 'zh-TW'] as const)('shows direct feature controls and separate system settings in %s', async locale => {
@@ -250,13 +250,13 @@ it('keeps the feature switch authoritative until confirmation and fences retaine
 it('closes an open feature action menu when Settings changes category or closes', async () => {
  const warnings = vi.spyOn(console, 'warn');
  await page.viewport(1024, 850); writeStoredLanguagePreference('en-US');
- state.screen = true; state.input = true; state.access = 'enabled'; state.desktopAccess = 'enabled';
+ state.screen = false; state.input = true; state.access = 'enabled'; state.desktopAccess = 'enabled';
  const host = document.createElement('main'); document.body.append(host);
  dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
  await page.getByRole('button', {name:'Access settings',exact:true}).click();
  const menu = page.getByRole('button', {name:'Manage this feature · Remote desktop',exact:true});
  await menu.click();
- await expect.element(page.getByRole('menuitem', {name:'Reset desktop settings…',exact:true})).toBeVisible();
+ await expect.element(page.getByRole('menuitem', {name:'Pause',exact:true})).toBeVisible();
  state.openSettings('appearance');
  await expect.element(page.getByRole('menu')).not.toBeInTheDocument();
  state.openSettings('applications');
@@ -272,38 +272,23 @@ it('closes an open feature action menu when Settings changes category or closes'
  warnings.mockRestore();
 });
 
-it.each(['enabled', 'paused'] as const)('resets only desktop access from %s after explicit confirmation', async access => {
+it.each(['enabled', 'paused', 'unconfigured'] as const)('omits reset and overflow actions for ready desktop access in %s', async access => {
  await page.viewport(1024, 850); writeStoredLanguagePreference('en-US');
- state.screen = true; state.input = true; state.access = 'enabled'; state.desktopAccess = access;
+ const change = vi.fn().mockResolvedValue(undefined), configure = vi.fn();
  const host = document.createElement('main'); document.body.append(host);
- dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
- await page.getByRole('button', {name:'Access settings',exact:true}).click();
- expect(page.getByRole('button', {name:'Manage this feature · Remote application windows',exact:true}).query()).toBeNull();
- const menu = page.getByRole('button', {name:'Manage this feature · Remote desktop',exact:true});
- await menu.click();
- await page.getByRole('menuitem', {name:'Reset desktop settings…',exact:true}).click();
- const confirmation = page.getByRole('dialog', {name:'Reset remote desktop settings?',exact:true});
- await expect.element(confirmation).toBeVisible();
- expect(confirmation.element().textContent).toContain('saved display selection and authorization reuse preference');
- expect(state.save).not.toHaveBeenCalled();
- await confirmation.getByRole('button', {name:'Cancel',exact:true}).click();
- expect(state.desktopAccess).toBe(access); expect(state.save).not.toHaveBeenCalled();
- await menu.click();
- await page.getByRole('menuitem', {name:'Reset desktop settings…',exact:true}).click();
- await confirmation.getByRole('button', {name:'Reset settings',exact:true}).click();
- await expect.poll(() => state.desktopAccess).toBe('unconfigured');
- expect(state.save).toHaveBeenCalledExactlyOnceWith('desktop', 'unconfigured');
- expect(state.access).toBe('enabled'); expect(state.screen && state.input).toBe(true);
- expect(state.permission).not.toHaveBeenCalled(); expect(state.launch).not.toHaveBeenCalled();
- await expect.element(page.getByRole('region', {name:'Remote desktop',exact:true}).getByRole('button', {name:'Set up',exact:true})).toBeVisible();
+ dispose = render(() => <I18nProvider><HostAccessFeatureSettings feature="desktop" state={access} ready allowed busy={false} onChange={change} onReconfigure={configure} /></I18nProvider>, host);
+ expect(host.querySelector('[aria-haspopup=menu]')).toBeNull();
+ expect(page.getByRole('button', {name:'Reset desktop settings…',exact:true}).query()).toBeNull();
+ expect(page.getByRole('dialog').query()).toBeNull();
+ expect(change).not.toHaveBeenCalled(); expect(configure).not.toHaveBeenCalled();
 });
 
-it('offers pause alone when enabled application access needs attention', async () => {
+it.each(['applications', 'desktop'] as const)('offers pause alone when enabled %s access needs attention', async feature => {
  await page.viewport(900, 700); writeStoredLanguagePreference('en-US');
  const change = vi.fn().mockResolvedValue(undefined);
  const host = document.createElement('main'); document.body.append(host);
- dispose = render(() => <I18nProvider><HostAccessFeatureSettings feature="applications" state="enabled" ready={false} allowed busy={false} onChange={change} onReconfigure={() => {}} /></I18nProvider>, host);
- await page.getByRole('button', {name:'Manage this feature · Remote application windows',exact:true}).click();
+ dispose = render(() => <I18nProvider><HostAccessFeatureSettings feature={feature} state="enabled" ready={false} allowed busy={false} onChange={change} onReconfigure={() => {}} /></I18nProvider>, host);
+ await page.getByRole('button', {name:`Manage this feature · ${feature === 'applications' ? 'Remote application windows' : 'Remote desktop'}`,exact:true}).click();
  expect(page.getByRole('menuitem').all()).toHaveLength(1);
  await page.getByRole('menuitem', {name:'Pause',exact:true}).click();
  expect(change).not.toHaveBeenCalled();
@@ -311,33 +296,59 @@ it('offers pause alone when enabled application access needs attention', async (
  expect(change).toHaveBeenCalledExactlyOnceWith('paused');
 });
 
-it.each(SUPPORTED_LOCALES)('keeps the desktop reset confirmation explicit and readable at 320px in %s', async locale => {
+it.each(SUPPORTED_LOCALES)('keeps desktop pause confirmation explicit and readable at 320px in %s', async locale => {
  await page.viewport(320, 900); const dictionary = await loadEnvAppDictionary(locale); writeStoredLanguagePreference(locale);
  const change = vi.fn().mockResolvedValue(undefined);
  const [allowed, setAllowed] = createSignal(true);
  const host = document.createElement('main'); document.body.append(host);
- dispose = render(() => <I18nProvider><HostAccessFeatureSettings feature="desktop" state="paused" allowed={allowed()} busy={false} onChange={change} onReconfigure={() => {}} /></I18nProvider>, host);
- await page.getByRole('button', {name:`${dictionary.hostAccess.manage} · ${dictionary.remoteDesktop.title}`,exact:true}).click();
- await page.getByRole('menuitem', {name:dictionary.hostAccess.resetDesktop,exact:true}).click();
- const dialog = page.getByRole('dialog', {name:dictionary.hostAccess.resetDesktopTitle,exact:true});
+ dispose = render(() => <I18nProvider><HostAccessFeatureSettings feature="desktop" state="enabled" allowed={allowed()} busy={false} onChange={change} onReconfigure={() => {}} /></I18nProvider>, host);
+ await expect.element(page.getByRole('switch', {name:dictionary.remoteDesktop.title,exact:true})).toBeVisible();
+ expect(host.querySelector('[aria-haspopup=menu]')).toBeNull();
+ await userEvent.click(page.getByRole('switch', {name:dictionary.remoteDesktop.title,exact:true}).element().closest('label')!);
+ const dialog = page.getByRole('dialog', {name:dictionary.hostAccess.pauseTitle,exact:true});
  await expect.element(dialog).toBeVisible();
  await expect.poll(() => getComputedStyle(dialog.element()).opacity).toBe('1');
  await expect.poll(() => document.getAnimations().filter(animation => animation.playState === 'running').length).toBe(0);
- expect(dialog.element().textContent).toContain(dictionary.hostAccess.resetDesktopHint);
+ expect(dialog.element().textContent).toContain(dictionary.hostAccess.pauseHint);
  for (const element of [dialog.element(), ...dialog.element().querySelectorAll<HTMLElement>('button, p')]) {
    expect(element.scrollWidth, element.outerHTML).toBeLessThanOrEqual(element.clientWidth + 1);
    expect(element.getBoundingClientRect().right).toBeLessThanOrEqual(320);
    expect(element.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
  }
  expect((await axe.run(dialog.element(), {runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations).toEqual([]);
- if (locale === 'zh-CN') await page.screenshot({element:dialog.element(),path:'__screenshots__/host-access-desktop-reset-narrow-zh-CN.png'});
- const confirm = dialog.getByRole('button', {name:dictionary.hostAccess.resetDesktopConfirm,exact:true}).element() as HTMLButtonElement;
+ if (locale === 'zh-CN') await page.screenshot({element:dialog.element(),path:'__screenshots__/host-access-desktop-pause-narrow-zh-CN.png'});
+ const confirm = dialog.getByRole('button', {name:dictionary.hostAccess.pause,exact:true}).element() as HTMLButtonElement;
  setAllowed(false);
  await expect.element(dialog).not.toBeInTheDocument();
  confirm.click();
  expect(change).not.toHaveBeenCalled();
  setAllowed(true);
  expect(dialog.query()).toBeNull();
+});
+
+it('pauses and resumes desktop access without resetting settings or application access', async () => {
+ await page.viewport(1024, 850); writeStoredLanguagePreference('en-US');
+ state.screen = true; state.input = true; state.access = 'enabled'; state.desktopAccess = 'enabled';
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
+ await page.getByRole('button', {name:'Access settings',exact:true}).click();
+ const toggle = page.getByRole('switch', {name:'Remote desktop',exact:true});
+ const clickToggle = () => userEvent.click(toggle.element().closest('label')!);
+ await clickToggle();
+ const confirmation = page.getByRole('dialog', {name:'Pause this feature?',exact:true});
+ expect(state.save).not.toHaveBeenCalled();
+ await confirmation.getByRole('button', {name:'Cancel',exact:true}).click();
+ expect(state.desktopAccess).toBe('enabled');
+ await clickToggle();
+ await confirmation.getByRole('button', {name:'Pause',exact:true}).click();
+ await expect.poll(() => state.desktopAccess).toBe('paused');
+ expect(state.save).toHaveBeenCalledExactlyOnceWith('desktop', 'paused');
+ expect(state.access).toBe('enabled'); expect(state.screen && state.input).toBe(true);
+ await clickToggle();
+ await expect.poll(() => state.desktopAccess).toBe('enabled');
+ expect(state.save.mock.calls).toEqual([['desktop', 'paused'], ['desktop', 'enabled']]);
+ expect(state.permission).not.toHaveBeenCalled(); expect(state.launch).not.toHaveBeenCalled();
+ expect(document.querySelector('.host-access-feature-group [aria-haspopup=menu]')).toBeNull();
 });
 
 it('shows the current permission and retains completed steps during first application setup', async () => {
