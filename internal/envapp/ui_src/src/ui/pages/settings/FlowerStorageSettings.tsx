@@ -1,6 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId } from 'solid-js';
 import { StableText, Button } from '@floegence/floe-webapp-core/ui';
-import { Database } from '@floegence/floe-webapp-core/icons';
 import type { AIReadinessController } from '../../flower/aiReadiness';
 import { useI18n } from '../../i18n';
 import { fetchLocalApiJSON } from '../../services/localApi';
@@ -87,7 +86,7 @@ export function FlowerStorageSettings(props: Readonly<{ controller: AIReadinessC
     : snapshot.source_build.replace(/:([a-f0-9]{64})$/u, (_, hash: string) => ` · ${hash.slice(0, 12)}`);
 
   return (
-    <SettingRow icon={Database} title={i18n.t('aiReadiness.storage.title')} description={i18n.t('aiReadiness.storage.description')}
+    <SettingRow title={i18n.t('aiReadiness.storage.title')} description={i18n.t('aiReadiness.storage.description')}
       control={<Show when={props.canAdmin} fallback={<p class="text-xs text-muted-foreground">{i18n.t('aiReadiness.storage.adminOnly')}</p>}>
         <Button size="sm" variant="outline" disabled={loading() || pending()} aria-busy={loading() || undefined}
           aria-expanded={snapshots() !== null} aria-controls={panelID} onClick={() => void load()}>

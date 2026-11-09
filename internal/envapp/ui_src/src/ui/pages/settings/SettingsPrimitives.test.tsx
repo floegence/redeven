@@ -59,6 +59,14 @@ describe('settings surface primitives', () => {
     expect(section?.querySelector('.redeven-surface-panel')).toBeNull();
   });
 
+  it('keeps ordinary row labels aligned without optional decorative icons', () => {
+    const host = mount(() => <SettingRow title="Runtime" control={<span>Ready</span>} />);
+    expect(host.querySelector('[data-decorative-icon]')).toBeNull();
+    expect(host.querySelector('.floe-setting-row__title')?.textContent).toBe('Runtime');
+    const resources = mount(() => <SettingRow title="Home" resourceIcon={() => <svg data-resource-icon />} />);
+    expect(resources.querySelector('[data-resource-icon]')).not.toBeNull();
+  });
+
   it('labels the resource selector and keeps refresh in the same scope', () => {
     const host = mount(() => <SettingsResourceToolbar label="Service" actions={<button>Refresh</button>}><select aria-label="Service"><option>API</option></select></SettingsResourceToolbar>);
     const group = host.querySelector('[role="group"]')!;

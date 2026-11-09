@@ -112,6 +112,7 @@ async function mount(width: number, locale: Locale = 'en-US', dark = false) {
       if (url.includes('history-retention?')) return retention;
       if (url.includes('history-retention')) return { supported: true, can_manage: true, defaults: retention.defaults };
       if (url.endsWith('/host-applications/picture')) return { mode: 'auto', max_dimension: 0, frame_rate: 0 };
+      if (url.endsWith('/storage')) return { entries: [{ id: 'flower', path: '/env/ai', kind: 'persistent', backup: 'partial_flower', bytes: 2_500_000_000, complete: true, present: true }, { id: 'plugins', path: '/env/apps/plugins', kind: 'persistent', backup: 'environment', bytes: 345_678_000, complete: true, present: true }, { id: 'snapshots', path: '/env/flower-maintenance', kind: 'recovery', backup: 'environment', bytes: 150_000_000, complete: true, present: true }, { id: 'skills', path: '/env/apps/skills', kind: 'persistent', backup: 'environment', bytes: 4096, complete: true, present: true }] };
       if (url.endsWith('/forwards')) return { forwards: [] };
       if (url.endsWith('/managed-web-services/catalog')) return { templates: [] };
       if (url.endsWith('/managed-web-services')) return { services: [managedService, secondaryService] };
@@ -122,7 +123,7 @@ async function mount(width: number, locale: Locale = 'en-US', dark = false) {
     session.open({ section: 'appearance' });
     return <I18nProvider><FloeProvider config={{ theme: { storageKey: 'settings-acceptance-theme', defaultTheme: dark ? 'dark' : 'light', shellPresets: builtInShellThemePresets, defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS, defaultSurfaceStyle: 'soft-neumorphic' } }}><TerminalSettingsAttachmentsProvider><TerminalOwner />
       <SettingsPanelContext.Provider value={{ ...session, register: () => () => {} }}>
-        <EnvSettingsDialog session={session} panels={[]} onThemeSourceChange={() => true} onShellThemeChange={() => true}
+        <EnvSettingsDialog onOpenServiceCanvas={() => undefined} onOpenPluginCenter={() => undefined} session={session} panels={[]} onThemeSourceChange={() => true} onShellThemeChange={() => true}
           pluginSettings={{ items: pluginProjection.items, ownerScope: {}, loading: false, canManage: true, refresh: async () => undefined, api: {
             listConnections: async () => ({ connections: [{ plugin_instance_id: 'metrics-instance', connector_id: 'workspace-api', transport: 'http', status: 'active', destination: 'https://api.example.com', revision: 1, scope: 'environment', http_methods: ['GET'], private_prefixes: [] }] }) as never,
             reviewConnection: api.mutations, approveConnection: api.mutations, cancelConnectionReview: api.mutations, revokeConnection: api.mutations,
@@ -229,9 +230,9 @@ function inspectCategory(section: EnvSettingsSection, panel: HTMLElement, locale
   expect(api.mutations).not.toHaveBeenCalled();
 }
 
-it.each([1440, 1024, 768, 390, 320])('renders all 18 actual category owners without horizontal overflow at %ipx', async width => {
+it.each([1440, 1024, 768, 390, 320])('renders all 19 actual category owners without horizontal overflow at %ipx', async width => {
   await mount(width);
-  expect(SETTINGS_NAV_ITEMS).toHaveLength(18);
+  expect(SETTINGS_NAV_ITEMS).toHaveLength(19);
   for (const item of SETTINGS_NAV_ITEMS) {
     const panel = await openCategory(item.id);
     inspectCategory(item.id, panel, 'en-US');
@@ -517,7 +518,7 @@ it.each([
   await mount(width, locale, dark);
   expect(matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
   expect(matchMedia('(pointer: coarse)').matches).toBe(touch);
-  for (const section of ['appearance', 'terminal', 'applications', 'containers', 'services', 'extensions', 'plugins', 'runtime', 'connection', 'codespaces'] as const) {
+  for (const section of ['appearance', 'terminal', 'applications', 'containers', 'services', 'extensions', 'plugins', 'runtime', 'connection', 'codespaces', 'storage', 'flower_recovery', 'agent'] as const) {
     const panel = await openCategory(section);
     inspectCategory(section, panel, locale);
     await page.screenshot({ path: `../../../../dist/settings-all-categories/${locale}-${width}-${dark ? 'dark' : 'light'}-${section}.png` });

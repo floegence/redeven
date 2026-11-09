@@ -48,7 +48,8 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = Object.freeze([
   { id: 'services', navLabel: 'Services', icon: Code, group: 'runtime_configuration' },
   { id: 'extensions', navLabel: 'Extensions', icon: Zap, group: 'ai_extensions' },
   { id: 'plugins', navLabel: 'Plugin configuration', icon: Code, group: 'ai_extensions' },
-  { id: 'storage', navLabel: 'Storage & Recovery', icon: Database, group: 'diagnostics' },
+  { id: 'flower_recovery', navLabel: 'Flower recovery', icon: Database, group: 'ai_extensions' },
+  { id: 'storage', navLabel: 'Storage', icon: Database, group: 'diagnostics' },
   { id: 'config', navLabel: 'Config File', icon: FileCode, group: 'diagnostics' },
   { id: 'connection', navLabel: 'Connection', icon: Globe, group: 'overview' },
   { id: 'agent', navLabel: 'Runtime Status', icon: Zap, group: 'overview' },
@@ -71,7 +72,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroupMeta[] = Object.freeze([
   { id: 'overview', title: 'Overview', sections: ['appearance', 'connection', 'agent'] },
   { id: 'runtime_configuration', title: 'Runtime Environment', sections: ['terminal', 'browser', 'applications', 'containers', 'services', 'runtime', 'codespaces'] },
   { id: 'security', title: 'Security', sections: ['permission_policy'] },
-  { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'extensions', 'plugins'] },
+  { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'extensions', 'plugins', 'flower_recovery'] },
   { id: 'diagnostics', title: 'Diagnostics', sections: ['storage', 'config', 'logging', 'debug_console'] },
 ]);
 

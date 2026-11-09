@@ -2159,7 +2159,8 @@
     "wslStopped": "请先启动此 WSL 环境，再读取或保存其访问设置。",
     "environmentOnlyLabel": "仅环境内部",
     "environmentOnlyDescription": "浏览器访问仅限环境内部，你仍可通过 Desktop 打开环境。",
-    "unifiedTitle": "设置"
+    "unifiedTitle": "设置",
+    "flowerGroup": "Flower"
   },
   "shell": {
     "accessibility": {

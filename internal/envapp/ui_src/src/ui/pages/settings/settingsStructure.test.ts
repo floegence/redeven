@@ -36,7 +36,7 @@ describe('settingsStructure', () => {
     expect(SETTINGS_NAV_ITEMS.map((item) => item.id)).toEqual(SETTINGS_SECTIONS.map((item) => item.id));
     expect(SETTINGS_GROUPS.find((group) => group.id === 'overview')?.sections).toEqual(['appearance', 'connection', 'agent']);
     expect(SETTINGS_GROUPS.find((group) => group.id === 'runtime_configuration')?.sections).toEqual(['terminal', 'browser', 'applications', 'containers', 'services', 'runtime', 'codespaces']);
-    expect(SETTINGS_GROUPS.find((group) => group.id === 'ai_extensions')?.sections).toEqual(['ai', 'extensions', 'plugins']);
+    expect(SETTINGS_GROUPS.find((group) => group.id === 'ai_extensions')?.sections).toEqual(['ai', 'extensions', 'plugins', 'flower_recovery']);
     expect(SETTINGS_GROUPS.find((group) => group.id === 'diagnostics')?.sections).toEqual(['storage', 'config', 'logging', 'debug_console']);
   });
 

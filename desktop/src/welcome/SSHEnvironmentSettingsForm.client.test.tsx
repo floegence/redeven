@@ -127,7 +127,7 @@ describe('SSH environment settings interactions', () => {
     expect(document.querySelector('.ssh-settings-summary')?.textContent).toBe(
       'Remote Download & Install · Custom directory · Custom mirror · 30 s',
     );
-    expect(document.getElementById('ssh-settings-runtime_root')).toBeNull();
+    await expect.poll(() => document.getElementById('ssh-settings-runtime_root'), { timeout: 400 }).toBeNull();
     expect(button('Save changes').disabled).toBe(true);
     input('label', 'Renamed');
     expect(document.querySelector('[role=dialog] h2')?.textContent).toContain('gzcom');
@@ -170,7 +170,7 @@ describe('SSH environment settings interactions', () => {
     await settle();
     expect(document.querySelector('[data-floe-dialog-panel]')?.textContent).toContain('Latest saved name');
     expect(button('Save changes').disabled).toBe(true);
-    expect(document.getElementById('ssh-settings-runtime_root')).toBeNull();
+    await expect.poll(() => document.getElementById('ssh-settings-runtime_root'), { timeout: 400 }).toBeNull();
   });
 
   it('lets the SSH picker own Escape and Enter before dialog dismissal or save', async () => {

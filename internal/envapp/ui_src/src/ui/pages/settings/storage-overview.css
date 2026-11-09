@@ -1,0 +1,26 @@
+.storage-overview { display: grid; gap: 1rem; min-width: 0; }
+.storage-overview-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.storage-overview-heading h2 { font-size: var(--floe-type-body); font-weight: 600; }
+.storage-overview-heading p, .storage-overview-note { margin-top: .3rem; font-size: var(--floe-type-supporting); line-height: 1.5; color: var(--muted-foreground); }
+.storage-overview-heading button { flex: none; }
+.storage-usage-list { padding: 0; list-style: none; }
+.storage-usage-row { min-width: 0; padding-block: .65rem; border-bottom: 1px solid var(--border); }
+.storage-usage-main { display: grid; grid-template-columns: minmax(0, 1fr) auto 1rem; align-items: center; gap: .75rem; width: 100%; min-height: 2rem; font-size: var(--floe-type-control); text-align: start; }
+.storage-usage-main > :first-child { overflow-wrap: anywhere; }
+.storage-usage-size { font-variant-numeric: tabular-nums; font-size: var(--floe-type-supporting); color: var(--muted-foreground); }
+.storage-usage-main svg { width: 1rem; height: 1rem; color: var(--muted-foreground); }
+.storage-usage-link { cursor: pointer; border-radius: var(--floe-radius-control); transition: color 140ms; }
+.storage-usage-link:hover { color: var(--primary); }
+.storage-usage-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.storage-usage-track { height: .3rem; overflow: hidden; border-radius: 1rem; background: var(--muted); margin: .25rem 1.75rem .15rem 0; }
+.storage-usage-track > span { display: block; height: 100%; min-width: 2px; background: var(--primary); border-radius: inherit; }
+.storage-overview-details { min-width: 0; }
+.storage-overview-details > summary { display: flex; align-items: center; gap: .5rem; cursor: pointer; width: fit-content; min-height: 2rem; color: var(--muted-foreground); font-size: var(--floe-type-supporting); }
+.storage-overview-details > summary::before { content: '›'; transform: rotate(0); transition: transform 140ms; }
+.storage-overview-details[open] > summary::before { transform: rotate(90deg); }
+.storage-location-list { list-style: none; display: grid; gap: .75rem; padding: .5rem 0; }
+.storage-location-list li { min-width: 0; }
+.storage-location-label { display: flex; align-items: center; justify-content: space-between; font-size: var(--floe-type-control); }
+.storage-location-list code, .storage-location-list p { overflow-wrap: anywhere; font-size: var(--floe-type-caption); color: var(--muted-foreground); }
+@media (pointer: coarse) { .storage-usage-main, .storage-overview-details > summary { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .storage-usage-link, .storage-overview-details > summary::before { transition: none; } }

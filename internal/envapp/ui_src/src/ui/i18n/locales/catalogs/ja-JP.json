@@ -8401,6 +8401,10 @@
       "flower": "Flower 復元の対象",
       "rebuildable": "再生成可能",
       "optional": "診断の保持は任意"
-    }
+    },
+    "usage": "ストレージ使用量",
+    "measuredScope": "測定済みの環境ディレクトリ · 外部プロジェクトを除く",
+    "manageOwner": "{owner}を管理",
+    "locations": "保存場所とバックアップ範囲"
   }
 }

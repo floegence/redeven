@@ -8405,6 +8405,10 @@
       "flower": "Couvert par la restauration Flower",
       "rebuildable": "Peut être régénéré",
       "optional": "Conservation facultative des diagnostics"
-    }
+    },
+    "usage": "Espace utilisé",
+    "measuredScope": "Emplacements mesurés de l’environnement · projets externes exclus",
+    "manageOwner": "Gérer {owner}",
+    "locations": "Emplacements et périmètre de sauvegarde"
   }
 }

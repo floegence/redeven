@@ -211,7 +211,7 @@ export function EnvAIPage(props: EnvAIPageProps) {
       focusComposerRequest={props.focusComposerRequest}
       onOpenUpdate={() => env.openSettings('agent', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}
       onOpenPermissions={() => env.openSettings('runtime', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}
-      onReviewIssues={() => env.openSettings('ai', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}
+      onReviewIssues={() => env.openSettings('flower_recovery', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } })}
       canReviewIssues={Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner)}
       canRetryGeneration={Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner)}
       focusEnabled={props.engaged ?? true}

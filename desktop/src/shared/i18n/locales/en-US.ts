@@ -750,6 +750,7 @@ export const enUS = {
     wslStopped: "Start this WSL environment before reading or saving its access settings.",
 
     interfaceTitle: 'Appearance & Language',
+    flowerGroup: 'Flower',
     interfaceDescription: 'Choose the appearance of Redeven Desktop and its environment windows on this device.',
     languageTitle: 'Language',
     languageDescription: 'Choose the interface language for Redeven Desktop and its environment windows.',

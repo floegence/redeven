@@ -1,5 +1,5 @@
 import { createMemo } from 'solid-js';
-import { FileCode, FileText } from '@floegence/floe-webapp-core/icons';
+import { FileCode } from '@floegence/floe-webapp-core/icons';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, SettingsList, CopyButton, SettingRow } from '../SettingsPrimitives';
 import { useI18n } from '../../../i18n';
@@ -18,7 +18,6 @@ export function ConfigFileSection() {
     >
       <SettingsList>
         <SettingRow
-          icon={FileText}
           title={i18n.t('settingsDesign.fileLocation')}
           description={i18n.t('settings.configFile.readOnlyRuntimeManaged')}
           control={<div class="settings-copy-value">

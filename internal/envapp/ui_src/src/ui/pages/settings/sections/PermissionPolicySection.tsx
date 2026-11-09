@@ -1,6 +1,6 @@
 import { For, Show, batch, createSignal, createEffect, onCleanup, untrack } from 'solid-js';
 import { createStore, produce, type SetStoreFunction } from 'solid-js/store';
-import { Shield, Trash, ShieldCheck } from '@floegence/floe-webapp-core/icons';
+import { Shield, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, SettingsList, AutoSaveIndicator, SubSectionHeader, SettingRow } from '../SettingsPrimitives';
@@ -180,7 +180,7 @@ export function PermissionPolicySection() {
       feedback={failure()?.kind === 'request' ? [{ id: 'save', severity: 'error', summary: error()!, actions: <Button size="sm" variant="outline" disabled={!canEdit() || saving()} onClick={() => setFailure(null)}>{i18n.t('common.actions.retry')}</Button> }] : []}
       actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={failure()?.kind === 'validation' ? error() : null} savedAt={savedAt()} enabled={canEdit()} />}>
       <SettingsList>
-        <SettingRow icon={ShieldCheck} title={i18n.t('settingsDesign.permissionCeiling')} description={localMaxDescription()}
+        <SettingRow title={i18n.t('settingsDesign.permissionCeiling')} description={localMaxDescription()}
           control={<div class="settings-permission-ceiling">
             <For each={[
               { key: 'read' as const, value: localRead, set: setLocalRead },

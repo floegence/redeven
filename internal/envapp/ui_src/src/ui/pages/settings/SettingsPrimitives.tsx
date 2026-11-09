@@ -14,7 +14,7 @@ import {
   type TagProps,
 } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../../utils/clipboard';
-import { For, Show, children, createMemo, createSignal, createUniqueId, onMount, type JSX } from 'solid-js';
+import { For, Show, children, splitProps, createMemo, createSignal, createUniqueId, onMount, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, Check } from '@floegence/floe-webapp-core/icons';
 import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
@@ -238,9 +238,14 @@ export function SettingsList(props: { children: JSX.Element; class?: string }) {
   return <FloeSettingsList class={cn('redeven-settings-list', props.class)}>{props.children}</FloeSettingsList>;
 }
 
-export function SettingRow(props: SettingRowProps) {
+export function SettingRow(props: Omit<SettingRowProps, 'icon'> & { resourceIcon?: SettingRowProps['icon'] }) {
+  // IMPORTANT: Ordinary product settings rows share one text edge. Optional
+  // decorative glyphs create random indents; reserve icons for navigation,
+  // resource identity and explicit actions, not field labels. resourceIcon is
+  // reserved for homogeneous resource lists, such as filesystem roots.
   const bindContext = createFlowerContextTarget(() => ({ id: props.title, label: props.title, state: { description: props.description } }));
-  const row = <FloeSettingRow {...props} class={cn('redeven-setting-row', props.class)} />;
+  const [, rowProps] = splitProps(props, ['resourceIcon']);
+  const row = <FloeSettingRow {...rowProps} icon={props.resourceIcon} class={cn('redeven-setting-row', props.class)} />;
   onMount(() => { if (row instanceof HTMLElement) bindContext(row); });
   return row;
 }

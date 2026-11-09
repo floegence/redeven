@@ -22,7 +22,7 @@ async function mount(width = 1280, dark = false) {
   host = document.createElement('div'); host.style.height = '780px'; document.body.append(host);
   dispose = render(() => {
     fixture = createRuntimeSettingsFixture(); api.request = fixture.request;
-    return <FloeProvider config={{ theme: { storageKey: 'runtime-settings-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><EnvSettingsPage context={fixture.context} panels={{ storage: () => <FlowerStorageSettings controller={fixture.context.env.aiReadinessController!} canAdmin={fixture.context.canAdmin()} /> }} /></FloeProvider>;
+    return <FloeProvider config={{ theme: { storageKey: 'runtime-settings-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><EnvSettingsPage context={fixture.context} panels={{ flower_recovery: () => <FlowerStorageSettings controller={fixture.context.env.aiReadinessController!} canAdmin={fixture.context.canAdmin()} /> }} /></FloeProvider>;
   }, host);
   await expect.poll(() => document.documentElement.classList.contains('dark')).toBe(dark);
 }
@@ -30,7 +30,7 @@ async function openSection(id: typeof SETTINGS_NAV_ITEMS[number]['id']) {
   fixture.setActiveSection(id);
   await expect.element(page.getByTestId(`settings-section-${id}`)).toBeVisible();
   if (id === 'ai') await expect.poll(() => host.querySelector('[data-testid="settings-section-ai"] .flower-settings-provider-card')).not.toBeNull();
-  else if (id !== 'storage') await expect.element(page.getByTestId(`settings-section-${id}`).getByRole('heading', { level: 1 })).toBeVisible();
+  else if (id !== 'flower_recovery') await expect.element(page.getByTestId(`settings-section-${id}`).getByRole('heading', { level: 1 })).toBeVisible();
   return host.querySelector(`[data-testid="settings-section-${id}"]`)! as HTMLElement;
 }
 function expectNoOverflow(panel: HTMLElement) {
@@ -432,7 +432,7 @@ it('keeps Flower defaults and storage recovery reachable and respects read-only 
   await mount(1280, true);
   await openSection('ai');
   await expect.element(page.getByText('Approval required', { exact: true })).toBeVisible();
-  const health = await openSection('storage');
+  const health = await openSection('flower_recovery');
   await expect.element(page.getByText('Flower backups', { exact: true })).toBeVisible();
   const backupButton = [...health.querySelectorAll('button')].find(button => button.innerText === 'View backups')!;
   expect(backupButton.closest('.floe-setting-row__control')).not.toBeNull();
@@ -449,7 +449,7 @@ it('navigates through the mobile section picker to models and storage recovery',
   await expect.element(page.getByTestId('settings-section-ai')).toBeVisible();
   fixture.setReadinessSnapshot({ state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false });
   await page.getByRole('combobox', { name: 'Settings', exact: true }).click();
-  await page.getByRole('option', { name: 'Storage', exact: true }).click();
+  await page.getByRole('option', { name: 'Flower recovery', exact: true }).click();
   await expect.element(page.getByText('Flower backups', { exact: true })).toBeVisible();
 });
 

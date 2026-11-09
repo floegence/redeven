@@ -1,6 +1,6 @@
 import { createSignal, onCleanup } from 'solid-js';
 
-export const SETTINGS_DESTINATIONS = ['appearance', 'storage', 'terminal', 'browser', 'extensions', 'applications', 'containers', 'services', 'plugins', 'config', 'connection', 'agent', 'runtime', 'logging', 'debug_console', 'codespaces', 'permission_policy', 'ai'] as const;
+export const SETTINGS_DESTINATIONS = ['appearance', 'storage', 'flower_recovery', 'terminal', 'browser', 'extensions', 'applications', 'containers', 'services', 'plugins', 'config', 'connection', 'agent', 'runtime', 'logging', 'debug_console', 'codespaces', 'permission_policy', 'ai'] as const;
 export type SettingsSection = typeof SETTINGS_DESTINATIONS[number];
 export type SettingsTarget = Readonly<{ section: SettingsSection; resource?: string }>;
 

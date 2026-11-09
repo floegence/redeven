@@ -48,7 +48,10 @@ try {
     await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-floe-dialog-panel]')).opacity === '1');
     await settleMotion();
     assert.equal(await dialog.locator('[data-floe-dialog-header] p').count(), 0);
-    assert.ok((await dialog.locator('.redeven-environment-settings-content h2').innerText()).includes(label), 'environment identity stays in the title row');
+    assert.equal(await dialog.locator('.environment-settings-resource-title').innerText(), label, 'only the environment name belongs in the resource row');
+    const positions = await page.locator('#ssh-settings-label, #ssh-settings-ssh_destination, #ssh-settings-ssh_port, .ssh-settings-field-control [role=radiogroup]').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().left));
+    assert.equal(positions.length, 4);
+    assert.ok(positions.every(left => Math.abs(left - positions[0]) <= 1), 'all editable controls share a leading edge in the hosted dialog');
   }
   async function switchTab(name, { reducedMotion = false } = {}) {
     const frames = await page.evaluate(async name => {

@@ -1,4 +1,4 @@
-import { HostedSettingsPanel } from '../../../internal/settings_ui/src/SettingsPanelHost';
+import { HostedSettingsPanel, useSettingsPanelHost } from '../../../internal/settings_ui/src/SettingsPanelHost';
 import { FlowerContextDialog as Dialog } from '../../../internal/flower_ui/src/FlowerContextDialog';
 import { Show, createMemo, createUniqueId, type JSX } from 'solid-js';
 import { Button, Tabs, TabPanel, createFloatingPresence } from '@floegence/floe-webapp-core/ui';
@@ -38,6 +38,7 @@ export function EnvironmentSettingsDialog(props: {
   connection: JSX.Element;
   access: JSX.Element;
 }) {
+  const settingsHost = useSettingsPanelHost();
   const relationID = createUniqueId();
   const tabID = (tab: EnvironmentSettingsTab) => `${relationID}-tab-${tab}`;
   const panelID = (tab: EnvironmentSettingsTab) => `${relationID}-panel-${tab}`;
@@ -58,7 +59,9 @@ export function EnvironmentSettingsDialog(props: {
     closeLabel={props.i18n.t('common.close')} escapeKeyPhase="bubble"
     class={`redeven-environment-settings-dialog${hasTabs() ? ' environment-settings-with-tabs' : ''}`} contentClass="environment-settings-content">
 {body}</Dialog>)}><div class="redeven-environment-settings-content environment-settings-content h-full flex min-h-0 flex-col" classList={{ 'environment-settings-with-tabs': hasTabs() }}>
-    <h2 class="px-5 py-3 text-sm font-semibold">{dialogTitle()}</h2>
+    {/* IMPORTANT: The enclosing dialog owns the settings title. A hosted
+        resource needs only its environment name, never a repeated category. */}
+    <Show when={settingsHost}><h2 class="environment-settings-resource-title">{presentation()?.label}</h2></Show>
     <Show when={props.unavailable}><p role="alert" class="px-5 py-3 text-sm text-warning">{props.i18n.t('interactionContinuity.unavailable')}</p><Button class="mx-5 mb-3" variant="outline" disabled={!props.canRevalidate} onClick={props.onRevalidate}>{props.i18n.t('interactionContinuity.revalidate')}</Button></Show>
     <Show when={hasTabs()}>
       <Tabs items={[
@@ -66,7 +69,7 @@ export function EnvironmentSettingsDialog(props: {
         { id: 'access', domId: tabID('access'), panelId: panelID('access'), label: props.i18n.t('settings.accessTab') },
       ]} activeId={props.tab} onChange={id => props.onTabChange(id as EnvironmentSettingsTab)}
         features={{ indicator: { mode: 'slider', animated: true, thicknessPx: 2 } }}
-        slotClassNames={{ tab: 'environment-settings-tab-trigger', indicator: 'environment-settings-indicator' }}
+        slotClassNames={{ scrollContainer: 'environment-settings-tabs-scroll', tab: 'environment-settings-tab-trigger', indicator: 'environment-settings-indicator' }}
         ariaLabel={props.i18n.t('settings.settingsWindowTitle')} class="environment-settings-tabs" />
     </Show>
     <TabPanel id={panelID('connection')} labelledBy={hasTabs() ? tabID('connection') : undefined} active={hasConnection() && props.tab === 'connection'} keepMounted class="environment-settings-tab">

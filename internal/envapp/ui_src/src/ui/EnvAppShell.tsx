@@ -5794,7 +5794,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                 refetchMaintenanceContext: refetchRuntimeMaintenanceContext,
               }}
             >
-              <Show when={settingsVisited()}><Suspense><EnvSettingsDialog session={settingsSession} panels={settingsPanels()} pluginSettings={{
+              <Show when={settingsVisited()}><Suspense><EnvSettingsDialog onOpenServiceCanvas={() => openTessiven()} onOpenPluginCenter={() => void openPluginCenter()} session={settingsSession} panels={settingsPanels()} pluginSettings={{
                 get items() { return pluginInventoryProjection()?.items ?? []; }, get ownerScope() { return pluginInventorySource(); },
                 get loading() { return pluginInventoryInitialPending(); }, get canManage() { return Boolean(pluginInventorySource() && canAdmin() && env()?.permissions?.can_read && env()?.permissions?.can_write && env()?.permissions?.can_execute); },
                 api: pluginLifecycle, refresh: refetchPluginInventory,

@@ -7,6 +7,11 @@ import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   storage: {
+    usage: "Space usage",
+    measuredScope: "Measured environment locations \u00b7 external projects excluded",
+    manageOwner: "Manage {owner}",
+    locations: "Locations and backup scope",
+
   "title": "Storage",
   "loading": "Inspecting…",
   "inspect": "Inspect storage",

@@ -85,6 +85,9 @@ try {
       const input = page.locator('#ssh-settings-ssh_destination');
       const baseline = await fieldGeometry(input); aligned(baseline, name);
       const label = await page.locator('#ssh-settings-label').boundingBox();
+      const port = await page.locator('#ssh-settings-ssh_port').boundingBox();
+      const authentication = await page.getByRole('radiogroup', { name: 'Authentication' }).boundingBox();
+      assert.ok(Math.abs(port.x - baseline.x) <= 1 && Math.abs(authentication.x - baseline.x) <= 1, `${name}: numeric and segmented controls share the input column's left edge`);
       assert.ok(Math.abs(baseline.right - label.x - label.width) <= 1, `${name}: name and SSH destination share their right edge`);
       await input.fill('gzc');
       const node = await input.elementHandle();

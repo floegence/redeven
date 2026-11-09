@@ -28,7 +28,7 @@ try {
     await page.locator('#fixture-open').click();
     await page.locator('.floe-theme-picker').waitFor(); await settle();
     const dialog = page.locator('.redeven-unified-settings-dialog');
-    assert.equal(await dialog.locator('.floe-settings-navigation__label').count(), 0, 'no empty group heading');
+    assert.deepEqual(await dialog.locator('.floe-settings-navigation__label').allTextContents(), ['Flower'], 'Flower capabilities share one group');
     assert.equal(await dialog.locator('h1').count(), 0, 'the category title belongs to the header');
     assert.equal(await dialog.locator('h2:not(.sr-only)').count(), 1, 'Theme appears once');
     const modeBox = await page.locator('.floe-theme-picker__modes').boundingBox();

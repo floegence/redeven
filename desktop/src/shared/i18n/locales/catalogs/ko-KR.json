@@ -2159,7 +2159,8 @@
     "wslStopped": "접근 설정을 읽거나 저장하기 전에 이 WSL 환경을 시작하세요.",
     "environmentOnlyLabel": "환경 내부만",
     "environmentOnlyDescription": "브라우저 접속은 환경 내부로 제한됩니다. Desktop에서는 계속 환경을 열 수 있습니다.",
-    "unifiedTitle": "설정"
+    "unifiedTitle": "설정",
+    "flowerGroup": "Flower"
   },
   "shell": {
     "accessibility": {

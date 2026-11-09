@@ -108,3 +108,12 @@ assert.match(welcome, /header=\{/);
 assert.match(welcome, /closeOnBackdropClick/);
 assert.match(read('desktop/src/welcome/App.tsx'), /<SettingsSelect section="appearance"/);
 console.log('Unified settings ownership contract passed.');
+
+// IMPORTANT: Storage is a read-only overview; recovery and plugin lifecycle keep
+// their own destinations, and ordinary row labels never acquire random indents.
+const storage = read('internal/envapp/ui_src/src/ui/pages/settings/StorageSettings.tsx');
+assert.doesNotMatch(storage, /AIReadinessSettingsSection|FlowerStorageSettings|method: ['"](?:POST|DELETE)['"]/);
+assert.match(storage, /props.active/);
+assert.match(storage, /abort\?\.abort\(\)/);
+assert.match(read('internal/envapp/ui_src/src/ui/pages/settings/SettingsPrimitives.tsx'), /Omit<SettingRowProps, 'icon'>/);
+assert.match(read('internal/envapp/ui_src/src/ui/pages/EnvAIPage.tsx'), /onReviewIssues=\{\(\) => env.openSettings\('flower_recovery'/);

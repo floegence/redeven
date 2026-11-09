@@ -34,6 +34,7 @@ const snapshot: FlowerSettingsSnapshot = {
   model_profile: { schema_version: 1, current_model_id: 'openai/gpt-5.2', providers: [{ id: 'openai', name: 'OpenAI', type: 'openai', models: [{ model_name: 'gpt-5.2', context_window: 400000, input_modalities: ['text'] }] }] },
   provider_secrets: [{ provider_id: 'openai', provider_api_key_configured: true, web_search_api_key_configured: false }],
 };
+const storageNavigation = vi.hoisted(() => ({ plugins: vi.fn(), surface: vi.fn(), files: vi.fn(), workbench: vi.fn(), canvas: vi.fn() }));
 const terminals = vi.hoisted(() => ({ attach: vi.fn(), takeover: vi.fn(), configure: vi.fn(), getLayout: vi.fn(), putWidget: vi.fn(), stream: vi.fn(), refresh: vi.fn() }));
 const retention = { effective: { max_lines: 1000, max_bytes: 1048576 }, defaults: { max_lines: 1000, max_bytes: 1048576 }, overrides: null };
 const layout = { seq: 1, revision: 1, updated_at_unix_ms: 1, widgets: [{ widget_id: 'widget-a', widget_type: 'redeven.terminal', x: 0, y: 0, width: 600, height: 400, z_index: 1, created_at_unix_ms: 1 }], widget_states: [{ widget_id: 'widget-a', widget_type: 'redeven.terminal', revision: 1, updated_at_unix_ms: 1, state: { kind: 'terminal', session_ids: ['session-a'], font_size: 14, font_family_id: 'jetbrains' } }], sticky_notes: [], annotations: [], background_layers: [] };
@@ -51,6 +52,7 @@ const adapter = { runtime: { display_name: 'Test environment' }, computerManagem
   listSkills: async () => ({ skills: [], catalog_version: 1 }), listSkillSources: async () => ({ items: [] }), listMCP: async () => ({ servers: [] }),
 } };
 const env = {
+  openSurface: storageNavigation.surface, openFileBrowserAtPath: storageNavigation.files, setViewMode: storageNavigation.workbench,
   env_id: () => 'one', flowerScopeKey: () => 'one:incarnation', env: () => ({ permissions: { can_admin: true, can_read: true, can_write: true, can_execute: true } }),
   settingsSeq: () => 0, settingsOrigin: () => fromFlower ? { kind: 'flower' } : null, returnFromSettingsOrigin: returnToFlower, settingsFocusSeq: () => session.revision(), settingsFocusSection: () => session.target()?.section,
   openSettings: (section: string, target?: { resource?: string }) => session.open({ section: section as never, ...target }), bumpSettingsSeq: changes,
@@ -69,13 +71,14 @@ vi.mock('./EnvSettingsPageContext', async original => {
 });
 vi.mock('./sections/ConnectionSection', () => ({ ConnectionSection: () => <p>Generic current connection</p> }));
 vi.mock('../../services/localApi', async original => ({ ...await original<object>(), fetchLocalApiJSON: async (url: string) => {
+  if (url.endsWith('/storage')) return { entries: ['plugins', 'skills', 'flower', 'snapshots', 'task_files'].map(id => ({ id, path: `/environment/${id}`, kind: 'persistent', backup: 'environment', bytes: 1000, present: true, complete: true })) };
   if (url.includes('history-retention?')) return retention;
   if (url.includes('history-retention')) return { supported: true, can_manage: true, defaults: { max_lines: 1000, max_bytes: 1048576 } };
   throw new Error(`Unexpected settings request: ${url}`);
 } }));
 beforeEach(async () => { fromFlower = false; writeStoredLanguagePreference('en-US'); vi.spyOn(console, 'warn'); await page.viewport(1440, 1000); terminals.getLayout.mockResolvedValue(layout); terminals.stream.mockImplementation(({ signal }: { signal: AbortSignal }) => new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }))); });
 afterEach(() => { dispose?.(); localStorage.clear(); document.body.replaceChildren(); window.history.replaceState({}, '', '/'); vi.clearAllMocks(); vi.restoreAllMocks(); });
-function mount(section: 'terminal' | 'ai' | 'runtime' | 'extensions' | 'browser' | 'appearance') {
+function mount(section: 'terminal' | 'ai' | 'runtime' | 'extensions' | 'browser' | 'appearance' | 'storage') {
   const host = document.createElement('div'); document.body.append(host);
   dispose = render(() => {
     session = createSettingsSession({ history: true });
@@ -83,7 +86,7 @@ function mount(section: 'terminal' | 'ai' | 'runtime' | 'extensions' | 'browser'
     [settingsError, setSettingsError] = createSignal<Error | null>(null);
     [admin, setAdmin] = createSignal(true);
     if (!session.target()) session.open({ section });
-    return <I18nProvider><FloeProvider><TerminalSettingsAttachmentsProvider><LiveTerminalFixture /><SettingsPanelContext.Provider value={{ ...session, register: () => () => {} }}><EnvSettingsDialog session={session} panels={[]} onThemeSourceChange={() => true} onShellThemeChange={() => true} /></SettingsPanelContext.Provider></TerminalSettingsAttachmentsProvider></FloeProvider></I18nProvider>;
+    return <I18nProvider><FloeProvider><TerminalSettingsAttachmentsProvider><LiveTerminalFixture /><SettingsPanelContext.Provider value={{ ...session, register: () => () => {} }}><EnvSettingsDialog onOpenServiceCanvas={storageNavigation.canvas} onOpenPluginCenter={storageNavigation.plugins} session={session} panels={[]} onThemeSourceChange={() => true} onShellThemeChange={() => true} /></SettingsPanelContext.Provider></TerminalSettingsAttachmentsProvider></FloeProvider></I18nProvider>;
   }, host);
 }
 it('retries a failed generic settings read within the current domain category', async () => {
@@ -358,4 +361,20 @@ it.each([1440, 390])('makes browser cadence and Workbench appearance reachable i
   expect(dialog.getBoundingClientRect().width).toBeLessThanOrEqual(width);
   expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
   expect(terminals.attach).not.toHaveBeenCalled(); expect(terminals.takeover).not.toHaveBeenCalled();
+});
+
+it('keeps storage overview separate and opens exact owner destinations', async () => {
+  mount('storage');
+  const panel = page.getByTestId('settings-section-storage');
+  await expect.element(panel.getByRole('button', { name: 'Manage Application plugins' })).toBeVisible();
+  expect(document.querySelector('.ai-readiness-settings')).toBeNull();
+  await panel.getByRole('button', { name: 'Manage Application plugins' }).click();
+  expect(storageNavigation.plugins).toHaveBeenCalledOnce();
+  await panel.getByRole('button', { name: 'Manage Recovery snapshots' }).click();
+  expect(session.target()?.section).toBe('flower_recovery');
+  await expect.element(page.getByTestId('settings-section-flower_recovery')).toBeVisible();
+  session.open({ section: 'storage' });
+  await panel.getByRole('button', { name: 'Manage Task working files' }).click();
+  expect(session.target()).toBeNull();
+  expect(storageNavigation.files).toHaveBeenCalledWith('/environment/task_files');
 });

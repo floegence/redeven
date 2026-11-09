@@ -15,6 +15,10 @@ describe('unified settings ownership gate', () => {
     expect(source('../EnvContainersPage.tsx')).not.toContain('container-service-configuration-dialog');
     expect(source('./EnvSettingsDialog.tsx')).toContain('ContainerSettingsPanel');
   });
+  it('routes Flower recovery to its own settings destination', () => {
+    expect(source('../EnvAIPage.tsx')).toContain("onReviewIssues={() => env.openSettings('flower_recovery'");
+    expect(source('./settingsStructure.ts')).toContain("id: 'flower_recovery'");
+  });
   it('uses one provider editor and makes storage discoverable', () => {
     const section = source('./sections/FlowerSection.tsx');
     expect(section).toContain('FlowerSettingsSurface');

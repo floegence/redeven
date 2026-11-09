@@ -36,6 +36,12 @@ export function DesktopSettingsDialog(props: {
     { id: 'extensions', label: copy().extensions.t('title') },
     { id: 'browser', label: copy().computer.title },
   ];
+  // IMPORTANT: These are Flower capabilities, not independent Desktop categories.
+  // Keep grouping in Floe's published navigation contract, including search.
+  const groups = () => [
+    { id: 'desktop', label: '', items: items().slice(0, 2) },
+    { id: 'flower', label: props.i18n.t('settings.flowerGroup'), items: items().slice(2) },
+  ].map(group => ({ ...group, items: group.items.filter(item => item.label.toLocaleLowerCase().includes(search().toLocaleLowerCase()) || group.label.toLocaleLowerCase().includes(search().toLocaleLowerCase())) })).filter(group => group.items.length);
   const FlowerPanel = (kind: string) => <Show when={props.flowerScope} keyed fallback={<p role="alert">{props.i18n.t('environmentCenter.environmentRegistrationUnavailable')}</p>}>{(_scope) => {
     const lifetime = new AbortController(); onCleanup(() => lifetime.abort());
     const adapter = props.createFlowerAdapter(lifetime.signal);
@@ -53,13 +59,13 @@ export function DesktopSettingsDialog(props: {
     title={props.i18n.t('settings.unifiedTitle')} closeLabel={props.i18n.t('common.close')} closeOnBackdropClick
     header={<div class="redeven-settings-dialog-heading">
       <div class="redeven-settings-dialog-breadcrumb"><span>{props.i18n.t('settings.unifiedTitle')}</span><ChevronRight aria-hidden="true" /><span>{label()}</span></div>
-      <div ref={setNavigationHost} class="redeven-settings-dialog-mobile"><Select open={navigationPresented()} onOpenChange={open => setNavigationOpen(open && props.session.present() && navigationVisible())} value={target()?.section ?? 'appearance'} onChange={section => { if (navigationVisible()) select(section); }} options={items().map(item => ({ value: item.id, label: item.label }))} ariaLabel={props.i18n.t('settings.unifiedTitle')} /></div>
+      <div ref={setNavigationHost} class="redeven-settings-dialog-mobile"><Select open={navigationPresented()} onOpenChange={open => setNavigationOpen(open && props.session.present() && navigationVisible())} value={target()?.section ?? 'appearance'} onChange={section => { if (navigationVisible()) select(section); }} options={items().map(item => ({ value: item.id, label: ['ai', 'extensions', 'browser'].includes(item.id) && item.id !== 'ai' ? `${props.i18n.t('settings.flowerGroup')} · ${item.label}` : item.label }))} ariaLabel={props.i18n.t('settings.unifiedTitle')} /></div>
       <Button variant="ghost" size="icon" class="redeven-settings-dialog-close" aria-label={props.i18n.t('common.close')} onClick={props.session.close}><X class="h-4 w-4" /></Button>
     </div>}>
     <div class="redeven-desktop-settings h-full min-h-0">
     <SettingsLayout class="h-full min-h-0 w-full" sidebar={<SettingsNavigation value={target()?.section ?? 'appearance'} onChange={select} label={props.i18n.t('settings.unifiedTitle')}
       search={<Input value={search()} onInput={event => setSearch(event.currentTarget.value)} aria-label={props.i18n.t('floeControls.searchPlaceholder')} placeholder={props.i18n.t('floeControls.searchPlaceholder')} />}
-      groups={[{ id: 'settings', label: '', items: items().filter(item => item.label.toLowerCase().includes(search().toLowerCase())) }]} />}>
+      groups={groups()} />}>
       <div class="relative h-full min-h-0">
       <For each={ids}>{id => {
         const [mounted, setMounted] = createSignal(false);

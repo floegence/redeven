@@ -133,8 +133,7 @@ export function RuntimeConfigSection() {
           <SettingsList>
             <For each={roots()}>
               {(root, index) => (
-                <SettingRow class="runtime-filesystem-root"
-                  icon={root.kind === 'home' ? Home : root.kind === 'computer' ? MonitorPointer : Folder}
+                <SettingRow class="runtime-filesystem-root" resourceIcon={root.kind === 'home' ? Home : root.kind === 'computer' ? MonitorPointer : Folder}
                   title={root.kind === 'home' ? i18n.t('settingsDesign.homeDirectory') : root.kind === 'computer' ? i18n.t('settingsDesign.computerRoot') : root.label || i18n.t('runtimeConfig.customRoot')}
                   description={root.kind === 'home' ? agentHomeDir() || '~' : root.path}
                   control={<div class="settings-row-actions">

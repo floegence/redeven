@@ -60,6 +60,10 @@ it('gives appearance one dialog identity and no separate scope strip', async () 
   session.open({ section: 'appearance' });
   await vi.waitFor(() => expect(document.querySelector('[data-appearance-content]')).not.toBeNull());
   expect(document.querySelector('.floe-settings-navigation__item[aria-current]')?.textContent).toBe('Appearance & Language');
+  const groups = [...document.querySelectorAll('.floe-settings-navigation__group')];
+  expect(groups).toHaveLength(2);
+  expect(groups[1].querySelector('.floe-settings-navigation__label')?.textContent).toBe('Flower');
+  expect([...groups[1].querySelectorAll('button')].map(node => node.textContent)).toEqual(['Flower Settings', 'Extensions', 'Browser and desktop']);
   expect(document.querySelector('.redeven-unified-settings-dialog-header')?.textContent).toContain('Appearance & Language');
   document.querySelector<HTMLButtonElement>('.redeven-settings-dialog-mobile [role=combobox]')!.click();
   await vi.waitFor(() => expect(document.querySelectorAll('[role=listbox]')).toHaveLength(1));

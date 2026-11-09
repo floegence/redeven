@@ -1,6 +1,6 @@
 import { SettingsSelect as Select } from '../SettingsSelect';
 import { createSignal, createEffect, onCleanup } from 'solid-js';
-import { Database, FileText, Filter } from '@floegence/floe-webapp-core/icons';
+import { Database } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, SettingsList, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
@@ -63,7 +63,6 @@ export function LoggingSection() {
     >
       <SettingsList>
         <SettingRow
-          icon={FileText}
           title={i18n.t('loggingSettings.formatLabel')}
           control={
           <Select section="logging"
@@ -75,7 +74,6 @@ export function LoggingSection() {
           }
         />
         <SettingRow
-          icon={Filter}
           title={i18n.t('loggingSettings.levelLabel')}
           control={
           <Select section="logging"

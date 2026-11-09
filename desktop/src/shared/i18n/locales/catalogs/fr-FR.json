@@ -2159,7 +2159,8 @@
     "wslStopped": "Démarrez cet environnement WSL avant de lire ou d’enregistrer ses paramètres d’accès.",
     "environmentOnlyLabel": "Dans l’environnement uniquement",
     "environmentOnlyDescription": "L’accès par navigateur reste limité à l’environnement. Vous pouvez toujours l’ouvrir avec Desktop.",
-    "unifiedTitle": "Paramètres"
+    "unifiedTitle": "Paramètres",
+    "flowerGroup": "Flower"
   },
   "shell": {
     "accessibility": {

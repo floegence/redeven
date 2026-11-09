@@ -8405,6 +8405,10 @@
       "flower": "Cubierto por la recuperación de Flower",
       "rebuildable": "Se puede regenerar",
       "optional": "Conservación opcional del diagnóstico"
-    }
+    },
+    "usage": "Uso del espacio",
+    "measuredScope": "Ubicaciones medidas del entorno · sin proyectos externos",
+    "manageOwner": "Gestionar {owner}",
+    "locations": "Ubicaciones y alcance de las copias"
   }
 }

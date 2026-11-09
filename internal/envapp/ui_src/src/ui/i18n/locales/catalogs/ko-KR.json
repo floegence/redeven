@@ -8401,6 +8401,10 @@
       "flower": "Flower 복구에 포함",
       "rebuildable": "재생성 가능",
       "optional": "진단 보관 선택 가능"
-    }
+    },
+    "usage": "저장 공간 사용량",
+    "measuredScope": "측정된 환경 디렉터리 · 외부 프로젝트 제외",
+    "manageOwner": "{owner} 관리",
+    "locations": "저장 위치 및 백업 범위"
   }
 }

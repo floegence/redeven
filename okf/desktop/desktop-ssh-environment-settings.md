@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop SSH environment settings
 tags: [desktop, environments, ssh, settings, interaction]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -12,7 +12,7 @@ SSH creation/editing share one form and registration API. Common controls preced
 # Contract
 
 ## SSH fields and validation
-The form presents name, connection and authentication, automatic status detection, and advanced configuration in that order. Creation and editing use the same canonical SSH normalizers.
+The form presents name, connection and authentication, automatic status detection, and advanced configuration in that order. Creation and editing use the same canonical SSH normalizers. Common fields share one label/control grid and a leading control edge; port and authentication cannot right-align their own columns. The editor container, not only the window, determines the stacked layout. Floe owns control geometry and tab interaction; the enclosing dialog owns the settings title, while a hosted resource shows only the environment name.
 
 # Boundaries
 

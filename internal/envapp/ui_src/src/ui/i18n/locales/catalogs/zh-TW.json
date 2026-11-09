@@ -8401,6 +8401,10 @@
       "flower": "Flower 復原涵蓋",
       "rebuildable": "可重新產生",
       "optional": "視需要保留診斷"
-    }
+    },
+    "usage": "空間用量",
+    "measuredScope": "已統計的環境目錄 · 不含外部專案",
+    "manageOwner": "管理{owner}",
+    "locations": "儲存位置與備份範圍"
   }
 }

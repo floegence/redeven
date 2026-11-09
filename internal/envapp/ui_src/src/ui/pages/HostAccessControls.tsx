@@ -147,7 +147,7 @@ export function HostAccessFeatureSettings(props: {
     const i18n = useI18n();
     const title = () => i18n.t(props.feature === 'applications' ? 'hostAccess.applicationFeature' : 'remoteDesktop.title');
     return <section class="host-access-feature-settings" aria-label={title()}>
-      <SettingRow class="host-access-feature-row" title={title()} icon={() => <HostAccessFeatureMark feature={props.feature} />}
+      <SettingRow class="host-access-feature-row" title={title()} resourceIcon={() => <HostAccessFeatureMark feature={props.feature} />}
         description={i18n.t(props.state === 'paused' ? 'hostAccess.paused' : props.state === 'unconfigured' ? 'hostAccess.unconfigured' : props.ready === false ? 'hostAccess.needsAttention' : 'hostAccess.enabled')}
         control={<HostAccessManagement {...props} compact title={title()} />} />
       {props.children}

@@ -1,6 +1,6 @@
 import { useSettingsPresentation } from '../../../../../../../settings_ui/src/SettingsPanelHost';
 import { Show, createSignal } from 'solid-js';
-import { Activity, Cpu, RefreshIcon } from '@floegence/floe-webapp-core/icons';
+import { Activity, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -93,9 +93,9 @@ export function RuntimeStatusSection() {
       error={ctx.maintenanceError()}
     >
       <SettingsList class="runtime-status-summary">
-        <SettingRow icon={Activity} title={i18n.t('runtimeStatus.statusLabel')}
+        <SettingRow title={i18n.t('runtimeStatus.statusLabel')}
           control={<span class={cn('font-medium', statusOnline() ? 'text-success' : 'text-warning')}>{statusLabel()}</span>} />
-        <SettingRow icon={Cpu} title={i18n.t('runtimeStatus.currentVersion')} description={compatLabel()}
+        <SettingRow title={i18n.t('runtimeStatus.currentVersion')} description={compatLabel()}
           control={<code class="font-mono text-xs text-foreground">{version()}</code>} />
         <SettingRow title={i18n.t('runtimeStatus.activeWork')} control={<span class="text-xs">{activeWorkSummary()}</span>} />
         <SettingRow title={i18n.t('runtimeStatus.desktopModelSource')}

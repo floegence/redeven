@@ -8401,6 +8401,10 @@
       "flower": "Flower 恢复覆盖",
       "rebuildable": "可重新生成",
       "optional": "按需保留诊断"
-    }
+    },
+    "usage": "空间使用",
+    "measuredScope": "已统计的环境目录 · 不含外部项目",
+    "manageOwner": "管理{owner}",
+    "locations": "存储位置与备份范围"
   }
 }

@@ -33,7 +33,8 @@ const NAV_SEARCH_KEYWORDS: Record<EnvSettingsSection, string[]> = {
   services: ['services', 'network', 'storage', 'resources'],
   extensions: ['skills', 'mcp', 'agent plugins'],
   plugins: ['plugin', 'connections'],
-  storage: ['storage', 'data', 'recovery', 'backup'],
+  storage: ['storage', 'data', 'space', 'usage'],
+  flower_recovery: ['flower', 'recovery', 'backup', 'snapshots', 'diagnostics'],
   config: ['path', 'config file', 'configuration', 'json', 'config_path', 'toml'],
   connection: ['url', 'e2ee', 'psk', 'encryption', 'websocket', 'ws', 'channel', 'environment id', 'instance id', 'control plane'],
   agent: ['version', 'restart', 'upgrade', 'update', 'status', 'maintenance', 'health', 'runtime status', 'compatibility', 'release'],
@@ -65,6 +66,7 @@ function navLabel(section: EnvSettingsSection, fallback: string, t: ReturnType<t
     case 'services': return t('settings.nav.services');
     case 'extensions': return t('settings.nav.extensions');
     case 'plugins': return t('settings.plugins.target');
+    case 'flower_recovery': return t('storage.flower');
     case 'storage': return t('storage.title');
     case 'config':
       return t('settings.nav.config');

@@ -2159,7 +2159,8 @@
     "wslStopped": "Starten Sie diese WSL-Umgebung, bevor Sie ihre Zugriffseinstellungen lesen oder speichern.",
     "environmentOnlyLabel": "Nur innerhalb der Umgebung",
     "environmentOnlyDescription": "Der Browserzugriff bleibt auf die Umgebung beschränkt. Sie können sie weiterhin über Desktop öffnen.",
-    "unifiedTitle": "Einstellungen"
+    "unifiedTitle": "Einstellungen",
+    "flowerGroup": "Flower"
   },
   "shell": {
     "accessibility": {

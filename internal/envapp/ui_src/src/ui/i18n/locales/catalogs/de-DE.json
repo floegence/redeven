@@ -8405,6 +8405,10 @@
       "flower": "Durch Flower-Wiederherstellung abgedeckt",
       "rebuildable": "Neu erzeugbar",
       "optional": "Optionale Diagnoseaufbewahrung"
-    }
+    },
+    "usage": "Speicherbelegung",
+    "measuredScope": "Erfasste Umgebungsverzeichnisse · ohne externe Projekte",
+    "manageOwner": "{owner} verwalten",
+    "locations": "Speicherorte und Sicherungsumfang"
   }
 }

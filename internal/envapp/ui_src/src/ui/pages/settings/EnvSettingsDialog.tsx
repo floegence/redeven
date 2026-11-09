@@ -31,6 +31,8 @@ export function EnvSettingsDialog(props: {
   session: ReturnType<typeof createSettingsSession>;
   panels: readonly SettingsPanelRegistration[];
   pluginSettings?: PluginSettingsOwner;
+  onOpenPluginCenter: () => void;
+  onOpenServiceCanvas: () => void;
   onThemeSourceChange: (value: ThemeType) => boolean | Promise<boolean>;
   onShellThemeChange: (mode: FloeShellThemeMode, preset: string) => boolean | Promise<boolean>;
 }) {
@@ -64,16 +66,28 @@ export function EnvSettingsDialog(props: {
       : <div class="redeven-settings-stack"><BrowserDisplaySettings /><FlowerComputerConnections embedded open={props.session.present() && target()?.section === 'browser'} threadID="" adapter={owner()} copy={copy().computer} onOpenChange={open => { if (!open) props.session.close(); }} /></div>
     }</Show></>;
   };
-  const Storage = () => {
+  const Recovery = () => {
     const ctx = useEnvSettingsPage();
     const controller = env.aiReadinessController ?? createAIReadinessController();
-    return <div class="space-y-6"><StorageSettings canAdmin={ctx.canAdmin() && ctx.canInteract()} scope={scope()} openFlower={() => env.openSettings('ai')} openTooling={() => env.openSettings('codespaces')} />
-      <AIReadinessSettingsSection controller={controller} canAdmin={ctx.canAdmin()} endpointID={env.env_id()} namespacePublicID={env.env()?.namespace_public_id ?? ''} modelID={ctx.settings()?.ai?.current_model_id ?? ''} modelOptions={(ctx.settings()?.ai?.providers ?? []).flatMap(provider => (provider.models ?? []).map(model => ({ id: `${provider.id}/${model.model_name}`, label: `${provider.name} · ${model.model_name}` })))} permissionType={ctx.settings()?.ai?.permission_type ?? 'approval_required'} workingDir={ctx.settings()?.runtime?.agent_home_dir ?? ''} />
+    return <div>
+      <AIReadinessSettingsSection controller={controller} canAdmin={ctx.canAdmin() && ctx.canInteract() && props.session.present() && target()?.section === 'flower_recovery'} endpointID={env.env_id()} namespacePublicID={env.env()?.namespace_public_id ?? ''} modelID={ctx.settings()?.ai?.current_model_id ?? ''} modelOptions={(ctx.settings()?.ai?.providers ?? []).flatMap(provider => (provider.models ?? []).map(model => ({ id: `${provider.id}/${model.model_name}`, label: `${provider.name} · ${model.model_name}` })))} permissionType={ctx.settings()?.ai?.permission_type ?? 'approval_required'} workingDir={ctx.settings()?.runtime?.agent_home_dir ?? ''} />
     </div>;
   };
   const panels: Partial<Record<EnvSettingsSection, () => JSX.Element>> = {
     appearance: () => <AppearanceSettings onThemeSourceChange={props.onThemeSourceChange} onShellThemeChange={props.onShellThemeChange} />,
-    storage: Storage, terminal: () => <Suspense><TerminalSettingsPanel resource={terminalResource()} /></Suspense>, ai: () => RuntimeFlower('ai'),
+    storage: () => {
+      const ctx = useEnvSettingsPage();
+      return <StorageSettings canAdmin={ctx.canAdmin() && ctx.canInteract()} active={props.session.present() && target()?.section === 'storage'} scope={scope()} onManage={destination => {
+        if (!ctx.canAdmin() || !ctx.canInteract() || !props.session.present() || target()?.section !== 'storage') return;
+        if (destination.kind === 'settings') { props.session.open({ section: destination.section }); return; }
+        if (destination.kind === 'plugins') { props.onOpenPluginCenter(); return; }
+        props.session.close();
+        if (destination.kind === 'canvas') props.onOpenServiceCanvas();
+        else if (destination.kind === 'surface') env.openSurface(destination.surface);
+        else if (destination.kind === 'files') env.openFileBrowserAtPath(destination.path);
+        else env.setViewMode('workbench');
+      }} />;
+    }, flower_recovery: Recovery, terminal: () => <Suspense><TerminalSettingsPanel resource={terminalResource()} /></Suspense>, ai: () => RuntimeFlower('ai'),
     browser: panel('browser', () => RuntimeFlower('browser')), extensions: () => RuntimeFlower('extensions'),
     plugins: () => <PluginSettingsPanel resource={pluginResource()} installed={props.pluginSettings} />,
     containers: () => <Suspense><ContainerSettingsPanel resource={containerResource()} /></Suspense>,
