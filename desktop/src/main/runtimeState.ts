@@ -21,12 +21,16 @@ import {
 } from './desktopPrivateBridge';
 
 export const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
+const DEFAULT_ENV_APP_SHELL_TIMEOUT_MS = 15_000;
 // Leave bridge capacity for control and interactive traffic while reusing
 // connections across every asset in a packaged Env App.
 const RUNTIME_PROBE_MAX_SOCKETS = 8;
 
 export type RuntimeProbeOptions = Readonly<{
+  /** Per-request deadline, including time queued on the transport agent. */
   timeoutMs?: number;
+  /** Total deadline for the HTML shell and all bounded asset batches. */
+  shellTimeoutMs?: number;
   signal?: AbortSignal;
   headers?: Readonly<Record<string, string>>;
   shellCacheScope?: string;
@@ -36,6 +40,7 @@ export type RuntimeProbeOptions = Readonly<{
 
 type NormalizedRuntimeProbeOptions = Readonly<{
   timeoutMs: number;
+  shellTimeoutMs: number;
   signal?: AbortSignal;
   headers?: Readonly<Record<string, string>>;
   shellCacheScope?: string;
@@ -372,9 +377,9 @@ async function requestEnvAppShell(
   baseURL: string,
   options: NormalizedRuntimeProbeOptions,
 ): Promise<EnvAppShellProbeOutcome> {
-  const deadline = Date.now() + options.timeoutMs;
+  const deadline = Date.now() + options.shellTimeoutMs;
   const shellResponse = await request(new URL('/_redeven_proxy/env/', baseURL), {
-    timeoutMs: Math.max(1, deadline - Date.now()),
+    timeoutMs: Math.min(options.timeoutMs, Math.max(1, deadline - Date.now())),
     signal: options.signal,
     accept: 'text/html;q=1.0,*/*;q=0.5',
     headers: options.headers,
@@ -393,26 +398,31 @@ async function requestEnvAppShell(
   const assetFingerprint = validation.assetPaths.join('\n');
   const assetResponses: RuntimeProbeResponse[] = [];
   let nextAsset = 0;
+  let unavailable = false;
   await Promise.all(Array.from({ length: Math.min(RUNTIME_PROBE_MAX_SOCKETS, validation.assetPaths.length) }, async () => {
-    while (nextAsset < validation.assetPaths.length) {
+    while (!unavailable && nextAsset < validation.assetPaths.length) {
       options.signal?.throwIfAborted();
       const assetPath = validation.assetPaths[nextAsset++];
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) {
-        assetResponses.push({ ok: false, failure: { kind: 'timeout' } });
+        unavailable = true;
         return;
       }
-      assetResponses.push(await request(new URL(assetPath, baseURL), {
-        timeoutMs: remainingMs,
+      const response = await request(new URL(assetPath, baseURL), {
+        timeoutMs: Math.min(options.timeoutMs, remainingMs),
         signal: options.signal,
         method: 'HEAD',
         accept: '*/*',
         headers: options.headers,
         agent: options.agent,
-      }));
+      });
+      assetResponses.push(response);
+      // A failed batch cannot prove readiness. Do not spend the entire shell
+      // budget scheduling more batches after a transport failure or timeout.
+      if (!response.ok && response.failure.kind !== 'invalid_response') unavailable = true;
     }
   }));
-  if (assetResponses.some((response) => !response.ok && response.failure.kind !== 'invalid_response')) {
+  if (unavailable) {
     return { result: 'unavailable', assetFingerprint };
   }
   if (assetResponses.some((response) => !response.ok || response.value.statusCode !== 200)) {
@@ -535,8 +545,10 @@ function probeStatusFromStartup(startup: StartupReport): RuntimeProbeStatus {
 
 function normalizedProbeOptions(options: RuntimeProbeOptions): NormalizedRuntimeProbeOptions {
   const timeoutMs = Number(options.timeoutMs ?? DEFAULT_RUNTIME_PROBE_TIMEOUT_MS);
+  const shellTimeoutMs = Number(options.shellTimeoutMs ?? DEFAULT_ENV_APP_SHELL_TIMEOUT_MS);
   return {
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
+    shellTimeoutMs: Number.isFinite(shellTimeoutMs) && shellTimeoutMs > 0 ? shellTimeoutMs : DEFAULT_ENV_APP_SHELL_TIMEOUT_MS,
     ...(options.signal ? { signal: options.signal } : {}),
     ...(options.headers ? { headers: options.headers } : {}),
     ...(options.agent ? { agent: options.agent } : {}),

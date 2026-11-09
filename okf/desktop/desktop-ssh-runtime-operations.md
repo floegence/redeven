@@ -19,9 +19,9 @@ Never send empty retries. Start/Restart/Update carry transient credentials throu
 Connect Timeout bounds probe/inventory/readiness; startup/packages have distinct deadlines. Windows x64 askpass accepts password/passphrase, rejects host-key prompts, writes only private stdout and preserves OpenSSH trust. Missing helper fails; no secrets in args/files/logs. Bounded includes exclude wildcard/negated picker aliases, not explicit destinations. Save exact root/container engine+ID separately from label.
 
 ## Connection verification and opening
-Desktop probes own at most eight reusable HTTP(S) connections and eight concurrent asset requests; validate every referenced asset within the shared shell deadline, including queue time. Success, failure and cancellation release owned connections. Caller-supplied authenticated Gateway agents retain their route and owner. Readiness diagnostics preserve observed reasons without private bridge credentials; an asset-check failure is not a missing Runtime Service. Bridge limits remain unchanged.
+Probes own at most eight reusable HTTP(S) connections and eight concurrent asset requests. Each request has a 1.5-second deadline including queue time; HTML and all asset batches share a separate 15-second deadline. Caller deadlines and cancellation still apply. Transport failure stops further batches; readiness requires every asset. Always release owned connections; preserve caller-owned Gateway agents. Diagnostics retain observed reasons without credentials. Asset failure does not mean a missing Runtime Service; bridge limits remain unchanged.
 
-A known openable placement is a dial hint even when its management observation is stale. Open creates a cancelable launcher operation first, then verifies the live bridge and Env App before admission. Unknown/unreachable management state never authorizes Start or Restart. Read-only preflight, connection retries and readiness share a 30-second budget; explicit installation/update keeps its existing lifecycle budget. Bridge establishment has a 15-second deadline and failed owned commands escalate TERM to KILL after one second.
+Known openable placement remains a dial hint when management observations are stale. Open creates a cancelable operation before bridge/Env App verification. Unknown management state never authorizes Start/Restart. Preflight, retries and readiness share 30 seconds; installation/update retain their lifecycle budget. Bridge establishment allows 15 seconds; failed owned commands escalate TERM to KILL after one second.
 
 When a bridge fails or repeated upper protocol attempts expose a stall, the SSH owner coalesces a bounded five-second remote `true` probe for the exact generation. Local `-O check` is not peer liveness. Healthy transports remain; failed generations are fenced before owned masters/children are retired. Acquisitions await verification/retirement; late reports cannot kill replacements or other credential scopes. Canceling one verification waiter does not cancel shared verification. Never replay a business command or vary SSH QoS automatically.
 
@@ -37,7 +37,7 @@ Remote snippets perform bounded probe/stage/inventory/stop/install/start/verify/
 ## Progress and results
 Use generated signed GitHub latest/download/redeven-install.sh with selected tag, no Portal duplicate. One Launcher Operation measures actual upload/download/acquisition bytes. Parse complete Downloading Redeven: N% records; stderr diagnostics, stdout stage path. Companion output cannot reset Runtime progress. No additional parser/process/poll.
 
-100% transfer proves no activation/readiness. Freeze measured progress on failure/cancel. Acquisition/staging/upload/unpack are preparation; only activation changes live slot. Create operation before first SSH command. Distinguish connection/engine/preparation/command/readiness errors with technical stderr. Empty successful report stays pending to deadline; nonzero read is command failure, valid blocked report Runtime failure, only nonempty malformed report invalid. All lifecycle paths share interpretation.
+100% transfer proves no readiness. Freeze progress on failure/cancel. Acquisition/staging/upload/unpack prepare; only activation changes the live slot. Create operations before SSH. Distinguish connection/engine/preparation/command/readiness errors with stderr. Empty successful reports remain pending; nonzero reads mean command failure, blocked reports Runtime failure, nonempty malformed reports invalid. All lifecycle paths share interpretation.
 
 # Boundaries
 
@@ -47,4 +47,4 @@ SSH registrations retain direct lifecycle menus. Gateway/Provider-only entries c
 
 - `redeven:desktop/src/main/sshTransportManager.ts:1` - Source.
 - `redeven:desktop/src/main/sshTransportManager.test.ts:1` - Tests.
-- `redeven:desktop/src/main/runtimeProbeConnections.test.ts:1` - Asset capacity, deadlines and cleanup.
+- `redeven:desktop/src/main/runtimeProbeConnections.test.ts:1` - Delayed batches, per-request/total deadlines, missing assets, cancellation and connection ownership.

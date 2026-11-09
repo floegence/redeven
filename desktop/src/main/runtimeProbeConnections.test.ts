@@ -1,12 +1,12 @@
 import http from 'node:http';
 import type { Socket } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
-import { probeExternalLocalUIHealth, probeLocalRuntimeBridgeStartup } from './runtimeState';
+import { probeExternalLocalUIHealth, probeExternalLocalUIStartup, probeLocalRuntimeBridgeStartup } from './runtimeState';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 
 const token = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
-async function createRuntime(options: { stallAssets?: boolean; missingAsset?: number } = {}) {
+async function createRuntime(options: { stallAssets?: boolean; missingAsset?: number; assetDelayMs?: number } = {}) {
   const sockets = new Set<Socket>();
   const admitted = new Set<Socket>();
   const assets = new Set<string>();
@@ -37,7 +37,7 @@ async function createRuntime(options: { stallAssets?: boolean; missingAsset?: nu
         const timer = setTimeout(() => {
           timers.delete(timer);
           response.writeHead(status, { 'Content-Length': '0' }).end();
-        }, 20);
+        }, options.assetDelayMs ?? 20);
         timers.add(timer);
       }
     } else {
@@ -90,9 +90,9 @@ describe('Runtime probe connection ownership', () => {
   });
 
   it('checks resources beyond the first batch instead of silently skipping them', async () => {
-    const runtime = await createRuntime({ missingAsset: 67 });
+    const runtime = await createRuntime({ missingAsset: 67, assetDelayMs: 60 });
     try {
-      const result = await probeLocalRuntimeBridgeStartup(runtime.startup, { timeoutMs: 500 });
+      const result = await probeLocalRuntimeBridgeStartup(runtime.startup, { timeoutMs: 250 });
       expect(result).toMatchObject({ ok: true, value: { runtime_service: { open_readiness: {
         state: 'blocked', reason_code: 'env_app_shell_unavailable',
       } } } });
@@ -101,12 +101,25 @@ describe('Runtime probe connection ownership', () => {
     } finally { await runtime.close(); }
   });
 
+  it('allows healthy asset batches to outlive the individual request timeout', async () => {
+    const runtime = await createRuntime({ assetDelayMs: 60 });
+    try {
+      const started = Date.now();
+      const result = await probeLocalRuntimeBridgeStartup(runtime.startup, { timeoutMs: 250 });
+      expect(result).toMatchObject({ ok: true, value: { runtime_service: { open_readiness: { state: 'openable' } } } });
+      expect(Date.now() - started).toBeGreaterThan(250);
+      expect(runtime.assets.size).toBe(68);
+      expect(runtime.peakConnections()).toBeLessThanOrEqual(8);
+      await vi.waitFor(() => expect(runtime.sockets.size).toBe(0));
+    } finally { await runtime.close(); }
+  });
+
   it('preserves a supplied transport agent and its connection ownership', async () => {
-    const runtime = await createRuntime();
+    const runtime = await createRuntime({ assetDelayMs: 50 });
     const agent = new http.Agent({ keepAlive: true, maxSockets: 3 });
     const destroy = vi.spyOn(agent, 'destroy');
     try {
-      const result = await probeLocalRuntimeBridgeStartup(runtime.startup, { agent, timeoutMs: 1500 });
+      const result = await probeLocalRuntimeBridgeStartup(runtime.startup, { agent, timeoutMs: 250 });
       expect(result).toMatchObject({ ok: true, value: { runtime_service: { open_readiness: { state: 'openable' } } } });
       expect(runtime.assets.size).toBe(68);
       expect(agent.maxSockets).toBe(3);
@@ -142,7 +155,7 @@ describe('Runtime probe connection ownership', () => {
     } finally { agent.destroy(); await runtime.close(); }
   });
 
-  it('bounds the whole asset check and closes stalled connections', async () => {
+  it('stops stalled asset checks at the request deadline without scheduling more batches', async () => {
     const runtime = await createRuntime({ stallAssets: true });
     try {
       const started = Date.now();
@@ -170,5 +183,46 @@ describe('Runtime probe connection ownership', () => {
       expect(destroy).not.toHaveBeenCalled();
       expect(runtime.sockets.size).toBe(0);
     } finally { agent.destroy(); await runtime.close(); }
+  });
+
+  it('bounds the complete shell check even while individual requests keep succeeding', async () => {
+    const runtime = await createRuntime({ assetDelayMs: 60 });
+    try {
+      const started = Date.now();
+      const result = await probeLocalRuntimeBridgeStartup(runtime.startup, { timeoutMs: 200, shellTimeoutMs: 250 });
+      expect(result).toMatchObject({ ok: true, value: { runtime_service: { open_readiness: {
+        state: 'starting', reason_code: 'env_app_shell_unreachable',
+      } } } });
+      expect(Date.now() - started).toBeLessThan(800);
+      expect(runtime.assets.size).toBeGreaterThan(8);
+      expect(runtime.assets.size).toBeLessThan(68);
+      await vi.waitFor(() => expect(runtime.sockets.size).toBe(0));
+    } finally { await runtime.close(); }
+  });
+
+  it('keeps cancellation effective after the first asset batches', async () => {
+    const runtime = await createRuntime({ assetDelayMs: 60 });
+    const controller = new AbortController();
+    try {
+      const outcome = probeLocalRuntimeBridgeStartup(runtime.startup, { timeoutMs: 250, signal: controller.signal })
+        .then(value => value, error => error as Error);
+      await vi.waitFor(() => expect(runtime.assets.size).toBeGreaterThan(8));
+      controller.abort();
+      expect(await outcome).toMatchObject({ name: 'AbortError' });
+      expect(runtime.assets.size).toBeLessThan(68);
+      await vi.waitFor(() => expect(runtime.sockets.size).toBe(0));
+    } finally { controller.abort(); await runtime.close(); }
+  });
+
+  it('uses separate deadlines through the public Local UI startup path', async () => {
+    const runtime = await createRuntime({ assetDelayMs: 60 });
+    try {
+      const result = await probeExternalLocalUIStartup(runtime.url, {
+        timeoutMs: 250, shellTimeoutMs: 2000, headers: { 'x-redeven-desktop-bridge-token': token },
+      });
+      expect(result).toMatchObject({ ok: true, value: { runtime_service: { open_readiness: { state: 'openable' } } } });
+      expect(runtime.assets.size).toBe(68);
+      await vi.waitFor(() => expect(runtime.sockets.size).toBe(0));
+    } finally { await runtime.close(); }
   });
 });
