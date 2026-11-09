@@ -64,6 +64,18 @@ func (s *Service) RetryThreadContinuation(ctx context.Context, meta *session.Met
 	if err != nil {
 		return RetryThreadContinuationResponse{}, err
 	}
+	// Retry is a new explicit admission by the current authenticated caller.
+	// Preserve the original model/options, but never restore a disconnected channel
+	// as the retry's transport identity or change the source turn's evidence.
+	if authority == nil || authority.EndpointID != meta.EndpointID || authority.UserPublicID != meta.UserPublicID || authority.NamespacePublicID != meta.NamespacePublicID {
+		return RetryThreadContinuationResponse{}, ErrThreadContinuationRetryUnavailable
+	}
+	currentAuthority, err := executionAuthorityFromMeta(meta, threadID, requestID, view.TurnID.String(), authority.PermissionType)
+	if err != nil {
+		return RetryThreadContinuationResponse{}, err
+	}
+	currentAuthority.ExecutionConfigJSON = authority.ExecutionConfigJSON
+	authority = &currentAuthority
 	if err := s.persistExecutionAuthorityRecord(ctx, authority, requestID, view.TurnID.String()); err != nil {
 		return RetryThreadContinuationResponse{}, err
 	}

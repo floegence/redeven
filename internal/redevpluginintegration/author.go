@@ -103,8 +103,26 @@ func (a *authorBackend) CreateWorkspace(ctx context.Context, meta *session.Meta,
 	w, err := a.store.Create(ctx, o, request)
 	return w.ID, err
 }
+
+// sourceOwner maps admitted host work to the released user/environment workspace
+// owner. Source operations are already governed by Flower's live tool policy;
+// they neither depend on a browser channel nor mint platform session authority.
+func (a *authorBackend) sourceOwner(meta *session.Meta, mutating bool) (authoring.Owner, error) {
+	owner, err := plugincreation.OwnerFromSession(meta)
+	if err != nil {
+		return authoring.Owner{}, err
+	}
+	// Managed source work always belongs to the Redeven agent application,
+	// including persisted execution authority restored without a browser app field.
+	cap := a.sessions.resolver.permissionPolicy.ResolveCap(owner.User, "com.floegence.redeven.agent")
+	if !cap.Read || mutating && (!meta.CanWrite || !meta.CanExecute || !cap.Write || !cap.Execute) {
+		return authoring.Owner{}, errAuthorPermission
+	}
+	return authoring.Owner{User: hashID("user", owner.User), Environment: hashID("env", owner.Environment)}, nil
+}
+
 func (a *authorBackend) SourceScope(ctx context.Context, meta *session.Meta, id string) (plugincreation.SourceScope, error) {
-	ctx, o, err := a.context(ctx, meta)
+	o, err := a.sourceOwner(meta, false)
 	if err != nil {
 		return plugincreation.SourceScope{}, err
 	}
@@ -154,14 +172,9 @@ func (a *authorBackend) RemoveWorkspace(ctx context.Context, meta *session.Meta,
 	return a.store.Remove(ctx, o, id)
 }
 func (a *authorBackend) AuthorOperation(ctx context.Context, meta *session.Meta, id, operation string, args map[string]any) (any, error) {
-	ctx, o, err := a.context(ctx, meta)
+	o, err := a.sourceOwner(meta, operation != "status")
 	if err != nil {
 		return nil, err
-	}
-	if operation != "status" {
-		if err = a.requireMutation(ctx, false); err != nil {
-			return nil, err
-		}
 	}
 	switch operation {
 	case "status":
@@ -686,6 +699,14 @@ func (a *authorBackend) checkAuthorArtifact(ctx context.Context, owner authoring
 	return a.store.InspectArtifact(ctx, owner, id, artifactID, a.host, intent)
 }
 func (a *authorBackend) authorReadiness(ctx context.Context, meta *session.Meta, owner authoring.Owner, id, artifactID string, result map[string]any) {
+	// A build remains usable when the browser reconnects. Installation inspection
+	// still requires a currently authenticated session and is checked again by UI.
+	ctx, _, err := a.context(ctx, meta)
+	if err != nil {
+		result["ready_for_install"] = false
+		result["installation_check"] = map[string]string{"code": "session_required", "message": "Reconnect the plugin workspace to review installation readiness."}
+		return
+	}
 	productOwner, err := plugincreation.OwnerFromSession(meta)
 	if err == nil {
 		var d plugincreation.Draft

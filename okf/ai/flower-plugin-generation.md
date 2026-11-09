@@ -3,7 +3,7 @@ type: AI Product Contract
 title: Flower plugin generation
 tags: [ai, flower, plugins, floret]
 lifecycle: contract
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -81,6 +81,14 @@ Only that authenticated source is added to the conversation filesystem scope;
 other projects, platform state and other task directories remain excluded. Adding
 this source never replaces existing private task-file isolation. Ordinary file
 and terminal tools use the same scope and existing effect approvals.
+An admitted source operation survives a browser disconnect under its original
+user/environment owner and current Flower tool policy. Source access never
+reactivates the expired platform session. Explicit Retry binds a new execution
+authority record to the same owner's current authenticated channel while retaining
+model/options and leaving the failed turn's record unchanged. Build/capture can
+complete offline; installation readiness remains session-bound and is reviewed
+again on reconnect. Acceptance must exercise tool calls and subsequent context
+refresh across disconnect, plus explicit retry and long-history continuation.
 
 `plugin_author_get_status`, `initialize`, `rename`, `build` and `capture` are available only to
 the dedicated conversation. Initialization saves the selected display name as the

@@ -120,8 +120,9 @@ func TestRetryThreadContinuationBindsAuthorityToEveryRetryTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.PutExecutionAuthority(ctx, threadstore.ExecutionAuthority{
-		RequestKey: "source-request", ThreadID: threadID, TurnID: "turn-source",
-		EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID, ChannelID: meta.ChannelID,
+		ExecutionConfigJSON: `{"Model":"fixture/model","Options":{"no_user_interaction":true}}`,
+		RequestKey:          "source-request", ThreadID: threadID, TurnID: "turn-source",
+		EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID, ChannelID: "disconnected-source-channel",
 		PermissionType: "approval_required", UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail,
 	}); err != nil {
 		t.Fatal(err)
@@ -142,7 +143,7 @@ func TestRetryThreadContinuationBindsAuthorityToEveryRetryTurn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if persisted == nil || persisted.TurnID != input.SourceTurnID.String() || persisted.UserPublicID != meta.UserPublicID || persisted.PermissionType != "approval_required" {
+		if persisted == nil || persisted.TurnID != input.SourceTurnID.String() || persisted.UserPublicID != meta.UserPublicID || persisted.ChannelID != meta.ChannelID || persisted.PermissionType != "approval_required" {
 			t.Fatalf("authority before retry=%#v, source_turn=%q", persisted, input.SourceTurnID)
 		}
 		turnID := retryTurns[retryCount]
@@ -159,6 +160,7 @@ func TestRetryThreadContinuationBindsAuthorityToEveryRetryTurn(t *testing.T) {
 	svc := &Service{threadsDB: store, threadRuntime: runtime, floretEffects: newFloretEffectAdapter()}
 
 	for index, wantTurnID := range retryTurns {
+		meta.ChannelID += "-reconnected"
 		retryCtx := ctx
 		if index == len(retryTurns)-1 {
 			var cancelRetry context.CancelFunc
@@ -173,9 +175,18 @@ func TestRetryThreadContinuationBindsAuthorityToEveryRetryTurn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if authority == nil || authority.UserPublicID != meta.UserPublicID || authority.EndpointID != meta.EndpointID || authority.PermissionType != "approval_required" {
+		if authority == nil || authority.ExecutionConfigJSON != `{"Model":"fixture/model","Options":{"no_user_interaction":true}}` || authority.UserPublicID != meta.UserPublicID || authority.EndpointID != meta.EndpointID || authority.ChannelID != meta.ChannelID || authority.PermissionType != "approval_required" {
 			t.Fatalf("retry %d turn authority=%#v", index+1, authority)
 		}
+	}
+	original, err := store.GetExecutionAuthority(ctx, "source-request")
+	if err != nil || original == nil || original.ChannelID != "disconnected-source-channel" || original.TurnID != "turn-source" {
+		t.Fatalf("source authority changed: %+v %v", original, err)
+	}
+	foreign := *meta
+	foreign.UserPublicID = "another-user"
+	if _, err := svc.RetryThreadContinuation(ctx, &foreign, threadID); !errors.Is(err, ErrThreadContinuationRetryUnavailable) {
+		t.Fatalf("retry changed owner: %v", err)
 	}
 }
 

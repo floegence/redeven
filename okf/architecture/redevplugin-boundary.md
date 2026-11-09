@@ -3,7 +3,7 @@ type: Architecture Boundary
 title: ReDevPlugin host integration boundary
 tags: [architecture, dependencies, plugins, release]
 lifecycle: contract
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -67,7 +67,12 @@ from the current owner-bound `SourceScope`, never a retained absolute path.
 Frozen create recovery uses that same source while preserving original request
 evidence and identity. Unavailable source fails before admission with
 `PLUGIN_WORKSPACE_UNAVAILABLE`; no obsolete directory fallback or grant widening
-is allowed. Preview success alone does not qualify continued authoring.
+is allowed. Preview success alone does not qualify continued authoring. Admitted
+source reads/builds use the released user/environment workspace owner and Flower's
+live tool policy plus local user and agent-application caps, not the browser
+channel lifetime. They do not register a Host session. Preview and installation still require a fresh authenticated channel;
+a disconnected build retains its artifact and reports pending installation review.
+This is product adapter ownership, not a platform lifecycle exception.
 
 Author-store locks belong to the owning Host process. The platform must
 open them atomically close-on-exec, so terminal and service descendants cannot
