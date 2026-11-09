@@ -1,4 +1,4 @@
-import { SettingsList } from './settings/SettingsPrimitives';
+import { SettingsDisclosure, SettingsList } from './settings/SettingsPrimitives';
 import { ApplicationPictureSettings } from './settings/ApplicationPictureSettings';
 import { DesktopAuthorizationSettings } from './settings/DesktopAuthorizationSettings';
 import { useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
@@ -9,7 +9,7 @@ import { createEnvCachedResource } from '../services/envResourceCache';
 import { hostApplicationSnapshot } from '../services/envResourceSnapshots';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useViewActivation, useResizeObserver } from '@floegence/floe-webapp-core';
-import { Check, ChevronRight, Filter, HelpIcon, MonitorPointer, MoreHorizontal, ExternalLink, Plus, Refresh, Search, Settings } from '@floegence/floe-webapp-core/icons';
+import { Check, Filter, MonitorPointer, MoreHorizontal, ExternalLink, Plus, Refresh, Search, Settings } from '@floegence/floe-webapp-core/icons';
 import { hostApplicationPresentation, hostApplicationLaunchFailureCopy } from '../services/hostApplicationPresentation';
 import { renderHostApplicationLaunchDocument } from '../services/hostApplicationLaunchDocument';
 import { ActivityBarHostApplicationsIcon } from '../icons/ActivityBarDockIcons';
@@ -71,7 +71,6 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
   const applicationTuningReady = () => applicationResource.ready() && accessState() === 'enabled' && Boolean(catalog()?.availability.ready);
   const desktopSettingsReady = () => applicationResource.ready() && !desktopError() && desktopState() === 'enabled' && Boolean(desktopStatus()?.capabilities.screen);
   const [pictureExpanded, setPictureExpanded] = createSignal(false);
-  const [pictureVisited, setPictureVisited] = createSignal(false);
   // IMPORTANT: Select reads admission during events outside rendering. Resolve
   // this conditional under the page owner, never in a compiled JSX getter.
   const picturePresented = createMemo(() => pictureExpanded() && applicationTuningReady());
@@ -785,11 +784,10 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
               <h2>{i18n.t('hostApplications.emptyTitle')}</h2>
               <p>{i18n.t('hostApplications.emptyDescription')}</p>
               <Button variant="outline" size="sm" onClick={() => setAddOpen(true)} disabled={!canLaunch()}><Plus class="w-3.5 h-3.5" aria-hidden="true" />{i18n.t('hostApplications.addExisting')}</Button>
-              <details class="host-apps-preparation-details">
-                <summary><HelpIcon class="w-3.5 h-3.5" aria-hidden="true" /><span>{i18n.t('hostApplications.emptyDetails')}</span><ChevronRight class="host-apps-details-chevron w-3 h-3" aria-hidden="true" /></summary>
+              <SettingsDisclosure class="host-apps-preparation-details" title={i18n.t('hostApplications.emptyDetails')}>
                 <p>{i18n.t('hostApplications.emptyHint')}</p>
                 <Button variant="outline" size="sm" onClick={() => { setSelectedApplication(null); setSetupDialog(true); }}><Settings class="w-3.5 h-3.5" aria-hidden="true" />{i18n.t('hostApplications.componentSettings')}</Button>
-              </details>
+              </SettingsDisclosure>
             </section>
           </Show>
           <Show when={!hasApplications() && !isMac() && catalog()!.availability.reason === 'catalog_unavailable'}><div class="host-apps-notice" role="status">{i18n.t('hostApplications.catalogUnavailable')}</div></Show>
@@ -880,16 +878,13 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
           if (accessState() === 'paused' && catalog()?.availability.ready) void changeAccess('enabled').catch(() => {});
           else beginSetup();
         }}>
-          <details class="host-access-picture" hidden={!applicationTuningReady()} open={pictureExpanded()} onToggle={event => {
-            const expanded = event.currentTarget.open && presented() && applicationTuningReady();
-            setPictureExpanded(expanded);
-            if (expanded) setPictureVisited(true);
-          }}>
-            <summary><span>{i18n.t('hostAccess.pictureSettings')}</span><span class="host-access-picture-hint">{i18n.t('hostAccess.pictureOptional')}</span></summary>
+          <SettingsDisclosure class="host-access-picture" hidden={!applicationTuningReady()} open={pictureExpanded()}
+            title={i18n.t('hostAccess.pictureSettings')} description={i18n.t('hostAccess.pictureOptional')}
+            onOpenChange={open => setPictureExpanded(open && presented() && applicationTuningReady())}>
             {/* Retain unsaved choices after collapse, pause or lost permissions;
                 only the current visible stage can open portals or submit changes. */}
-            <Show when={pictureVisited()}><ApplicationPictureSettings active={picturePresented()} allowed={canLaunch()} macOS={isMac()} /></Show>
-          </details>
+            <ApplicationPictureSettings active={picturePresented()} allowed={canLaunch()} macOS={isMac()} />
+          </SettingsDisclosure>
         </HostAccessFeatureSettings>
         <Show when={desktopStatus() && !desktopError()} fallback={<div class="host-access-notice"><p>{i18n.t(desktopError() ? 'remoteDesktop.statusFailed' : 'remoteDesktop.checking')}</p><Button variant="outline" disabled={desktopRefreshing()} onClick={() => void refreshDesktop()}>{i18n.t('remoteDesktop.refresh')}</Button></div>}>
           <HostAccessFeatureSettings feature="desktop" state={desktopState()!} error={displayError()} ready={Boolean(desktopStatus()?.capabilities.screen)} allowed={canLaunch()} busy={desktopBusy() || desktopRefreshing()} onChange={changeDesktopAccess} onReconfigure={() => {

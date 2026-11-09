@@ -7,6 +7,8 @@ import {
   Button,
   SettingsSection as FloeSettingsSection,
   SettingsList as FloeSettingsList,
+  SettingsDisclosure as FloeSettingsDisclosure,
+  type SettingsDisclosureProps,
   SettingRow as FloeSettingRow,
   type SettingRowProps,
   type TagProps,
@@ -251,36 +253,11 @@ export function CapabilityTag(props: { active?: boolean; children: JSX.Element }
   );
 }
 
-export function SectionCollapse(props: {
-  title: string;
-  description?: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  children: JSX.Element;
-}) {
-  return (
-    <div class="redeven-settings-inset rounded-lg border">
-      <button
-        type="button"
-        class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-[var(--redeven-settings-row-hover-bg)] disabled:cursor-not-allowed disabled:opacity-60"
-        onClick={() => props.onOpenChange(!props.open)}
-      >
-        <span class="min-w-0">
-          <span class="block text-[length:var(--floe-type-body)] font-medium text-foreground">{props.title}</span>
-          <Show when={props.description}>
-            <span class="redeven-settings-note mt-0.5 block text-xs">{props.description}</span>
-          </Show>
-        </span>
-        <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border text-xs text-muted-foreground">
-          {props.open ? '-' : '+'}
-        </span>
-      </button>
-      <Show when={props.open}>
-        <div class="border-t border-[var(--redeven-settings-divider)] p-3">{props.children}</div>
-      </Show>
-    </div>
-  );
+export function SettingsDisclosure(props: SettingsDisclosureProps) {
+  return <FloeSettingsDisclosure {...props} class={cn('redeven-settings-list', props.class)} />;
 }
+
+export const SectionCollapse = SettingsDisclosure;
 
 export const AdvancedCollapse = SectionCollapse;
 

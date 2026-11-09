@@ -1,6 +1,7 @@
+import { SettingsDisclosure } from './settings/SettingsPrimitives';
 import { FlowerContextSource, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import { Button, LinearProgress, StableText } from '@floegence/floe-webapp-core/ui';
-import { Refresh, ChevronDown, ChevronRight, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
+import { Refresh, ChevronDown, ArrowRight, AlertCircle, Check } from '@floegence/floe-webapp-core/icons';
 import { RemoteDesktopIcon } from '../icons/RemoteDesktopIcon';
 import { For, Match, Show, Switch as MatchSwitch, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, onMount } from 'solid-js';
 import { Dialog } from '../primitives/EnvAppModal';
@@ -549,16 +550,15 @@ export function RemoteDesktopPanel(props: { active?: boolean; onManage?: () => v
     </Show>
 
     <Show when={sshManaged() && loginService()?.state === 'active'}><p class="remote-desktop-service-status">{i18n.t('remoteDesktop.serviceActive')}</p></Show>
-    <Show when={sshManaged()}><details class="remote-desktop-options" open={optionsOpen()} onToggle={event => setOptionsOpen(event.currentTarget.open)}>
-      <summary><ChevronRight size={14} aria-hidden="true" /><span>{i18n.t('remoteDesktop.options')}</span><span class="remote-desktop-mode">{i18n.t(mode() === 'view' ? 'remoteDesktop.view' : 'remoteDesktop.control')}</span></summary>
+    <Show when={sshManaged()}><SettingsDisclosure class="remote-desktop-options" open={optionsOpen()} onOpenChange={setOptionsOpen} title={i18n.t('remoteDesktop.options')} description={i18n.t(mode() === 'view' ? 'remoteDesktop.view' : 'remoteDesktop.control')}>
       <Show when={sshManaged() && (serviceUpdateRequired() || ['active', 'stopped'].includes(loginService()?.state ?? ''))}><div class="remote-desktop-actions remote-desktop-service-actions">
-        <For each={['ensure', ...(loginService()?.state === 'active' ? ['stop'] : []), 'uninstall'] as DesktopDeploymentOperation[]}>{operation => <Button data-desktop-focus={operation} variant="outline" disabled={!full() || !!busy()} onClick={() => showDeployment(operation)}>{i18n.t(operationLabels[operation])}</Button>}</For>
+        <For each={['ensure', ...(loginService()?.state === 'active' ? ['stop'] : []), 'uninstall'] as DesktopDeploymentOperation[]}>{operation => <Button data-desktop-focus={operation} variant="outline" disabled={!foreground() || !optionsOpen() || !full() || !!busy()} onClick={() => { if (foreground() && optionsOpen()) showDeployment(operation); }}>{i18n.t(operationLabels[operation])}</Button>}</For>
       </div></Show>
-    </details></Show>
+    </SettingsDisclosure></Show>
     <Show when={failure()}>{problem => <div class="remote-desktop-error" role="alert">
       <AlertCircle size={16} aria-hidden="true" />
       <div><strong>{i18n.t(problem().title)}</strong><p>{i18n.t(problem().hint)}</p>
-        <Show when={problem().diagnostic}><details><summary>{i18n.t('remoteDesktop.errorDetails')}</summary><code>{problem().diagnostic}</code></details></Show>
+        <Show when={problem().diagnostic}><SettingsDisclosure title={i18n.t('remoteDesktop.errorDetails')}><code>{problem().diagnostic}</code></SettingsDisclosure></Show>
       </div>
     </div>}</Show>
     <div class="remote-desktop-footer">
@@ -606,11 +606,6 @@ export function RemoteDesktopPanel(props: { active?: boolean; onManage?: () => v
             <h4 class="remote-desktop-step-title" tabIndex={-1} ref={focusStep}>{i18n.t('remoteDesktop.authorizeStep')}</h4>
             <div class="remote-desktop-flow-copy">
               <p>{i18n.t('remoteDesktop.deployAuthorizationSummary')}</p>
-              <details class="remote-desktop-permission-details">
-                <summary><ChevronRight size={14} aria-hidden="true" /><span>{i18n.t('remoteDesktop.deployPermissionDetails')}</span></summary>
-                <p>{i18n.t('remoteDesktop.deployScope')}</p>
-                <Show when={deploymentConnectIntent()}><p class="remote-desktop-flow-note">{i18n.t('remoteDesktop.deployHint')}</p></Show>
-              </details>
             </div>
             <label class="remote-desktop-credential">
               <span>{i18n.t('remoteDesktop.deployAuthMethod')}</span>
@@ -626,6 +621,10 @@ export function RemoteDesktopPanel(props: { active?: boolean; onManage?: () => v
               <input ref={focusStep} type="password" autocomplete="off" disabled={deploymentPhase()!=='password'} value={administratorPassword()} onInput={event => setAdministratorPassword(event.currentTarget.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void respondDeployment(); } }} />
               <span class="remote-desktop-credential-hint">{i18n.t('remoteDesktop.deployPasswordHint')}</span>
             </label></Show>
+              <SettingsDisclosure class="remote-desktop-permission-details" title={i18n.t('remoteDesktop.deployPermissionDetails')}>
+                <p>{i18n.t('remoteDesktop.deployScope')}</p>
+                <Show when={deploymentConnectIntent()}><p class="remote-desktop-flow-note">{i18n.t('remoteDesktop.deployHint')}</p></Show>
+              </SettingsDisclosure>
             </div>
           </Show>
           <Show when={['preparing','canceling'].includes(deploymentPhase())}>

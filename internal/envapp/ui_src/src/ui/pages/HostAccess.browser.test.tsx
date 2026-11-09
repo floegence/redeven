@@ -1,11 +1,11 @@
 import '../../index.css';
 import axe from 'axe-core';
-import { FloeProvider } from '@floegence/floe-webapp-core';
+import { FloeProvider, useTheme } from '@floegence/floe-webapp-core';
 import { SettingsDialog } from '../../../../../settings_ui/src/SettingsDialog';
 import { SettingsPanelContext } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { createSettingsSession, type SettingsSection } from '../../../../../settings_ui/src/settingsSession';
 import { render } from 'solid-js/web';
-import { createSignal } from 'solid-js';
+import { createSignal, onCleanup, onMount } from 'solid-js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { I18nProvider, useI18n } from '../i18n/I18nProvider';
@@ -13,6 +13,7 @@ import { SUPPORTED_LOCALES } from '../i18n/localeMeta';
 import { loadEnvAppDictionary } from '../i18n/locales';
 import { writeStoredLanguagePreference } from '../i18n/storage';
 import { EnvHostApplicationsPage } from './EnvHostApplicationsPage';
+import { HostApplicationSetupPanel } from './HostApplicationSetupPanel';
 import { HostAccessFeatureSettings, HostAccessManagement, HostAccessPermissions, HostAccessSystemPermissions, HostAccessWelcome } from './HostAccessControls';
 
 const media = commands as unknown as { emulateMediaPreferences: (preferences: { forcedColors?: 'active' | 'none'; reducedMotion?: 'reduce' | 'no-preference' }) => Promise<void> };
@@ -29,11 +30,18 @@ vi.mock('../services/hostApplicationsApi',async original=>({...await original<ob
 }));
 // IMPORTANT: Exercise the actual global modal and presentation owner. A local
 // replacement dialog cannot verify nested permission recovery or retained state.
-function HostApplicationsFixture() {
+function FixtureTheme(props: { mode: 'light' | 'dark' }) {
+ const theme = useTheme();
+ const initial = theme.theme();
+ onMount(() => theme.setTheme(props.mode));
+ onCleanup(() => theme.setTheme(initial));
+ return null;
+}
+function HostApplicationsFixture(props: { theme?: 'light' | 'dark' } = {}) {
  const i18n = useI18n();
  const session = createSettingsSession();
  state.openSettings.mockImplementation((section: SettingsSection) => session.open({ section }));
- return <FloeProvider><SettingsPanelContext.Provider value={{ ...session, register: () => () => {} }}>
+ return <FloeProvider>{props.theme && <FixtureTheme mode={props.theme} />}<SettingsPanelContext.Provider value={{ ...session, register: () => () => {} }}>
    <EnvHostApplicationsPage />
    <SettingsDialog open={session.target() !== null} present={session.present()} onPresenceChange={session.setPresent} onClose={session.close}
      title={i18n.t('settings.runtimeTitle')} closeLabel={i18n.t('common.actions.close')}>
@@ -183,8 +191,9 @@ it.each(['zh-CN', 'de-DE', 'zh-TW'] as const)('shows direct feature controls and
  expect(dialog.querySelector('.host-access-permissions')).toBeNull();
  expect(dialog.querySelector('.remote-desktop-connect')).toBeNull();
  expect(dialog.querySelector('.host-apps > button')).toBeNull();
- expect(dialog.querySelector<HTMLDetailsElement>('.host-access-system')?.open).toBe(false);
- expect([...dialog.querySelectorAll('.host-access-system-row span')].map(node => node.textContent)).toEqual([dictionary.hostAccess.allowed, dictionary.hostAccess.allowed]);
+ expect(dialog.querySelector('.host-access-system > button')?.getAttribute('aria-expanded')).toBe('false');
+ await page.getByRole('button', {name: dictionary.hostAccess.systemSettings, exact: true}).click();
+ expect([...dialog.querySelectorAll('.host-access-system-row .floe-setting-row__label p')].map(node => node.textContent)).toEqual([dictionary.hostAccess.allowed, dictionary.hostAccess.allowed]);
  expect((await axe.run(dialog, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations).toEqual([]);
  await page.screenshot({ element: dialog, path: `__screenshots__/host-access-direct-settings-${locale}.png` });
  await page.viewport(320, 850);
@@ -493,8 +502,8 @@ it.each(['pause', 'permission loss'] as const)('collapses optional tuning after 
  dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
  await page.getByRole('button', {name: 'Access settings', exact: true}).click();
  expect(state.picture).not.toHaveBeenCalled();
- const details = document.querySelector<HTMLDetailsElement>('.host-access-picture')!;
- expect(details.open).toBe(false);
+ const details = document.querySelector<HTMLElement>('.host-access-picture')!;
+ expect(details.dataset.open).toBe('false');
  await page.getByText('Application picture settings', {exact: true}).click();
  await expect.poll(() => state.picture.mock.calls.length).toBe(1);
  expect(state.picture).toHaveBeenCalledExactlyOnceWith('/_redeven_proxy/api/host-applications/picture', {method:'GET'});
@@ -507,7 +516,7 @@ it.each(['pause', 'permission loss'] as const)('collapses optional tuning after 
    await expect.poll(() => state.access).toBe('paused');
  } else { state.screen = false; window.dispatchEvent(new Event('focus')); }
  await expect.poll(() => details.hidden).toBe(true);
- await expect.poll(() => details.open).toBe(false);
+ await expect.poll(() => details.dataset.open).toBe('false');
  expect(document.querySelector('[data-testid=application-picture-settings]')).toBe(fields);
  expect(state.picture.mock.calls.every(([, options]) => options.method === 'GET')).toBe(true);
  if (reason === 'pause') {
@@ -515,7 +524,7 @@ it.each(['pause', 'permission loss'] as const)('collapses optional tuning after 
    await userEvent.click(control.closest('label')!);
  } else { state.screen = true; window.dispatchEvent(new Event('focus')); }
  await expect.poll(() => details.hidden).toBe(false);
- expect(details.open).toBe(false);
+ expect(details.dataset.open).toBe('false');
  await page.getByText('Application picture settings', {exact:true}).click();
  expect(document.querySelector('[data-testid=application-picture-settings]')).toBe(fields);
  await expect.element(page.getByRole('combobox', {name:'Picture quality',exact:true})).toBeEnabled();
@@ -591,7 +600,7 @@ it.each(['light', 'dark'] as const)('presents a compact permission step in %s mo
  document.documentElement.classList.toggle('dark', theme === 'dark');
  state.local = true; state.access = 'enabled'; state.permissionApp = 'Redeven Desktop Access Dev';
  const host = document.createElement('main'); document.body.append(host);
- dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
+ dispose = render(() => <I18nProvider><HostApplicationsFixture theme={theme} /></I18nProvider>, host);
  await page.getByRole('button', {name:'访问设置',exact:true}).click();
  await page.getByRole('region', {name:'远程应用窗口',exact:true}).getByRole('button',{name:'继续设置',exact:true}).click();
  document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -621,4 +630,136 @@ it('reconciles an existing system grant when setup opens without requesting it a
  await page.getByRole('button', {name:'Set up application access',exact:true}).click();
  await expect.poll(() => document.querySelector('[aria-current=step]')?.textContent).toContain('Accessibility');
  expect(state.permission).not.toHaveBeenCalled(); expect(state.save).not.toHaveBeenCalled();
+});
+
+it.each(['light', 'dark'] as const)('keeps expanded host settings in shared rounded groups in %s', async theme => {
+ document.documentElement.classList.toggle('dark', theme === 'dark');
+ await page.viewport(1080, 900); await loadEnvAppDictionary('zh-CN'); writeStoredLanguagePreference('zh-CN');
+ const dictionary = await loadEnvAppDictionary('zh-CN');
+ state.local = true; state.screen = true; state.input = true; state.access = 'enabled'; state.desktopAccess = 'enabled'; state.permissionApp = 'Redeven Desktop Access Dev';
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostApplicationsFixture theme={theme} /></I18nProvider>, host);
+ await expect.poll(() => document.documentElement.classList.contains('dark')).toBe(theme === 'dark');
+ await page.getByRole('button', {name:dictionary.hostAccess.settings, exact:true}).click();
+ const dialog = document.querySelector<HTMLElement>('[role=dialog]')!;
+ await page.getByRole('button', {name:dictionary.hostAccess.systemSettings, exact:true}).click();
+ await page.getByRole('button', {name:dictionary.hostAccess.permissionHelp, exact:true}).click();
+ const settle = async () => { await expect.poll(() => dialog.getAnimations({subtree:true}).filter(animation => animation.playState === 'running').length).toBe(0); };
+ await settle();
+ const reference = getComputedStyle(dialog.querySelector('.host-access-feature-group')!);
+ for (const group of dialog.querySelectorAll<HTMLElement>('.host-access-system, .host-access-recovery, .host-access-system .floe-settings-list')) {
+   const style = getComputedStyle(group);
+   expect(style.borderRadius).toBe(reference.borderRadius);
+   expect(style.borderTopStyle).toBe('solid');
+   expect(style.backgroundColor).toBe(reference.backgroundColor);
+ }
+ expect(dialog.querySelectorAll('.host-access-system-row.floe-setting-row')).toHaveLength(2);
+ expect(dialog.querySelectorAll('.host-access-recovery-step.floe-setting-row')).toHaveLength(2);
+ await page.screenshot({element:dialog,path:`__screenshots__/host-access-disclosures-${theme}-zh-CN.png`});
+ await page.getByRole('button', {name:dictionary.hostAccess.pictureSettings, exact:true}).click();
+ await expect.element(page.getByRole('combobox',{name:dictionary.hostApplications.macPicture,exact:true})).toBeEnabled();
+ await settle();
+ await page.screenshot({element:dialog,path:`__screenshots__/host-access-disclosures-all-${theme}-zh-CN.png`});
+ await page.viewport(320, 900); await settle();
+ expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+ for (const group of dialog.querySelectorAll<HTMLElement>('.floe-settings-disclosure')) {
+   expect(group.scrollWidth, group.className).toBeLessThanOrEqual(group.clientWidth + 1);
+   expect(group.getBoundingClientRect().right).toBeLessThanOrEqual(320);
+ }
+ expect((await axe.run(dialog,{runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations).toEqual([]);
+ await page.screenshot({element:dialog,path:`__screenshots__/host-access-disclosures-narrow-${theme}-zh-CN.png`});
+ const restart = page.getByRole('button',{name:dictionary.hostAccess.applyPermissions,exact:true}).element() as HTMLButtonElement;
+ restart.scrollIntoView({block:'nearest'});
+ await expect.poll(() => restart.getBoundingClientRect().bottom).toBeLessThanOrEqual(dialog.getBoundingClientRect().bottom);
+ await page.screenshot({element:dialog,path:`__screenshots__/host-access-disclosures-recovery-${theme}-zh-CN.png`});
+});
+
+it('retires hidden recovery intent and permission callbacks when the group closes', async () => {
+ await page.viewport(900, 900); writeStoredLanguagePreference('en-US');
+ const host = document.createElement('main'); document.body.append(host);
+ const recovery = vi.fn(), permission = vi.fn();
+ dispose = render(() => <I18nProvider><HostAccessSystemPermissions permissionAppName="Redeven Desktop Access Dev" screen input allowed busy={false} onPermission={permission} onRecovery={recovery}/></I18nProvider>, host);
+ const system = page.getByRole('button',{name:'Manage system permissions',exact:true});
+ await system.click();
+ await page.getByRole('button',{name:'Cannot find the app or permissions are not taking effect?',exact:true}).click();
+ await page.getByRole('button',{name:'Apply permission changes',exact:true}).click();
+ const restart = page.getByRole('button',{name:'Restart Desktop Access',exact:true}).element() as HTMLButtonElement;
+ const permissionButton = host.querySelector<HTMLButtonElement>('.host-access-system-row button')!;
+ await system.click();
+ expect(host.querySelector('.host-access-system > .floe-settings-disclosure__panel')?.getAttribute('aria-hidden')).toBe('true');
+ restart.click(); permissionButton.click();
+ expect(recovery).not.toHaveBeenCalled(); expect(permission).not.toHaveBeenCalled();
+ await system.click();
+ expect(page.getByRole('button',{name:'Restart Desktop Access',exact:true}).query()).toBeNull();
+ await expect.element(page.getByRole('button',{name:'Apply permission changes',exact:true})).toBeVisible();
+});
+
+it.each(['no-preference', 'reduce'] as const)('uses reversible Floe motion inside the host settings dialog with %s', async reducedMotion => {
+ await media.emulateMediaPreferences({reducedMotion});
+ await page.viewport(1080, 900); writeStoredLanguagePreference('en-US');
+ state.screen = true; state.input = true; state.access = 'enabled'; state.desktopAccess = 'enabled'; state.permissionApp = 'Redeven Desktop Access Dev';
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
+ await page.getByRole('button',{name:'Access settings',exact:true}).click();
+ const dialog = document.querySelector<HTMLElement>('[role=dialog]')!;
+ for (const selector of ['.host-access-picture','.host-access-system','.host-access-recovery']) {
+   const group = dialog.querySelector<HTMLElement>(selector)!;
+   const trigger = group.querySelector<HTMLButtonElement>(':scope > button')!;
+   const panel = group.querySelector<HTMLElement>(':scope > .floe-settings-disclosure__panel')!;
+   const sample = async () => {
+     void getComputedStyle(panel).gridTemplateRows;
+     trigger.click();
+     void getComputedStyle(panel).gridTemplateRows;
+     await new Promise(requestAnimationFrame);
+     const motions = panel.getAnimations().filter(animation => (animation as CSSTransition).transitionProperty === 'grid-template-rows');
+     const read = () => panel.getBoundingClientRect().height;
+     motions.forEach(animation => { animation.pause(); animation.currentTime = 0; });
+     const start = read();
+     motions.forEach(animation => { animation.currentTime = Number(animation.effect!.getTiming().duration) / 2; });
+     const middle = read();
+     motions.forEach(animation => animation.finish());
+     await new Promise(requestAnimationFrame); await new Promise(requestAnimationFrame);
+     return {start,middle,end:read(),count:motions.length};
+   };
+   const opening = await sample();
+   if (reducedMotion === 'reduce') expect(opening.count).toBe(0);
+   else { expect(opening.count).toBe(1); expect(opening.middle).toBeGreaterThan(opening.start); expect(opening.middle).toBeLessThan(opening.end); }
+   const closing = await sample();
+   expect(panel.inert).toBe(true);
+   if (reducedMotion === 'reduce') expect(closing.count).toBe(0);
+   else { expect(closing.count).toBe(1); expect(closing.middle).toBeLessThan(closing.start); expect(closing.middle).toBeGreaterThan(closing.end); }
+   expect(closing.end).toBe(0);
+   trigger.click();
+   await expect.poll(() => panel.getAnimations().length).toBe(0);
+ }
+ expect(state.permission).not.toHaveBeenCalled(); expect(state.save).not.toHaveBeenCalled();
+});
+
+
+it.each(['zh-CN','de-DE'] as const)('keeps Linux preparation disclosures consistent and usable at 320px in %s', async locale => {
+ await page.viewport(320, 900); await loadEnvAppDictionary(locale); writeStoredLanguagePreference(locale);
+ const dictionary = await loadEnvAppDictionary(locale);
+ const host = document.createElement('main'); host.style.padding = '12px'; document.body.append(host);
+ const upload = vi.fn(), start = vi.fn();
+ dispose = render(() => <I18nProvider><HostApplicationSetupPanel setup={null} allowed submitting={false} canRelay disconnected={false} inDialog
+   downloadMethod="host" onDownloadMethodChange={() => {}} onStart={start} onCancel={() => {}} onReconnect={() => {}} onUpload={upload} /></I18nProvider>, host);
+ expect(host.querySelector('input[type=file]')).toBeNull();
+ for (const title of [dictionary.hostApplications.prepare.details, dictionary.hostApplications.prepare.offline]) {
+   const trigger = page.getByRole('button',{name:title,exact:true});
+   await trigger.click();
+   expect(trigger.element().getAttribute('aria-expanded')).toBe('true');
+ }
+ const picker = host.querySelector<HTMLInputElement>('input[type=file]')!;
+ expect(picker.disabled).toBe(false);
+ for (const group of host.querySelectorAll<HTMLElement>('.floe-settings-disclosure')) {
+   expect(group.scrollWidth).toBeLessThanOrEqual(group.clientWidth + 1);
+   expect(group.getBoundingClientRect().right).toBeLessThanOrEqual(320);
+   expect(getComputedStyle(group).borderTopStyle).toBe('solid');
+ }
+ await page.getByRole('button',{name:dictionary.hostApplications.prepare.offline,exact:true}).click();
+ expect(picker.isConnected).toBe(true); expect(picker.disabled).toBe(true);
+ expect(upload).not.toHaveBeenCalled(); expect(start).not.toHaveBeenCalled();
+ await page.getByRole('button',{name:dictionary.hostApplications.prepare.offline,exact:true}).click();
+ expect(host.querySelector('input[type=file]')).toBe(picker);
+ expect((await axe.run(host,{runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations).toEqual([]);
 });

@@ -1,8 +1,9 @@
+import { SettingsDisclosure } from './settings/SettingsPrimitives';
 import { StatusRegion, StableText, Button, RadioList } from '@floegence/floe-webapp-core/ui';
-import { ChevronRight, Download, FolderOpen, Info, MonitorPointer, Package, Upload } from '@floegence/floe-webapp-core/icons';
+import { Download, MonitorPointer, Package, Upload } from '@floegence/floe-webapp-core/icons';
 import './host-application-preparation.css';
 import type { HostApplicationComponentsProgress } from '../../../../../../desktop/src/shared/hostApplicationComponents';
-import { Show } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { useI18n, type EnvAppTranslationKey } from '../i18n';
 import { hostApplicationSetupActive, type HostApplicationSetup, type HostApplicationTransferPlan } from '../services/hostApplicationsApi';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
@@ -88,7 +89,8 @@ export function HostApplicationSetupPanel(props: {
   const canChoose = () => !props.submitting && (!active() || receiving());
   const canStart = () => props.allowed && !props.submitting && !props.checkingPlan && !unsupported()
     && (local() || (props.downloadMethod === 'desktop' ? props.canRelay : !receiving()));
-  const canUpload = () => props.allowed && !props.submitting && !unsupported() && (!active() || Boolean(receiving()));
+  const [offlineOpen, setOfflineOpen] = createSignal(false);
+  const canUpload = () => offlineOpen() && props.allowed && !props.submitting && !unsupported() && (!active() || Boolean(receiving()));
   let fileInput: HTMLInputElement | undefined;
   return <section class={`host-apps-preparation ${props.inDialog ? '' : redevenSurfaceRoleClass('panel')}`} classList={{ "host-apps-preparation-dialog": props.inDialog }} aria-label={i18n.t(installed() ? 'hostApplications.update.title' : 'hostApplications.prepare.title')}>
     <div class="host-apps-preparation-content">
@@ -113,21 +115,19 @@ export function HostApplicationSetupPanel(props: {
     </Show>
     <Show when={local()}><p class="host-apps-preparation-target">{i18n.t('hostApplications.update.local')}</p></Show>
     <div class="host-apps-preparation-disclosures">
-    <details class="host-apps-preparation-details host-apps-component-details">
-      <summary><Info class="w-3.5 h-3.5" aria-hidden="true" /><span>{i18n.t('hostApplications.prepare.details')}</span><ChevronRight class="host-apps-details-chevron w-3 h-3" aria-hidden="true" /></summary>
+    <SettingsDisclosure class="host-apps-preparation-details host-apps-component-details" title={i18n.t('hostApplications.prepare.details')}>
       <p>{i18n.t(installed() ? 'hostApplications.update.stabilityFix' : 'hostApplications.prepare.description')}</p>
       <Show when={installed()}><dl class="host-apps-component-versions">
         <div><dt>{i18n.t('hostApplications.update.installedVersion')}</dt><dd>{installed()?.id}</dd></div>
         <div><dt>{i18n.t('hostApplications.update.targetVersion')}</dt><dd>{props.setup?.package?.id}</dd></div>
       </dl></Show>
       <Show when={!unsupported() && !local()}><p>{i18n.t('hostApplications.prepare.hostDownloadHint')}</p><p>{i18n.t('hostApplications.prepare.desktopDownloadHint')}</p></Show>
-    </details>
-    <Show when={!unsupported()}><details class="host-apps-preparation-details">
-      <summary><FolderOpen class="w-3.5 h-3.5" aria-hidden="true" /><span>{i18n.t('hostApplications.prepare.offline')}</span><ChevronRight class="host-apps-details-chevron w-3 h-3" aria-hidden="true" /></summary>
+    </SettingsDisclosure>
+    <Show when={!unsupported()}><SettingsDisclosure class="host-apps-preparation-details host-apps-offline-details" open={offlineOpen()} onOpenChange={setOfflineOpen} title={i18n.t('hostApplications.prepare.offline')}>
       <p>{i18n.t('hostApplications.prepare.offlineHint')}</p>
       <input ref={fileInput} type="file" accept=".zip" hidden disabled={!canUpload()} onChange={event => { const file = event.currentTarget.files?.[0]; if (file && canUpload()) props.onUpload(file); event.currentTarget.value = ''; }} />
-      <Button variant="outline" size="sm" disabled={!canUpload()} onClick={() => fileInput?.click()}><Upload class="w-3.5 h-3.5" aria-hidden="true" />{i18n.t('hostApplications.prepare.choosePackage')}</Button>
-    </details></Show>
+      <Button variant="outline" size="sm" disabled={!canUpload()} onClick={() => { if (canUpload()) fileInput?.click(); }}><Upload class="w-3.5 h-3.5" aria-hidden="true" />{i18n.t('hostApplications.prepare.choosePackage')}</Button>
+    </SettingsDisclosure></Show>
     </div>
     </div>
     <div class="host-apps-preparation-footer">

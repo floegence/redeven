@@ -233,6 +233,7 @@ describe('independent component updates', () => {
     await inspectUpdate(); state.setupPlan.mockClear();
     state.setupStart.mockResolvedValue({ ...installedSetup, state: 'receiving', operation_id: 'offline', can_cancel: true });
     state.setupUpload.mockResolvedValue({ ...installedSetup, state: 'validating' });
+    document.querySelector<HTMLButtonElement>('.host-apps-offline-details > button')!.click(); await settle();
     const input = document.querySelector<HTMLInputElement>('[role=dialog] input[type=file]')!;
     const file = new File([new Uint8Array(100)], 'components.zip');
     Object.defineProperty(input, 'files', { value: [file] });
@@ -242,8 +243,20 @@ describe('independent component updates', () => {
     expect(state.setupPlan).not.toHaveBeenCalled();
     expect(state.components).not.toHaveBeenCalled();
   });
+  it('rejects a retained offline picker result after its group closes', async () => {
+    await inspectUpdate();
+    const trigger = document.querySelector<HTMLButtonElement>('.host-apps-offline-details > button')!;
+    trigger.click(); await settle();
+    const input = document.querySelector<HTMLInputElement>('[role=dialog] input[type=file]')!;
+    trigger.click(); await settle();
+    expect(input.isConnected).toBe(true); expect(input.disabled).toBe(true);
+    Object.defineProperty(input, 'files', { value: [new File([new Uint8Array(100)], 'components.zip')] });
+    input.dispatchEvent(new Event('change', { bubbles: true })); await settle();
+    expect(state.setupStart).not.toHaveBeenCalled(); expect(state.setupUpload).not.toHaveBeenCalled();
+  });
   it('rejects a late offline file selection after preparation becomes busy', async () => {
     await inspectUpdate();
+    document.querySelector<HTMLButtonElement>('.host-apps-offline-details > button')!.click(); await settle();
     const input = document.querySelector<HTMLInputElement>('[role=dialog] input[type=file]')!;
     const file = new File([new Uint8Array(100)], 'components.zip');
     state.setupObserve.mock.calls[0][0]({ ...installedSetup, state: 'downloading', operation_id: 'active', can_cancel: true });
@@ -557,7 +570,7 @@ it('refreshes the real application library after preparation without a pending a
  state.catalog.mockResolvedValue({ availability: { supported: true, ready: false }, applications: [], sessions: [] });
  dispose = render(() => <EnvHostApplicationsPage />, host); await settle();
  expect(host.querySelector('.host-apps-preparation')).toBeNull();
- host.querySelector<HTMLDetailsElement>('.host-apps-empty-host details')!.open = true;
+ host.querySelector<HTMLButtonElement>('.host-apps-preparation-details > button')!.click(); await settle();
  textButton('Component settings').click(); await settle();
  expect(state.setupStart).not.toHaveBeenCalled();
  textButton('Prepare').click(); await settle();

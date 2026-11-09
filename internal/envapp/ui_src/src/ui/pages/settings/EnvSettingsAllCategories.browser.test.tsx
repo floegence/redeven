@@ -161,11 +161,11 @@ async function openCategory(section: EnvSettingsSection) {
 async function expandPictureSettings(panel: HTMLElement) {
   // IMPORTANT: The host owner admits picture controls only after explicit
   // disclosure. Exercise that path instead of bypassing its retained state.
-  const disclosure = panel.querySelector<HTMLDetailsElement>('.host-access-picture')!;
-  expect(disclosure.open).toBe(false);
-  await userEvent.click(disclosure.querySelector('summary')!);
+  const disclosure = panel.querySelector<HTMLElement>('.host-access-picture')!;
+  expect(disclosure.dataset.open).toBe('false');
+  await userEvent.click(disclosure.querySelector('button')!);
   await expect.element(page.getByRole('combobox', { name: 'Picture quality', exact: true })).toBeEnabled();
-  await expect.poll(() => disclosure.open).toBe(true);
+  await expect.poll(() => disclosure.dataset.open).toBe('true');
 }
 
 function inspectCategory(section: EnvSettingsSection, panel: HTMLElement, locale: Locale) {
@@ -473,8 +473,9 @@ it('saves real picture selections immediately and never writes from category nav
   const field = picker.element();
   await openCategory('appearance');
   await openCategory('applications');
-  expect(panel.querySelector<HTMLDetailsElement>('.host-access-picture')!.open).toBe(false);
-  expect((field as HTMLElement).checkVisibility()).toBe(false);
+  expect(panel.querySelector<HTMLElement>('.host-access-picture')!.dataset.open).toBe('false');
+  expect(field.closest('.floe-settings-disclosure__panel')?.getAttribute('inert')).not.toBeNull();
+  await expect.poll(() => (field as HTMLElement).checkVisibility({visibilityProperty:true})).toBe(false);
   expect(updates).toHaveLength(1);
   await expandPictureSettings(panel);
   expect(picker.element()).toBe(field);
@@ -482,7 +483,7 @@ it('saves real picture selections immediately and never writes from category nav
   expect(updates).toHaveLength(1);
   session.close();
   session.open({ section: 'applications' });
-  expect(panel.querySelector<HTMLDetailsElement>('.host-access-picture')!.open).toBe(false);
+  expect(panel.querySelector<HTMLElement>('.host-access-picture')!.dataset.open).toBe('false');
   await expandPictureSettings(panel);
   await expect.element(picker).toBeVisible();
   expect(updates).toHaveLength(1);

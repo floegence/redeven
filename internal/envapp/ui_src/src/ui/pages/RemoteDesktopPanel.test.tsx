@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { controlText } from '../../testSupport/controlText';
 import { RemoteDesktopPanel } from './RemoteDesktopPanel';
@@ -109,6 +110,7 @@ it('keeps a failed connection visible after a successful status refresh', async 
   await mount(); button('Connect to desktop').click();
   await vi.waitFor(() => expect(host.querySelector('[role=alert]')?.textContent).toContain('Could not connect to the desktop'));
   button('Refresh').click(); await vi.waitFor(() => expect(state.status).toHaveBeenCalledTimes(3));
+  host.querySelector<HTMLButtonElement>('.remote-desktop-error .floe-settings-disclosure__trigger')!.click();
   expect(host.querySelector('[role=alert]')?.textContent).toContain('DESKTOP_UNAVAILABLE');
   expect(host.textContent).not.toContain('desktop operation');
 });
@@ -126,7 +128,7 @@ it('permits the connection that triggers Wayland system authorization', async ()
 
 it('keeps advanced settings out of the initial connection flow and avoids a single-display selector', async () => {
   await mount(); expect(host.querySelector('select')).toBeNull();
-  const options = host.querySelector<HTMLDetailsElement>('.remote-desktop-options')!;
+  const options = host.querySelector<HTMLElement>('.remote-desktop-options')!;
   expect(options).toBeNull(); expect(host.textContent).not.toContain('Connect automatically after first approval');
   expect(host.textContent).not.toContain('Unattended reconnection'); expect(state.save).not.toHaveBeenCalled();
 });
@@ -144,6 +146,7 @@ it('releases a session when the viewer window cannot open and explains the failu
   await mount(); button('Connect to desktop').click();
   await vi.waitFor(() => expect(state.disconnect).toHaveBeenCalledWith('one'));
   expect(host.querySelector('[role=alert]')?.textContent).toContain('The desktop window could not open');
+  host.querySelector<HTMLButtonElement>('.remote-desktop-error .floe-settings-disclosure__trigger')!.click();
   expect(host.querySelector('[role=alert]')?.textContent).toContain('Invalid Web Service window request.');
   expect(host.querySelector('.remote-desktop-guidance')).toBeNull();
 });
@@ -270,6 +273,7 @@ it('requests a masked password only for a matching challenge and clears it after
   state.deployment.mockImplementation(request => request.action === 'capabilities' ? Promise.resolve({ok:true,available:true}) : request.action === 'respond' ? Promise.resolve({ok:true}) : new Promise(resolve => { finish=resolve; }));
   await mount(); await vi.waitFor(() => expect(button('Connect to desktop')).toBeDefined()); button('Connect to desktop').click();
   expect(host.querySelector('input[type=password]')).toBeNull();
+  host.querySelector<HTMLButtonElement>('.remote-desktop-permission-details > button')!.click();
   expect(host.textContent).toContain('root system service'); expect(document.querySelector('[role=dialog]')).toBeNull();
   button('Authorize and continue').click();
   await vi.waitFor(() => expect(state.deployment.mock.calls.some(([r]) => r.action==='manage')).toBe(true));
@@ -316,11 +320,34 @@ it('continues from authorized setup to the desktop in the same dialog flow', asy
   expect(state.open).toHaveBeenCalledOnce();
 });
 
+it.each(['collapsed', 'inactive'] as const)('rejects a retained service action while advanced options are %s', async condition => {
+  state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'ready' }, login_service: { state: 'active', backend: 'linux-drm-kms' } });
+  state.ssh = true; state.deployment.mockResolvedValue({ ok: true, available: true });
+  const [active, setActive] = createSignal(true);
+  dispose = render(() => <RemoteDesktopPanel active={active()} />, host);
+  await vi.waitFor(() => expect(host.querySelector('.remote-desktop-options')).not.toBeNull());
+  const trigger = host.querySelector<HTMLButtonElement>('.remote-desktop-options > button')!;
+  trigger.click();
+  const action = button('Prepare remote desktop');
+  expect(action.disabled).toBe(false);
+  if (condition === 'collapsed') trigger.click();
+  else setActive(false);
+  expect(action.isConnected).toBe(true);
+  expect(action.disabled).toBe(true);
+  action.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  expect(host.querySelector('.remote-desktop-deployment-flow')).toBeNull();
+  expect(state.deployment.mock.calls.some(([request]) => request.action === 'manage')).toBe(false);
+  if (condition === 'collapsed') trigger.click();
+  else setActive(true);
+  action.click();
+  expect(host.querySelector('[data-phase=authorizing]')).not.toBeNull();
+});
+
 it('does not connect automatically after a service-management action from advanced options', async () => {
   state.status.mockResolvedValue({ ...ready, capabilities: { ...ready.capabilities, backend: 'linux-drm-kms', state: 'ready' }, login_service: { state: 'active', backend: 'linux-drm-kms' } });
   state.ssh = true; state.deployment.mockImplementation(request => Promise.resolve(request.action === 'capabilities' ? { ok: true, available: true } : { ok: true }));
   await mount();
-  host.querySelector<HTMLDetailsElement>('.remote-desktop-options')!.open = true;
+  host.querySelector<HTMLButtonElement>('.remote-desktop-options > button')!.click();
   const update = [...host.querySelectorAll<HTMLButtonElement>('.remote-desktop-options button')].find(item => controlText(item) === 'Prepare remote desktop')!;
   update.click();
   const flow = document.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!;
@@ -362,7 +389,7 @@ it('does not let a canceled retry skip a newer authorization step', async () => 
   state.status.mockImplementation(() => new Promise(resolve => { finishStatus = resolve; }));
   button('Connect to desktop').click();
   button('Back to connection').click();
-  host.querySelector<HTMLDetailsElement>('.remote-desktop-options')!.open = true;
+  host.querySelector<HTMLButtonElement>('.remote-desktop-options > button')!.click();
   button('Prepare remote desktop').click();
   expect(host.querySelector('[data-phase=authorizing]')).not.toBeNull();
   state.status.mockResolvedValue(installed); finishStatus(installed);
@@ -624,6 +651,7 @@ it.each(['complete', 'next_challenge', 'canceling'] as const)('ignores a late ch
     return Promise.resolve({ ok: true });
   });
   await mount();
+  host.querySelector<HTMLButtonElement>('.remote-desktop-options > button')!.click();
   button('Prepare remote desktop').click();
   button('Authorize and continue').click();
   const current = state.deployment.mock.calls.find(([request]) => request.action === 'manage')![0];

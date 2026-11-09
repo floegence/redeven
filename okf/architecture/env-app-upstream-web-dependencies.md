@@ -4,11 +4,11 @@ title: Env App upstream web dependencies
 tags: [architecture, dependencies, protocol, ui]
 quality_exception: Published web dependency and terminal package boundary covering version pins, shell ownership, and renderer-free loading.
 lifecycle: contract
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.99.1, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.
+Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.9, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.
 
 # Contract
 

@@ -28,8 +28,6 @@
 .host-access-permission-visual{display:grid;place-items:center;width:64px;height:64px;border:1px solid var(--border);border-radius:14px;background:var(--muted);}
 .host-access-permission-scene{width:54px;height:42px;}
 .host-access-system{font-size:12px;color:var(--muted-foreground);}
-.host-access-system summary{cursor:pointer;color:var(--foreground);}
-.host-access-system p{margin:12px 0;line-height:1.6;}
 .host-access-management{border-top:1px solid var(--border);padding-top:18px;margin-top:20px;}
 .host-access-confirm p{margin:8px 0 14px;line-height:1.6;color:var(--muted-foreground);}
 .host-access-state{font-weight:500;}
@@ -64,37 +62,20 @@
 .host-access-state::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;margin-inline-end:7px;background:var(--muted-foreground);}
 .host-access-state[data-state=enabled]::before{background:var(--redeven-status-success-foreground);}
 .host-access-state[data-state=paused]::before{background:var(--redeven-status-warning-foreground);}
-.host-access-system{padding-top:14px;border-top:1px solid var(--border);}
-.host-access-system-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:8px;}
-.host-access-system-row>div{display:grid;gap:3px;}
-.host-access-system-row strong{font-weight:500;color:var(--foreground);}
 .host-access-back{margin-bottom:16px;}
-@media(max-width:380px){.host-access-system-row{flex-wrap:wrap;}}
 
 .host-access-state[data-state=enabled][data-ready=false]::before{background:var(--redeven-status-warning-foreground);}
 
 
-.host-access-recovery{margin-top:18px;border-top:1px solid var(--border);padding-top:14px;font-size:12px;}
-.host-access-recovery summary{cursor:pointer;color:var(--foreground);}
-.host-access-recovery-step{display:grid;grid-template-columns:72px minmax(0,1fr);gap:14px;margin-top:18px;}
-.host-access-recovery-step h4{font-weight:600;color:var(--foreground);font-size:13px;}
-.host-access-recovery-step p{margin:6px 0 10px;line-height:1.6;color:var(--muted-foreground);}
 .host-access-helper-scene{width:72px;height:54px;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
 .host-access-recovery-step button{min-width:0;max-width:100%;white-space:normal;height:auto;min-height:32px;overflow-wrap:anywhere;}
 .host-access-recovery-step button span{min-width:0;white-space:normal;overflow-wrap:anywhere;}
-@media(max-width:380px){.host-access-recovery-step{grid-template-columns:48px minmax(0,1fr);gap:10px;}.host-access-helper-scene{width:48px;height:38px;}}
+@media(max-width:380px){.host-access-helper-scene{width:48px;height:38px;}}
 
-.host-access-recovery-step>div{min-width:0;overflow-wrap:anywhere;}
 
 /* Feature prerequisites precede optional tuning; retain the shared row surface. */
 .host-access-settings-intro{font-size:var(--floe-type-control);line-height:1.6;color:var(--muted-foreground);}
 .host-access-feature-row .host-access-feature-mark{width:38px;height:30px;flex:none;}
-.host-access-picture{margin:0 16px 16px;padding-top:12px;border-top:1px solid var(--border);font-size:var(--floe-type-control);}
-.host-access-picture[hidden]{display:none;}
-.host-access-picture>summary{cursor:pointer;color:var(--foreground);}
-.host-access-picture-hint{margin-inline-start:12px;font-size:var(--floe-type-meta);color:var(--muted-foreground);}
-.host-access-picture>[data-testid=application-picture-settings]{margin-top:12px;}
-@media(max-width:480px){.host-access-picture-hint{display:block;margin:4px 0 0 16px;}}
 
 /* One current permission, a persistent completion trail and one primary action. */
 .host-access-permission-progress{display:flex;gap:16px;list-style:none;margin:0 0 6px;padding:0;}
@@ -107,6 +88,12 @@
 .host-access-permission-target{padding:12px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;overflow-wrap:anywhere;}
 .host-access-permission-footer{display:grid;gap:12px;}
 .host-access-permission-footer>p{font-size:12px;line-height:1.6;color:var(--muted-foreground);}
-.host-access-permissions>.host-access-recovery{margin-top:2px;padding-top:14px;}
 .host-access-permissions .host-access-actions button{max-width:100%;height:auto;min-height:34px;white-space:normal;}
 @media(forced-colors:active){.host-access-permission-progress li[data-complete=true]{color:CanvasText;}.host-access-permission-progress li[aria-current=step]{border-color:Highlight;}}
+
+/* Shared disclosure owns its rounded boundary, keyboard interaction and motion. */
+.host-access-system .host-access-permission-destination,.host-access-system .floe-settings-disclosure__content>p{margin:0;line-height:1.6;}
+.host-access-recovery-step .floe-setting-row__label{align-items:center;}
+.host-access-recovery-step .host-access-helper-scene{flex:none;}
+.host-access-recovery-step [role=alert]{margin:0 0 10px;font-size:var(--floe-type-supporting);line-height:1.6;color:var(--muted-foreground);}
+.host-access-picture{margin:0 12px 12px;}

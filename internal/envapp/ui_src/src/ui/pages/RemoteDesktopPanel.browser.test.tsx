@@ -32,7 +32,13 @@ let dispose: (() => void) | undefined;
 
 async function settleDialog(dialog: HTMLElement) {
   await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-  await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity).length).toBe(0);
+  await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity).map(animation => ({
+    target: ((animation.effect as KeyframeEffect)?.target as HTMLElement)?.className,
+    name: (animation as CSSAnimation).animationName,
+    property: (animation as CSSTransition).transitionProperty,
+    time: animation.currentTime,
+    timing: animation.effect?.getComputedTiming(),
+  }))).toEqual([]);
 }
 
 function expectCompactFooter(flow: HTMLElement) {
@@ -94,22 +100,22 @@ it.each(SUPPORTED_LOCALES)('centers the primary label and keeps SSH authorizatio
   await settleDialog(dialog);
   expectCompactFooter(flow);
   expectFlowWithinViewport(dialog, 320, 780);
-  const permissionDetails = flow.querySelector<HTMLDetailsElement>('.remote-desktop-permission-details');
+  const permissionDetails = flow.querySelector<HTMLElement>('.remote-desktop-permission-details');
   expect(permissionDetails).not.toBeNull();
-  expect(permissionDetails!.open).toBe(false);
+  expect(permissionDetails!.dataset.open).toBe('false');
   const authorizationSummary = flow.querySelector<HTMLElement>('.remote-desktop-flow-copy > p')!;
   expect(authorizationSummary.getBoundingClientRect().height).toBeLessThanOrEqual(Number.parseFloat(getComputedStyle(authorizationSummary).lineHeight) * 3 + 1);
-  await expect.element(page.elementLocator(permissionDetails!.querySelector('p')!)).not.toBeVisible();
-  permissionDetails!.querySelector('summary')!.focus();
+  expect(permissionDetails!.querySelector('p')).toBeNull();
+  permissionDetails!.querySelector('button')!.focus();
   await userEvent.keyboard('{Enter}');
-  expect(permissionDetails!.open).toBe(true);
+  expect(permissionDetails!.dataset.open).toBe('true');
   await expect.element(page.elementLocator(permissionDetails!.querySelector('p')!)).toBeVisible();
   await settleDialog(dialog);
   expectCompactFooter(flow);
   expectFlowWithinViewport(dialog, 320, 780);
   if (locale === 'zh-CN') await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-permissions-expanded-narrow-zh-CN.png' });
   await userEvent.keyboard('{Enter}');
-  expect(permissionDetails!.open).toBe(false);
+  expect(permissionDetails!.dataset.open).toBe('false');
   await settleDialog(dialog);
   expect(document.querySelectorAll('[role=dialog]')).toHaveLength(1);
   expect(flow.scrollWidth).toBeLessThanOrEqual(flow.clientWidth + 1);
@@ -230,7 +236,9 @@ it.each([
     expect(select.labels?.[0]?.textContent).toContain(locale === 'zh-CN' ? '管理员授权方式' : 'Administrator authorization');
     expectCompactFooter(dialog.querySelector<HTMLElement>('.remote-desktop-deployment-flow')!);
     const authorizationFooter = dialog.querySelector<HTMLElement>('.remote-desktop-flow-footer')!;
-    expect(authorizationFooter.getBoundingClientRect().top - select.getBoundingClientRect().bottom).toBeLessThanOrEqual(24);
+    const permissionDetails = dialog.querySelector<HTMLElement>('.remote-desktop-permission-details')!;
+    expect(permissionDetails.getBoundingClientRect().top).toBeGreaterThanOrEqual(select.getBoundingClientRect().bottom);
+    expect(authorizationFooter.getBoundingClientRect().top - permissionDetails.getBoundingClientRect().bottom).toBeLessThanOrEqual(24);
     await page.screenshot({ element: dialog, path: '__screenshots__/remote-desktop-authorization-' + width + '-' + locale + '-' + theme + '-' + forcedColors + '.png' });
     const arrow = select.parentElement!.querySelector('svg');
     expect(arrow, 'The dropdown arrow needs its own inset inside the field').not.toBeNull();
@@ -248,7 +256,11 @@ it.each([
     expect(field.right).toBeLessThanOrEqual(width);
     select.focus();
     await userEvent.keyboard('{Tab}');
+    expect(document.activeElement).toBe(permissionDetails.querySelector('button'));
+    await userEvent.keyboard('{Tab}');
     expect(document.activeElement).toBe(dialog.querySelector('.remote-desktop-flow-footer > button:first-child'));
+    await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
+    expect(document.activeElement).toBe(permissionDetails.querySelector('button'));
     await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
     expect(document.activeElement).toBe(select);
     await userEvent.selectOptions(select, 'root');
@@ -313,7 +325,13 @@ it.each(['no-preference', 'reduce'] as const)('advances one dialog with visible 
     expect(duration).toBeLessThanOrEqual(.3);
     expect(getComputedStyle(flow).animationName).toBe(reducedMotion === 'reduce' ? 'none' : 'remote-desktop-flow-enter');
     await settleDialog(dialog);
-    await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity).length).toBe(0);
+    await expect.poll(() => dialog.getAnimations({ subtree: true }).filter(animation => animation.playState === 'running' && animation.effect?.getTiming().iterations !== Infinity).map(animation => ({
+    target: ((animation.effect as KeyframeEffect)?.target as HTMLElement)?.className,
+    name: (animation as CSSAnimation).animationName,
+    property: (animation as CSSTransition).transitionProperty,
+    time: animation.currentTime,
+    timing: animation.effect?.getComputedTiming(),
+  }))).toEqual([]);
     const initialHeight = dialog.getBoundingClientRect().height;
     const content = flow.querySelector<HTMLElement>('.remote-desktop-flow-content')!;
     const initialContentHeight = content.getBoundingClientRect().height;
