@@ -1,4 +1,4 @@
-import { Match, Show, Switch } from 'solid-js';
+import { Match, Show, Switch, createUniqueId } from 'solid-js';
 import type { HostAccessState } from '../services/hostAccess';
 
 // Product illustrations describe the scope of access; adjacent localized copy
@@ -49,19 +49,50 @@ export function HostAccessFeatureIllustration(props: { feature: 'applications' |
   );
 }
 
-// Compact settings marks preserve the same single-window / whole-screen scope.
+// Product artwork distinguishes one application window from a complete desktop.
+// Each instance owns its paint servers, including retained settings surfaces.
 export function HostAccessFeatureMark(props: { feature: 'applications' | 'desktop' }) {
-  return <svg class="host-access-feature-mark" data-scene={props.feature} viewBox="0 0 64 48" fill="none" aria-hidden="true">
-    <Show when={props.feature === 'applications'} fallback={<g class="host-access-art-selected">
-      <rect x="4" y="4" width="56" height="34" rx="4" class="host-access-art-tint" />
-      <rect x="10" y="10" width="25" height="17" rx="2" class="host-access-art-paper" />
-      <rect x="30" y="18" width="23" height="14" rx="2" class="host-access-art-paper" />
-      <path d="M10 15h25m-5 8h23m-29 15v6m16-6v6m-22 0h28m-20-11h2m4 0h2m4 0h2" />
-    </g>}><g class="host-access-art-selected">
-      <rect x="7" y="7" width="50" height="34" rx="4" class="host-access-art-paper" />
-      <path d="M7 16h50m-42-5h2m4 0h2m12 13h14m-14 7h10" />
-      <rect x="15" y="23" width="12" height="11" rx="2" class="host-access-art-tint" />
-    </g></Show>
+  const id = `host-feature-${createUniqueId()}`;
+  return <svg class="host-access-feature-mark" data-scene={props.feature} viewBox="0 0 64 64" fill="none" aria-hidden="true" style={props.feature === 'applications' ? {
+    '--host-feature-palette-bright': 'light-dark(#8c7bd3, #ad9be8)',
+    '--host-feature-palette-deep': 'light-dark(#62549f, #7160ac)',
+    '--host-feature-palette-paper': 'light-dark(#f8f6ff, #eee8fc)',
+    '--host-feature-palette-mist': 'light-dark(#ded9ef, #c6b9e7)',
+  } : {
+    '--host-feature-palette-bright': 'light-dark(#5e9cb9, #86c6df)',
+    '--host-feature-palette-deep': 'light-dark(#346b89, #417c9b)',
+    '--host-feature-palette-paper': 'light-dark(#f3faff, #e2f3fb)',
+    '--host-feature-palette-mist': 'light-dark(#c3e0ee, #abd4e7)',
+  }}>
+    <defs>
+      <linearGradient id={`${id}-tile`} x1="0" y1="0" x2="1" y2="1"><stop stop-color="var(--host-feature-tile-top)" /><stop offset="1" stop-color="var(--host-feature-tile-bottom)" /></linearGradient>
+      <linearGradient id={`${id}-shell`} x1="0" y1="0" x2=".8" y2="1"><stop stop-color="var(--host-feature-bright)" /><stop offset="1" stop-color="var(--host-feature-deep)" /></linearGradient>
+      <linearGradient id={`${id}-glass`} x1="0" y1="0" x2="1" y2="1"><stop stop-color="var(--host-feature-paper)" /><stop offset="1" stop-color="var(--host-feature-mist)" /></linearGradient>
+    </defs>
+    <rect class="host-feature-tile" x="2" y="2" width="60" height="60" rx="16" fill={`url(#${id}-tile)`} />
+    <path class="host-feature-highlight" d="M18 2.5h28A15.5 15.5 0 0 1 61.5 18" stroke="var(--host-feature-bright)" stroke-opacity=".3" stroke-width="1" />
+    <Show when={props.feature === 'applications'} fallback={<g data-part="complete-desktop">
+      <path d="m27 45-2 8h14l-2-8" fill="var(--host-feature-deep)" />
+      <rect x="21" y="52" width="22" height="3" rx="1.5" fill="var(--host-feature-bright)" />
+      <rect class="host-feature-frame" x="8" y="11" width="48" height="35" rx="6" fill={`url(#${id}-shell)`} />
+      <rect class="host-feature-screen" x="11" y="14" width="42" height="27" rx="3.5" fill={`url(#${id}-glass)`} />
+      <path class="host-feature-wallpaper" d="M11 32c12-15 21 7 42-12v17.5a3.5 3.5 0 0 1-3.5 3.5h-35a3.5 3.5 0 0 1-3.5-3.5Z" fill="var(--host-feature-bright)" opacity=".55" />
+      <rect class="host-feature-window" x="16" y="19" width="17" height="12" rx="2.5" fill="var(--host-feature-paper)" stroke="var(--host-feature-deep)" stroke-opacity=".35" stroke-width="1" />
+      <path class="host-feature-detail" d="M16 23h17" stroke="var(--host-feature-bright)" stroke-width="1" />
+      <rect class="host-feature-window" x="30" y="26" width="17" height="10" rx="2.5" fill="var(--host-feature-deep)" />
+      <path class="host-feature-detail" d="M34 30h8m-8 3h5" stroke="var(--host-feature-paper)" stroke-width="1.3" opacity=".85" />
+      <path class="host-feature-detail" d="M27 38h1m4 0h1m4 0h1" stroke="var(--host-feature-paper)" stroke-width="2" />
+      <circle cx="32" cy="43.5" r=".9" fill="var(--host-feature-paper)" />
+    </g>}>
+      <g data-part="application-window">
+        <rect class="host-feature-frame" x="9" y="13" width="46" height="38" rx="7" fill={`url(#${id}-shell)`} />
+        <rect class="host-feature-screen" x="12" y="23" width="40" height="25" rx="4" fill={`url(#${id}-glass)`} />
+        <path class="host-feature-detail" d="M16 18h.5m4 0h.5m4 0h.5" stroke="var(--host-feature-paper)" stroke-width="2" opacity=".85" />
+        <rect class="host-feature-window" x="16" y="27" width="11" height="17" rx="3" fill={`url(#${id}-shell)`} />
+        <path class="host-feature-detail" d="M32 29h13m-13 6h9m-9 6h6" stroke="var(--host-feature-deep)" stroke-width="2.5" opacity=".7" />
+        <path class="host-feature-highlight" d="M16 13.5h32a6.5 6.5 0 0 1 6.5 6.5" stroke="var(--host-feature-paper)" stroke-opacity=".5" stroke-width="1" />
+      </g>
+    </Show>
   </svg>;
 }
 

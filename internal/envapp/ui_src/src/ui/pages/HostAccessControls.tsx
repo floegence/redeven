@@ -1,5 +1,5 @@
 import { Button, Dropdown, Switch } from '@floegence/floe-webapp-core/ui';
-import { MoreHorizontal } from '@floegence/floe-webapp-core/icons';
+import { Check, MoreHorizontal } from '@floegence/floe-webapp-core/icons';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { Dialog } from '../primitives/EnvAppModal';
 import { useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
@@ -103,8 +103,7 @@ export function HostAccessSystemPermissions(props: {
       <HostAccessPermissionDestination name={props.permissionAppName} />
       <SettingsList><For each={['screen_recording', 'accessibility'] as const}>{permission => <SettingRow class="host-access-system-row"
         title={i18n.t(permission === 'screen_recording' ? 'hostAccess.screenPermission' : 'hostAccess.inputPermission')}
-        description={i18n.t(granted(permission) ? 'hostAccess.allowed' : 'hostAccess.required')}
-        control={<Button size="sm" variant="outline" disabled={!canManage()} onClick={() => { if (!canManage()) return; const manage = granted(permission) || requested().includes(permission); if (!manage) setRequested(previous => [...previous, permission]); props.onPermission(permission, manage); }}>{i18n.t((granted(permission) || requested().includes(permission)) ? 'hostAccess.openSystemSettings' : permission === 'screen_recording' ? 'hostAccess.allowScreen' : 'hostAccess.allowInput')}</Button>} />}</For></SettingsList>
+        control={<div class="host-access-permission-control"><span class="host-access-permission-status" data-granted={granted(permission)}><Show when={granted(permission)}><Check aria-hidden="true" /></Show>{i18n.t(granted(permission) ? 'hostAccess.allowed' : 'hostAccess.required')}</span><Button size="sm" variant="outline" disabled={!canManage()} onClick={() => { if (!canManage()) return; const manage = granted(permission) || requested().includes(permission); if (!manage) setRequested(previous => [...previous, permission]); props.onPermission(permission, manage); }}>{i18n.t((granted(permission) || requested().includes(permission)) ? 'hostAccess.openSystemSettings' : permission === 'screen_recording' ? 'hostAccess.allowScreen' : 'hostAccess.allowInput')}</Button></div>} />}</For></SettingsList>
       <Show when={requested().some(permission => !granted(permission))}><p role="status">{i18n.t('hostAccess.requestPending')}</p></Show>
       <p>{i18n.t('hostAccess.sharedPermissions')}</p>
       <Show when={props.onRecovery}><HostAccessRecovery name={props.permissionAppName} allowed={recoveryAllowed()} busy={props.busy} onRecovery={props.onRecovery!} /></Show>

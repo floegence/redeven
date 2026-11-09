@@ -193,7 +193,7 @@ it.each(['zh-CN', 'de-DE', 'zh-TW'] as const)('shows direct feature controls and
  expect(dialog.querySelector('.host-apps > button')).toBeNull();
  expect(dialog.querySelector('.host-access-system > button')?.getAttribute('aria-expanded')).toBe('false');
  await page.getByRole('button', {name: dictionary.hostAccess.systemSettings, exact: true}).click();
- expect([...dialog.querySelectorAll('.host-access-system-row .floe-setting-row__label p')].map(node => node.textContent)).toEqual([dictionary.hostAccess.allowed, dictionary.hostAccess.allowed]);
+ expect([...dialog.querySelectorAll('.host-access-system-row .host-access-permission-status')].map(node => node.textContent)).toEqual([dictionary.hostAccess.allowed, dictionary.hostAccess.allowed]);
  expect((await axe.run(dialog, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } })).violations).toEqual([]);
  await page.screenshot({ element: dialog, path: `__screenshots__/host-access-direct-settings-${locale}.png` });
  await page.viewport(320, 850);
@@ -655,6 +655,16 @@ it.each(['light', 'dark'] as const)('keeps expanded host settings in shared roun
  }
  expect(dialog.querySelectorAll('.host-access-system-row.floe-setting-row')).toHaveLength(2);
  expect(dialog.querySelectorAll('.host-access-recovery-step.floe-setting-row')).toHaveLength(2);
+ const marks = [...dialog.querySelectorAll<SVGSVGElement>('.host-access-feature-mark')];
+ expect(marks).toHaveLength(2);
+ const paintIds = marks.flatMap(mark => [...mark.querySelectorAll('[id]')].map(node => node.id));
+ expect(new Set(paintIds).size).toBe(paintIds.length);
+ expect(getComputedStyle(marks[0]).getPropertyValue('--host-feature-bright')).not.toBe(getComputedStyle(marks[1]).getPropertyValue('--host-feature-bright'));
+ for (const mark of marks) {
+   expect(mark.getAttribute('aria-hidden')).toBe('true');
+   expect(mark.getBoundingClientRect().width).toBe(44);
+   expect(mark.getBoundingClientRect().height).toBe(44);
+ }
  await page.screenshot({element:dialog,path:`__screenshots__/host-access-disclosures-${theme}-zh-CN.png`});
  await page.getByRole('button', {name:dictionary.hostAccess.pictureSettings, exact:true}).click();
  await expect.element(page.getByRole('combobox',{name:dictionary.hostApplications.macPicture,exact:true})).toBeEnabled();
@@ -672,6 +682,55 @@ it.each(['light', 'dark'] as const)('keeps expanded host settings in shared roun
  restart.scrollIntoView({block:'nearest'});
  await expect.poll(() => restart.getBoundingClientRect().bottom).toBeLessThanOrEqual(dialog.getBoundingClientRect().bottom);
  await page.screenshot({element:dialog,path:`__screenshots__/host-access-disclosures-recovery-${theme}-zh-CN.png`});
+});
+
+it.each(['light', 'dark'] as const)('aligns permission status with actions and reflects grants in %s', async theme => {
+ await loadEnvAppDictionary('zh-CN'); writeStoredLanguagePreference('zh-CN');
+ const dictionary = await loadEnvAppDictionary('zh-CN');
+ const [screen, setScreen] = createSignal(true);
+ const permission = vi.fn();
+ const host = document.createElement('main'); host.style.padding = '12px'; document.body.append(host);
+ dispose = render(() => <I18nProvider><FloeProvider><FixtureTheme mode={theme} /><HostAccessSystemPermissions permissionAppName="Redeven Desktop Access Dev" screen={screen()} input={false} allowed busy={false} onPermission={permission}/></FloeProvider></I18nProvider>, host);
+ await page.getByRole('button', {name:dictionary.hostAccess.systemSettings, exact:true}).click();
+ const rows = [...host.querySelectorAll<HTMLElement>('.host-access-system-row')];
+ const granted = rows[0].querySelector<HTMLElement>('.host-access-permission-status')!;
+ const required = rows[1].querySelector<HTMLElement>('.host-access-permission-status')!;
+ expect(granted.textContent).toBe(dictionary.hostAccess.allowed);
+ expect(granted.querySelector('svg')).not.toBeNull();
+ expect(required.textContent).toBe(dictionary.hostAccess.required);
+ expect(required.querySelector('svg')).toBeNull();
+ const token = document.createElement('span'); token.style.color = 'var(--redeven-status-success-foreground)'; host.append(token);
+ expect(getComputedStyle(granted).color).toBe(getComputedStyle(token).color);
+ expect(getComputedStyle(required).color).not.toBe(getComputedStyle(granted).color);
+ token.remove();
+ for (const width of [1080, 320]) {
+   await page.viewport(width, 900);
+   await expect.poll(() => host.getAnimations({subtree:true}).filter(animation => animation.playState === 'running').length).toBe(0);
+   for (const row of rows) {
+     expect(row.querySelector('.floe-setting-row__label p')).toBeNull();
+     const status = row.querySelector<HTMLElement>('.host-access-permission-status')!;
+     const action = row.querySelector<HTMLButtonElement>('button')!;
+     expect(status.closest('.floe-setting-row__control')).not.toBeNull();
+     expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right);
+     expect(status.getBoundingClientRect().right).toBeLessThanOrEqual(action.getBoundingClientRect().left);
+     expect(Math.abs((status.getBoundingClientRect().top + status.getBoundingClientRect().height / 2) - (action.getBoundingClientRect().top + action.getBoundingClientRect().height / 2))).toBeLessThan(1);
+     expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+   }
+   await page.screenshot({element:host,path:`__screenshots__/host-access-status-${theme}-${width}.png`});
+ }
+ await page.elementLocator(rows[0].querySelector<HTMLButtonElement>('button')!).click();
+ expect(permission).toHaveBeenCalledExactlyOnceWith('screen_recording', true);
+ setScreen(false);
+ expect(granted.dataset.granted).toBe('false');
+ expect(granted.textContent).toBe(dictionary.hostAccess.required);
+ expect(granted.querySelector('svg')).toBeNull();
+ setScreen(true);
+ expect(granted.dataset.granted).toBe('true');
+ expect((await axe.run(host,{runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations).toEqual([]);
+ await media.emulateMediaPreferences({forcedColors:'active'});
+ expect(granted.querySelector('svg')).not.toBeNull();
+ const systemText = document.createElement('span'); systemText.style.color = 'CanvasText'; host.append(systemText);
+ expect(getComputedStyle(granted).color).toBe(getComputedStyle(systemText).color);
 });
 
 it('retires hidden recovery intent and permission callbacks when the group closes', async () => {

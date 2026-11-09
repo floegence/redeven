@@ -232,6 +232,16 @@ export const THEME_COLOR_EXCEPTIONS = Object.freeze([
       && /(?:stop-color|\bfill)=/u.test(lineSource),
   ),
   exception(
+    'internal/envapp/ui_src/src/ui/pages/HostAccessIllustration.tsx',
+    'brand',
+    'Host access feature artwork pairs authored violet application and blue desktop palettes; tile surfaces retain the active card token.',
+    ({ value, source, offset, lineSource }) => [
+      '#8c7bd3', '#ad9be8', '#62549f', '#7160ac', '#f8f6ff', '#eee8fc', '#ded9ef', '#c6b9e7',
+      '#5e9cb9', '#86c6df', '#346b89', '#417c9b', '#f3faff', '#e2f3fb', '#c3e0ee', '#abd4e7',
+    ].includes(value.toLowerCase()) && isInsideNamedFunction(source, offset, 'HostAccessFeatureMark')
+      && /'--host-feature-palette-(?:bright|deep|paper|mist)':/u.test(lineSource),
+  ),
+  exception(
     'internal/envapp/ui_src/src/ui/icons/WorkbenchSoftIcons.tsx',
     'brand',
     'Workbench network, composition, and launcher artwork uses a bounded blue-gray palette; tile backgrounds derive from the active card token.',

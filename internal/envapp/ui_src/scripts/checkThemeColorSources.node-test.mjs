@@ -49,6 +49,16 @@ test('accepts semantic variables and color functions derived from them', () => {
   assert.deepEqual(violations, []);
 });
 
+test('host feature artwork colors stay inside their named SVG palette', () => {
+  const pathname = 'internal/envapp/ui_src/src/ui/pages/HostAccessIllustration.tsx';
+  const palette = "function HostAccessFeatureMark() { return <svg style={{ '--host-feature-palette-bright': 'light-dark(#8c7bd3, #ad9be8)' }} />; }";
+  assert.deepEqual(findThemeColorViolations(palette, pathname), []);
+  assert.equal(findThemeColorViolations(palette, 'other.tsx').length, 2);
+  assert.equal(findThemeColorViolations(palette.replace('HostAccessFeatureMark', 'Other'), pathname).length, 2);
+  assert.equal(findThemeColorViolations(palette.replace('--host-feature-palette-bright', 'color'), pathname).length, 2);
+  assert.equal(findThemeColorViolations(palette.replace('#8c7bd3', '#123456'), pathname).length, 1);
+});
+
 test('published standalone palette colors belong only to their generated string export', () => {
   const pathname = 'desktop/src/shared/floeStandaloneStyles.generated.ts';
   const source = [

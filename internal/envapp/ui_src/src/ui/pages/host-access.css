@@ -75,7 +75,15 @@
 
 /* Feature prerequisites precede optional tuning; retain the shared row surface. */
 .host-access-settings-intro{font-size:var(--floe-type-control);line-height:1.6;color:var(--muted-foreground);}
-.host-access-feature-row .host-access-feature-mark{width:38px;height:30px;flex:none;}
+.host-access-feature-row .host-access-feature-mark{width:44px;height:44px;flex:none;}
+.host-access-feature-row .floe-setting-row__label{align-items:center;}
+.host-access-feature-mark{--host-feature-bright:var(--host-feature-palette-bright);--host-feature-deep:var(--host-feature-palette-deep);--host-feature-paper:var(--host-feature-palette-paper);--host-feature-mist:var(--host-feature-palette-mist);--host-feature-tile-top:color-mix(in srgb,var(--card) 92%,var(--host-feature-bright));--host-feature-tile-bottom:color-mix(in srgb,var(--card) 80%,var(--host-feature-bright));}
+.host-access-permission-control{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 16px;max-width:100%;}
+.host-access-system-row .floe-setting-row__control{max-width:none;justify-content:flex-end;}
+.host-access-permission-status{display:inline-flex;align-items:center;gap:5px;font-size:var(--floe-type-supporting);white-space:nowrap;color:var(--muted-foreground);}
+.host-access-permission-status[data-granted=true]{color:var(--redeven-status-success-foreground);font-weight:500;}
+.host-access-permission-status>svg{width:14px;height:14px;flex:none;}
+@media(forced-colors:active){.host-access-permission-status[data-granted=true]{color:CanvasText;}.host-access-feature-mark{--host-feature-bright:CanvasText;--host-feature-deep:CanvasText;--host-feature-paper:Canvas;--host-feature-mist:Canvas;}.host-feature-tile,.host-feature-highlight,.host-feature-wallpaper{display:none;}.host-feature-frame,.host-feature-screen{fill:Canvas;stroke:CanvasText;stroke-width:1.5;}.host-feature-detail{stroke:CanvasText;opacity:1;}}
 
 /* One current permission, a persistent completion trail and one primary action. */
 .host-access-permission-progress{display:flex;gap:16px;list-style:none;margin:0 0 6px;padding:0;}
