@@ -15,6 +15,9 @@ export async function inspectTemplateSource(request: {
   token?: string;
 }, signal: AbortSignal, onTransfer?: () => void): Promise<SourcePreview> {
   signal.throwIfAborted();
+  // Market entries carry ResolvedSource metadata. The request contract accepts
+  // GitSource only; immutable identity belongs in expected and snapshot.source.
+  const source: GitSource = {repository: request.source.repository, ref: request.source.ref, path: request.source.path};
   const bridge = window.redevenDesktopTemplateSources;
   if (request.mode === 'desktop_transfer' && !bridge) throw new LocalApiError({message: '', code: 'TEMPLATE_SOURCE_UNAVAILABLE'});
   const operationID = secureRandomUUID();
@@ -23,7 +26,7 @@ export async function inspectTemplateSource(request: {
   if (request.mode === 'desktop_transfer' && bridge) {
     signal.addEventListener('abort', cancel, { once: true });
     try {
-      const response = await bridge.acquire({operation_id: operationID, action: 'capture', source: request.source, expected: request.expected, token: request.token});
+      const response = await bridge.acquire({operation_id: operationID, action: 'capture', source, expected: request.expected, token: request.token});
       signal.throwIfAborted();
       if (!response.ok) throw new LocalApiError({message: '', code: response.error_code});
       snapshot = response.snapshot;
@@ -33,7 +36,7 @@ export async function inspectTemplateSource(request: {
   }
   const result = await fetchLocalApiJSON<SourcePreview>('/_redeven_proxy/api/managed-web-service-templates/source-previews', {
     method: 'POST', signal,
-    body: JSON.stringify({template_id: request.templateID, source: request.source, expected: request.expected, ...(snapshot ? {snapshot} : {token: request.token})}),
+    body: JSON.stringify({template_id: request.templateID, source, expected: request.expected, ...(snapshot ? {snapshot} : {token: request.token})}),
   });
   signal.throwIfAborted();
   return result;

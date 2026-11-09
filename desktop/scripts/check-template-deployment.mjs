@@ -101,17 +101,22 @@ await session.run(async () => {
     page.on('request', request => {
       if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/source-previews')) {
         const body = request.postDataJSON();
-        sourceTransfers.push({snapshot: Boolean(body.snapshot), token: Boolean(body.token), commit_sha: body.source?.commit_sha});
+        sourceTransfers.push({snapshot: Boolean(body.snapshot), token: Boolean(body.token), sourceKeys: Object.keys(body.source || {}).sort(), commit_sha: body.expected?.commit_sha});
       }
     });
     await page.getByTestId('service-template-primary').click();
-    const form = page.getByTestId('managed-install-form'); await form.waitFor({timeout: 60000});
+    const form = page.getByTestId('managed-install-form');
+    await waitFor(async () => await form.isVisible() || await page.getByTestId('managed-install-blocker').isVisible(), 60000, 'automatic template acquisition');
+    assert.equal(await page.getByTestId('managed-install-blocker').count(), 0, await page.getByTestId('managed-install-blocker').allTextContents().then(lines => lines.join(' ')));
+    await form.waitFor();
     assert.equal(await page.getByRole('dialog', {name: 'Review template', exact: true}).count(), 0);
     assert.equal(await page.getByRole('button', {name: 'Continue to deployment', exact: true}).count(), 0);
     if (kind !== 'compose') {
       assert.equal(sourceTransfers.length, 1);
       assert.equal(sourceTransfers[0].snapshot, true);
       assert.equal(sourceTransfers[0].token, false);
+      assert.deepEqual(sourceTransfers[0].sourceKeys, ['path', 'ref', 'repository']);
+      assert.match(sourceTransfers[0].commit_sha, /^[a-f0-9]{40}$/);
       report.sourceTransfers = sourceTransfers;
       report.steps.push('production catalog -> automatic anonymous Desktop acquisition -> configuration');
     }

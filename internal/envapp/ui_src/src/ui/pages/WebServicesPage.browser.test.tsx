@@ -342,6 +342,7 @@ describe('Web Services product interaction', () => {
       await expect.element(page.getByTestId('managed-install-blocker')).toBeVisible();
       const blocker = document.querySelector<HTMLElement>('[data-testid="managed-install-blocker"]')!;
       const rect = blocker.getBoundingClientRect();
+      expect(getComputedStyle(blocker).borderTopWidth).toBe('1px');
       expect(rect.bottom).toBeLessThan(submit.getBoundingClientRect().top);
       expect(rect.top).toBeGreaterThan(panel.getBoundingClientRect().top);
       expect(rect.left).toBeGreaterThanOrEqual(0); expect(rect.right).toBeLessThanOrEqual(width);

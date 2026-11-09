@@ -6,6 +6,7 @@ import { LocalApiError } from '../services/localApi';
 const api = vi.hoisted(() => ({request: vi.fn()}));
 vi.mock('../services/localApi', async original => ({...await original<typeof import('../services/localApi')>(), fetchLocalApiJSON: api.request}));
 const source = {repository: 'owner/templates', repository_id: 123, ref: 'main', path: 'templates/app', commit_sha: 'a'.repeat(40)};
+const requestSource = {repository: source.repository, ref: source.ref, path: source.path};
 const snapshot = {source, files: [{path: 'redeven-service-template.json', mode: '100644' as const, content: 'e30K'}], sha256: 'b'.repeat(64)};
 const expected = {repository_id: source.repository_id, commit_sha: source.commit_sha, sha256: snapshot.sha256};
 
@@ -20,9 +21,9 @@ describe('shared template source acquisition', () => {
     const result = await inspectTemplateSource({source, expected, mode: 'desktop_transfer', token: 'private-token'}, controller.signal);
     expect(result.candidate_id).toBe('review');
     expect(acquire).toHaveBeenCalledTimes(1);
-    expect(acquire.mock.calls[0][0]).toMatchObject({action: 'capture', source, expected, token: 'private-token'});
+    expect(acquire.mock.calls[0][0]).toMatchObject({action: 'capture', source: requestSource, expected, token: 'private-token'});
     expect(api.request).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(api.request.mock.calls[0][1].body)).toEqual({source, expected, snapshot});
+    expect(JSON.parse(api.request.mock.calls[0][1].body)).toEqual({source: requestSource, expected, snapshot});
     expect(api.request.mock.calls[0][1].signal).toBe(controller.signal);
   });
 
@@ -63,6 +64,6 @@ describe('shared template source acquisition', () => {
     api.request.mockResolvedValue({candidate_id: 'remote-review'});
     await inspectTemplateSource({source, expected, mode: 'remote_download', token: 'remote-token'}, new AbortController().signal);
     expect(acquire).not.toHaveBeenCalled();
-    expect(JSON.parse(api.request.mock.calls[0][1].body)).toEqual({source, expected, token: 'remote-token'});
+    expect(JSON.parse(api.request.mock.calls[0][1].body)).toEqual({source: requestSource, expected, token: 'remote-token'});
   });
 });

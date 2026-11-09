@@ -106,3 +106,28 @@ func TestTemplateMarketReadAndRefreshPermissions(t *testing.T) {
 		}
 	}
 }
+
+func TestTemplateSourcePreviewSeparatesRequestSourceFromResolvedEvidence(t *testing.T) {
+	channel := "ch_source_contract"
+	for _, tc := range []struct {
+		name string
+		body string
+		want int
+	}{
+		{"remote", `{"source":{"repository":"owner/repo","ref":"main","path":"templates/app"},"expected":{"repository_id":123,"commit_sha":"` + strings.Repeat("a", 40) + `","sha256":"` + strings.Repeat("b", 64) + `"}}`, http.StatusOK},
+		{"desktop", `{"source":{"repository":"owner/repo","ref":"main","path":"templates/app"},"expected":{"repository_id":123,"commit_sha":"` + strings.Repeat("a", 40) + `","sha256":"` + strings.Repeat("b", 64) + `"},"snapshot":{"source":{"repository":"owner/repo","repository_id":123,"ref":"main","path":"templates/app","commit_sha":"` + strings.Repeat("a", 40) + `"},"sha256":"` + strings.Repeat("b", 64) + `","files":[]}}`, http.StatusOK},
+		{"resolved_metadata_in_request", `{"source":{"repository":"owner/repo","repository_id":123,"ref":"main","path":"templates/app","commit_sha":"` + strings.Repeat("a", 40) + `"}}`, http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := &templateSourceBackendStub{}
+			server := &Server{managed: backend, resolveSessionMeta: resolveMetaForTest(channel, session.Meta{CanRead: true, CanWrite: true, CanExecute: true, UserPublicID: "source-owner", EndpointID: "environment"})}
+			request := httptest.NewRequest(http.MethodPost, managedTemplatesAPIBase+"/source-previews", strings.NewReader(tc.body))
+			request.Header.Set("Origin", envOriginWithChannel(channel))
+			response := httptest.NewRecorder()
+			server.handleManagedWebServicesAPI(response, request)
+			if response.Code != tc.want || (backend.calls == 1) != (tc.want == http.StatusOK) {
+				t.Fatalf("source contract: %d %s calls=%d", response.Code, response.Body.String(), backend.calls)
+			}
+		})
+	}
+}

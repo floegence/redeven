@@ -983,6 +983,7 @@ function managedFailureMessage(errorCode: string, i18n: WebServicesI18n): string
   const releaseReasons = new Set(['NODE_RANGE_UNSUPPORTED', 'NODE_VERSION_UNAVAILABLE', 'PLATFORM_UNAVAILABLE', 'RELEASE_IDENTITY_UNVERIFIABLE', 'RELEASE_NOT_FOUND']);
   if (releaseReasons.has(errorCode)) return i18n.t(`webServices.managed.releaseReason.${errorCode}` as EnvAppTranslationKey);
   switch (errorCode) {
+    case 'TEMPLATE_SOURCE_REVIEW_STALE': return i18n.t('webServices.sources.stale');
     case 'STOP_SCRIPT_FAILED':
     case 'STOP_SCRIPT_UNAVAILABLE':
     case 'UNINSTALL_SCRIPT_FAILED':
