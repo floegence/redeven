@@ -43,7 +43,8 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = Object.freeze([
   { id: 'appearance', navLabel: 'Appearance & Language', icon: Globe, group: 'overview' },
   { id: 'terminal', navLabel: 'Terminal', icon: Terminal, group: 'runtime_configuration' },
   { id: 'browser', navLabel: 'Browser', icon: Globe, group: 'runtime_configuration' },
-  { id: 'applications', navLabel: 'Applications & Desktop', icon: Code, group: 'runtime_configuration' },
+  { id: 'applications', navLabel: 'Host Applications & Desktop', icon: Code, group: 'runtime_configuration' },
+  { id: 'containers', navLabel: 'Containers', icon: Code, group: 'runtime_configuration' },
   { id: 'services', navLabel: 'Services', icon: Code, group: 'runtime_configuration' },
   { id: 'extensions', navLabel: 'Extensions', icon: Zap, group: 'ai_extensions' },
   { id: 'plugins', navLabel: 'Plugin Center', icon: Code, group: 'ai_extensions' },
@@ -68,7 +69,7 @@ export const SETTINGS_SECTION_META: Readonly<Record<EnvSettingsSection, Settings
 
 export const SETTINGS_GROUPS: readonly SettingsGroupMeta[] = Object.freeze([
   { id: 'overview', title: 'Overview', sections: ['appearance', 'connection', 'agent'] },
-  { id: 'runtime_configuration', title: 'Runtime Environment', sections: ['terminal', 'browser', 'applications', 'services', 'runtime', 'codespaces'] },
+  { id: 'runtime_configuration', title: 'Runtime Environment', sections: ['terminal', 'browser', 'applications', 'containers', 'services', 'runtime', 'codespaces'] },
   { id: 'security', title: 'Security', sections: ['permission_policy'] },
   { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'extensions', 'plugins'] },
   { id: 'diagnostics', title: 'Diagnostics', sections: ['storage', 'config', 'logging', 'debug_console'] },

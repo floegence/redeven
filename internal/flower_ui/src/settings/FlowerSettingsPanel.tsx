@@ -16,6 +16,7 @@ export function FlowerSettingsPanel(props: {
   const lifetime = new AbortController();
   onCleanup(() => lifetime.abort());
   const [snapshot, { mutate, refetch }] = createResource(() => props.adapter.loadSettings(true, lifetime.signal));
+  const snapshotData = () => snapshot.error ? undefined : snapshot();
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal('');
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
@@ -50,9 +51,9 @@ export function FlowerSettingsPanel(props: {
   };
   return <>
     <Show when={snapshot.error}><p role="alert">{String(snapshot.error)}</p><Button onClick={() => void refetch()}>{props.copy.chat.handlerRetry}</Button></Show>
-    <Show when={snapshot()} fallback={<p role="status">{props.copy.chat.loadingSettings}</p>}>
+    <Show when={snapshotData()} fallback={<p role="status">{props.copy.chat.loadingSettings}</p>}>
       <div inert={!props.canEdit || props.adapter.canMutate === false}>
-        <FlowerSettingsSurface active={props.active} snapshot={snapshot() ?? null} copy={props.copy.settings} dialog
+        <FlowerSettingsSurface active={props.active} snapshot={snapshotData() ?? null} copy={props.copy.settings} dialog
           providerFocusRequest={props.providerFocusRequest}
           onDiscoverModels={props.adapter.discoverProviderModels ? async input => { assertCurrent(); const result = await props.adapter.discoverProviderModels!(input); assertCurrent(); return result; } : undefined}
           chatGPTAuth={props.adapter.chatGPTAuth ? accountAction : undefined} loadChatGPTAccounts={props.adapter.loadChatGPTAccounts ? async () => { assertCurrent(); const result = await props.adapter.loadChatGPTAccounts!(); assertCurrent(); return result; } : undefined}

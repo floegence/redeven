@@ -728,6 +728,12 @@ export const enUSWidgetChrome = defineDictionary({
     statusSession: 'Session',
     statusHistory: 'History',
     settings: {
+      target: "Settings target",
+      defaultsTarget: "Default preferences",
+      widgetTarget: "Workbench terminal {number}",
+      sessionTarget: "Session history",
+      historyAttachmentRequired: "Attach this session in Terminal before changing its history limits. Viewing settings never takes terminal control.",
+
       followInput: "Return to latest when typing",
       historyTitle: "History retention",
       historyDescription: "Blank uses engine defaults; 0 keeps no history. Limits apply together in storage pages, excluding the current screen. Memory is measured in bytes, not characters.",

@@ -81,7 +81,7 @@ async function settle(): Promise<void> {
 }
 
 function themeRadios(): HTMLInputElement[] {
-  return Array.from(document.querySelectorAll<HTMLInputElement>('input[name="terminal-theme"]'));
+  return Array.from(document.querySelectorAll<HTMLInputElement>('input[type="radio"]'));
 }
 
 function themeCards(): HTMLElement[] {
@@ -202,8 +202,14 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
     expect(mounted.changes).toContain('solarizedDark');
     expect(document.querySelector('[aria-live="polite"]')?.textContent).toContain('Solarized Dark');
     expect(document.querySelector('[aria-live="polite"]')?.textContent).toContain('Theme applied');
-    expect(document.querySelectorAll('[role="group"][aria-labelledby="terminal-theme-dark-group-label"]')).toHaveLength(1);
-    expect(document.querySelectorAll('[role="group"][aria-labelledby="terminal-theme-light-group-label"]')).toHaveLength(1);
+    for (const [appearance, name] of [['dark', 'Dark'], ['light', 'Light']] as const) {
+      const group = document.querySelector<HTMLElement>(`[role="group"][data-theme-appearance-group="${appearance}"]`)!;
+      const labelID = group.getAttribute('aria-labelledby')!;
+      expect(labelID).toBeTruthy();
+      expect(document.querySelectorAll(`#${CSS.escape(labelID)}`)).toHaveLength(1);
+      expect(document.getElementById(labelID)?.textContent).toBe(name);
+      await expect.element(page.getByRole('group', { name, exact: true })).toBeVisible();
+    }
 
     const preview = secondDark.closest('label')?.querySelector('[aria-hidden="true"]');
     expect(preview?.querySelectorAll('[data-theme-preview-ansi="normal"] > span')).toHaveLength(8);

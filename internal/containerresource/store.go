@@ -194,6 +194,14 @@ func (s *store) operation(ctx context.Context, operationID string) (Operation, e
 	return op, err
 }
 
+func (s *store) operationByRequestID(ctx context.Context, requestID string) (Operation, error) {
+	op, err := getOperationDB(ctx, s.db, "request_id", requestID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Operation{}, ErrOperationNotFound
+	}
+	return op, err
+}
+
 func (s *store) operations(ctx context.Context, limit int) ([]Operation, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 100

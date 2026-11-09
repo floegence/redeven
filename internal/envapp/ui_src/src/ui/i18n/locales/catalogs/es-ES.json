@@ -383,7 +383,10 @@
       "appearance": "Apariencia e idioma",
       "browser": "Navegador",
       "services": "Servicios",
-      "extensions": "Extensiones"
+      "extensions": "Extensiones",
+      "terminal": "Terminal",
+      "applications": "Aplicaciones del host y escritorio",
+      "containers": "Contenedores"
     },
     "groups": {
       "overview": "Resumen",
@@ -450,7 +453,30 @@
       "notProvided": "No proporcionado",
       "emptyValue": "—"
     },
-    "targetUnavailable": "Este destino de configuración ya no está disponible."
+    "targetUnavailable": "Este destino de configuración ya no está disponible.",
+    "operationUnknown": "El resultado de la operación no está confirmado. Actualiza el estado antes de realizar otro cambio.",
+    "conversationDefaults": {
+      "title": "Preferencias personales de conversación",
+      "description": "Modelo, razonamiento y directorio de trabajo recordados para nuevas conversaciones. Las selecciones del editor también actualizan estos valores.",
+      "environmentDirectory": "Usar el directorio de trabajo del entorno"
+    },
+    "workbench": {
+      "canvasTheme": "Tema del lienzo de Workbench",
+      "themes": {
+        "default": "Predeterminado",
+        "vibrancy": "Vibrante",
+        "mica": "Mica",
+        "midnight": "Medianoche",
+        "aurora": "Aurora",
+        "terminal": "Terminal"
+      }
+    },
+    "plugins": {
+      "installed": "Plugins instalados",
+      "preview": "Vista previa de autor",
+      "previewEmpty": "No hay vistas previas de plugins disponibles",
+      "target": "Configuración del plugin"
+    }
   },
   "flower": {
     "currentEnvironmentFallback": "Este entorno",
@@ -2517,7 +2543,12 @@
       "historyUnavailable": "Este entorno de ejecución no admite ajustes de conservación del historial.",
       "historyLoadFailed": "No se pudieron cargar los ajustes del historial.",
       "historyChangeUnknown": "No se pudo confirmar el cambio. Recargue los ajustes actuales antes de reintentarlo.",
-      "historyReload": "Recargar ajustes"
+      "historyReload": "Recargar ajustes",
+      "target": "Destino de los ajustes",
+      "defaultsTarget": "Preferencias predeterminadas",
+      "widgetTarget": "Terminal de Workbench {number}",
+      "sessionTarget": "Historial de sesión",
+      "historyAttachmentRequired": "Conecta primero esta sesión en Terminal para cambiar sus límites de historial. Consultar los ajustes no toma el control del terminal."
     },
     "retryingOlderOutput": "Sincronizando la salida anterior...",
     "waitingForActivation": "Seleccione este terminal para continuar.",

@@ -383,7 +383,10 @@
       "appearance": "Apparence et langue",
       "browser": "Navigateur",
       "services": "Services",
-      "extensions": "Extensions"
+      "extensions": "Extensions",
+      "terminal": "Terminal",
+      "applications": "Applications de l’hôte et bureau",
+      "containers": "Conteneurs"
     },
     "groups": {
       "overview": "Vue d’ensemble",
@@ -450,7 +453,30 @@
       "notProvided": "Non fourni",
       "emptyValue": "—"
     },
-    "targetUnavailable": "Cette cible de paramètres n’est plus disponible."
+    "targetUnavailable": "Cette cible de paramètres n’est plus disponible.",
+    "operationUnknown": "Le résultat de l’opération n’est pas confirmé. Actualisez son état avant toute autre modification.",
+    "conversationDefaults": {
+      "title": "Préférences personnelles des conversations",
+      "description": "Modèle, raisonnement et répertoire de travail mémorisés pour les nouvelles conversations. Les choix dans la zone de saisie mettent aussi à jour ces préférences.",
+      "environmentDirectory": "Utiliser le répertoire de travail de l’environnement"
+    },
+    "workbench": {
+      "canvasTheme": "Thème du canevas Workbench",
+      "themes": {
+        "default": "Par défaut",
+        "vibrancy": "Vibrant",
+        "mica": "Mica",
+        "midnight": "Minuit",
+        "aurora": "Aurore",
+        "terminal": "Terminal"
+      }
+    },
+    "plugins": {
+      "installed": "Plugins installés",
+      "preview": "Aperçu de création",
+      "previewEmpty": "Aucun aperçu de plugin disponible",
+      "target": "Configuration du plugin"
+    }
   },
   "flower": {
     "currentEnvironmentFallback": "Cet environnement",
@@ -2517,7 +2543,12 @@
       "historyUnavailable": "Ce environnement d’exécution ne prend pas en charge la conservation configurable de l’historique.",
       "historyLoadFailed": "Impossible de charger les paramètres de l’historique.",
       "historyChangeUnknown": "La modification n’a pas pu être confirmée. Rechargez les paramètres actuels avant de réessayer.",
-      "historyReload": "Recharger les paramètres"
+      "historyReload": "Recharger les paramètres",
+      "target": "Cible des paramètres",
+      "defaultsTarget": "Préférences par défaut",
+      "widgetTarget": "Terminal Workbench {number}",
+      "sessionTarget": "Historique de session",
+      "historyAttachmentRequired": "Connectez d’abord cette session dans le terminal pour modifier ses limites de conservation. Consulter les paramètres ne prend pas le contrôle du terminal."
     },
     "retryingOlderOutput": "Synchronisation de la sortie précédente...",
     "waitingForActivation": "Sélectionnez ce terminal pour continuer.",

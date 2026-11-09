@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
   JSDOM: new (html: string, options: Record<string, unknown>) => { window: Window & typeof globalThis };
 };
-const shared = ['catalog.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'viewport.generated.js', 'appearance.js', 'connection.js', 'canvas.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
+const shared = ['catalog.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'viewport.generated.js', 'appearance.js', 'connection.js', 'picture.js', 'canvas.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
 const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/macos.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
 let dom: InstanceType<typeof JSDOM>;
@@ -18,6 +18,10 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
   dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new dom.window.Event('close')); };
   const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ state: 'running', password: 'private' }) });
+  let picture = {mode:'auto', max_dimension:0, frame_rate:0};
+  const pictureFetch = vi.fn(async () => ({ok:true,json:async()=>({ok:true,data:picture})}));
+  const request = (url: string, init?: RequestInit) => url.endsWith('/picture') ? pictureFetch() : fetch(url, init);
+  const setPicture = async (next: Partial<typeof picture>) => { picture={...picture,...next}; dom.window.dispatchEvent(new dom.window.Event('focus')); await drain(); };
   const drawImage = vi.fn();
   const bitmap = vi.fn().mockResolvedValue({ width: 640, height: 480, close: vi.fn() });
   const native = { request: vi.fn() };
@@ -51,7 +55,7 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
     close() { this.state = 'closed'; }
   }
   Object.assign(dom.window, {matchMedia: () => ({matches:false})});
-  Object.assign(dom.window, { TextDecoder, TextEncoder, VideoDecoder: video ? Decoder : undefined, EncodedVideoChunk: class { constructor(public value: unknown) {} }, fetch, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
+  Object.assign(dom.window, { TextDecoder, TextEncoder, VideoDecoder: video ? Decoder : undefined, EncodedVideoChunk: class { constructor(public value: unknown) {} }, fetch:request, WebSocket: Socket, createImageBitmap: bitmap, redevenHostApplicationWindow: native });
   const statisticsTicks: (() => void)[] = [];
   vi.spyOn(dom.window, 'setInterval').mockImplementation(((callback: () => void) => { statisticsTicks.push(callback); return 1; }) as typeof dom.window.setInterval);
   setup?.(dom.window);
@@ -62,7 +66,7 @@ async function viewer(video = false, icon = '', initial?: Record<string, string>
   const window = (generation = 1) => socket().message({ type: 'window', window: 'owned', generation, width: 640, height: 480 });
   const activate = async () => { window(); socket().frame(); await drain(); socket().send.mockClear(); };
   const retry = async () => { (dom.window.document.getElementById('retry') as HTMLButtonElement).click(); await drain(); };
-  return { socket, state, window, activate, retry, fetch, bitmap, drawImage, native, decoders, statisticsTicks };
+  return { socket, state, window, activate, retry, fetch, pictureFetch, setPicture, bitmap, drawImage, native, decoders, statisticsTicks };
 }
 
 describe('macOS application viewer', () => {
@@ -570,15 +574,19 @@ describe('macOS picture controls and stream delivery', () => {
     const picture = dom.window.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
     picture.click();
     const panel = dom.window.document.querySelector('#picture-settings')!;
-    [...panel.querySelectorAll('button')].find(el=>el.textContent==='Motion first')!.click();
+    const settings = panel.querySelector<HTMLButtonElement>('[data-picture-settings]')!;
+    expect(dom.window.document.activeElement).toBe(settings);
+    settings.click(); expect(v.native.request).toHaveBeenCalledExactlyOnceWith('settings');
+    expect(v.socket().send).not.toHaveBeenCalled();
+    await v.setPicture({mode:'smooth'});
     expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure', mode:'smooth', pixel_ratio:2});
-    const select = panel.querySelector<HTMLSelectElement>('select[aria-label="Frame rate limit"]')!;
-    select.value='60';select.dispatchEvent(new dom.window.Event('change'));
+    await v.setPicture({frame_rate:60});
     expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure', frame_rate:60});
-    expect(JSON.parse(dom.window.localStorage.getItem('redeven.mac-app.picture.v1')!)).toMatchObject({mode:'smooth',frame_rate:60});
+    expect(dom.window.localStorage.getItem('redeven.mac-app.picture.v1')).toBeNull();
+    expect(panel.querySelector('select')).toBeNull();
     expect(v.fetch).toHaveBeenCalledOnce();
     expect(v.socket().close).not.toHaveBeenCalled();
-    select.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+    settings.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
     expect(dom.window.document.querySelector<HTMLElement>('.mac-app-popover')!.hidden).toBe(true);
     expect(dom.window.document.activeElement).toBe(picture);
   });
@@ -766,19 +774,18 @@ describe('fixed application toolbar', () => {
     expect(toggle.querySelector<HTMLElement>('.mac-app-window-count')!.hidden).toBe(false);
   });
 
-  it('navigates picture presets without changing quality or sending remote input until activation', async () => {
+  it('focuses the canonical settings link without sending remote input', async () => {
     const v = await viewer(); await v.activate();
     const doc = dom.window.document;
     doc.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!.click();
-    const buttons = [...doc.querySelectorAll<HTMLButtonElement>('.mac-app-picture-modes button')];
-    const key = (value: string) => doc.activeElement!.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:value,bubbles:true}));
-    expect(doc.activeElement).toBe(buttons[0]);
-    key('ArrowRight'); expect(doc.activeElement).toBe(buttons[1]);
-    key('ArrowDown'); expect(doc.activeElement).toBe(buttons[3]);
+    const settings = doc.querySelector<HTMLButtonElement>('[data-picture-settings]')!;
+    expect(doc.activeElement).toBe(settings);
+    expect(doc.querySelector('.mac-app-picture-modes')).toBeNull();
     expect(v.socket().send).not.toHaveBeenCalled();
-    buttons[3].click();
-    expect(JSON.parse(v.socket().send.mock.lastCall![0])).toMatchObject({action:'configure',mode:'data'});
-    key('Escape');
+    settings.click();
+    expect(v.native.request).toHaveBeenCalledExactlyOnceWith('settings');
+    expect(v.socket().send).not.toHaveBeenCalled();
+    settings.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
     expect(doc.activeElement).toBe(doc.querySelector('.mac-app-controls-toggle'));
   });
 

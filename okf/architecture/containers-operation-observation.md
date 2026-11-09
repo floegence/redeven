@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Container execution and operation observation
 tags: [architecture, containers, operations, reconciliation]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -16,6 +16,9 @@ Every container operation binds exact engine, endpoint and resource identity. Te
 The operation key contains engine, opaque endpoint ID, resource kind, and canonical identity.
 
 Reusing a request ID with different hashes produces an idempotency conflict instead of a second operation.
+
+### Exact recovery
+Settings reads a known operation by ID, or uses the read-only `by-request/<request_id>` endpoint when creation returned no operation ID. Neither depends on the bounded recent-operation list. Absence remains uncertain because admission may still be in flight; observation never replays a mutation. `Container-Operation-Admission: rejected` is emitted only before entering operation storage, never for a storage-boundary failure.
 
 ### Execution, cancellation, and events
 The service owns an operation context from queued state through reconciliation. Cancellation is an explicit API action; closing Activity, Workbench, an inspector, an event stream, or the browser never implies cancellation.

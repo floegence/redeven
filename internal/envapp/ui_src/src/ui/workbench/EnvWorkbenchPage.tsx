@@ -32,6 +32,7 @@ import { isDesktopStateStorageAvailable, readUIStorageJSON, writeUIStorageJSON }
 import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { resolveEnvAppStorageBinding } from '../services/uiPersistence';
+import { readWorkbenchLocalPreferences, subscribeWorkbenchLocalPreferences, writeWorkbenchLocalPreferences } from '../services/workbenchLocalPreferences';
 import {
   DEFAULT_TERMINAL_FONT_FAMILY_ID,
   DEFAULT_TERMINAL_FONT_SIZE,
@@ -109,7 +110,6 @@ import {
   runtimeWorkbenchWidgetStateDataEqual,
   runtimeWorkbenchWidgetStatesEqual,
   samePersistedWorkbenchLocalState,
-  sanitizePersistedWorkbenchLocalState,
   type PersistedWorkbenchLocalState,
   type RuntimeWorkbenchLayoutSnapshot,
   type RuntimeWorkbenchOpenPreviewStrategy,
@@ -652,16 +652,6 @@ function fileItemToRuntimePreviewItem(item: FileItem, fallbackName: string): Run
   };
 }
 
-function readPersistedWorkbenchLocalState(
-  storageKey: string,
-  widgetDefinitions: readonly WorkbenchWidgetDefinition[],
-): PersistedWorkbenchLocalState {
-  return sanitizePersistedWorkbenchLocalState(
-    readUIStorageJSON(storageKey, null),
-    widgetDefinitions,
-  );
-}
-
 function createWorkbenchStateFromLocalState(
   localState: PersistedWorkbenchLocalState,
   widgetDefinitions: readonly WorkbenchWidgetDefinition[],
@@ -729,7 +719,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   }));
   const localPreferencesKey = createMemo(() => storageBinding().workbenchLocalPreferencesKey);
   const instanceStateKey = createMemo(() => storageBinding().workbenchInstanceStateKey);
-  const initialLocalState = readPersistedWorkbenchLocalState(localPreferencesKey(), redevenWorkbenchWidgets);
+  const initialLocalState = readWorkbenchLocalPreferences(localPreferencesKey());
   const initialWorkbenchState = createWorkbenchStateFromLocalState(initialLocalState, redevenWorkbenchWidgets);
   const [workbenchState, setWorkbenchState] = createSignal<WorkbenchState>(initialWorkbenchState);
   const [localState, setLocalState] = createSignal<PersistedWorkbenchLocalState>(initialLocalState);
@@ -1499,7 +1489,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     setPluginPlacementState(null);
     const localKey = localPreferencesKey();
     const instanceKey = instanceStateKey();
-    const nextLocalState = readPersistedWorkbenchLocalState(localKey, redevenWorkbenchWidgets);
+    const nextLocalState = readWorkbenchLocalPreferences(localKey);
     const nextWorkbenchState = createWorkbenchStateFromLocalState(nextLocalState, redevenWorkbenchWidgets);
     setWorkbenchState(nextWorkbenchState);
     setLocalState(nextLocalState);
@@ -1659,6 +1649,15 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   });
 
   createEffect(() => {
+    const key = localPreferencesKey();
+    onCleanup(subscribeWorkbenchLocalPreferences(key, state => {
+      setWorkbenchState(previous => samePersistedWorkbenchLocalState(derivePersistedWorkbenchLocalState(previous), state)
+        ? previous
+        : { ...previous, locked: state.locked, theme: state.theme, mode: state.mode, activeTool: state.activeTool });
+    }));
+  });
+
+  createEffect(() => {
     const state = derivePersistedWorkbenchLocalState(workbenchState());
     setLocalState((previous) => (samePersistedWorkbenchLocalState(previous, state) ? previous : state));
   });
@@ -1670,13 +1669,9 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
       return;
     }
 
-    const timer = globalThis.setTimeout(() => {
-      writeUIStorageJSON(key, state);
-    }, WORKBENCH_PERSIST_DELAY_MS);
-
-    onCleanup(() => {
-      globalThis.clearTimeout(timer);
-    });
+    // IMPORTANT: Publish local control changes synchronously so a simultaneous
+    // Settings theme edit cannot overwrite newer lock/mode/tool preferences.
+    writeWorkbenchLocalPreferences(key, state);
   });
 
   createEffect(() => {

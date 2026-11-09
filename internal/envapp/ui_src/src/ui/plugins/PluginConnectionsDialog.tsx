@@ -14,6 +14,8 @@ type Review = Awaited<ReturnType<PluginConnectionsAPI['reviewConnection']>>['rev
 
 type Props = {
   visible?: boolean;
+  embedded?: boolean;
+  authorityKey?: unknown;
   open: boolean; item?: PluginInventoryItem; ownerScope?: object | false; canManage: boolean;
   api: PluginConnectionsAPI; onOpenChange: (open: boolean) => void;
 };
@@ -25,6 +27,8 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
   const [destination, setDestination] = createSignal('');
   const [prefixes, setPrefixes] = createSignal('');
   const [methods, setMethods] = createSignal<string[]>([]);
+  const [dirty, setDirty] = createSignal(false);
+  const [draftRevision, setDraftRevision] = createSignal(0);
   const [review, setReview] = createSignal<Review>();
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string>();
@@ -41,7 +45,7 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
   let generation = 0;
   const selected = () => connections().find((connection) => connection.connector_id === connectorID());
   const declaration = () => props.item?.networkConnectors?.find((connector) => connector.connectorID === connectorID());
-  const editable = () => props.canManage && declaration()?.configurable && loaded() && !busy();
+  const editable = () => props.authorityKey !== false && props.visible !== false && props.open && !!props.ownerScope && props.canManage && declaration()?.configurable && loaded() && !busy();
   const statusLabel = (status: Connection['status']) => i18n.t(({
     fixed: 'uiCopy.plugin.connections.fixed', unconfigured: 'uiCopy.plugin.connections.unconfigured',
     active: 'uiCopy.plugin.connections.active', expired: 'uiCopy.plugin.connections.expired',
@@ -52,21 +56,24 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
   function choose(id: string) {
     const connection = connections().find((entry) => entry.connector_id === id);
     setConnectorID(id);
+    setDirty(false); setDraftRevision(connection?.revision ?? 0);
     setDestination(connection?.destination ?? '');
     setPrefixes(connection?.private_prefixes?.join(', ') ?? '');
     setMethods(connection?.http_methods ?? []);
   }
-  async function refresh(signal: AbortSignal, id: string, current: () => boolean) {
+  async function refresh(signal: AbortSignal, id: string, current: () => boolean, preserveDraft = true) {
     setLoaded(false);
     const result = await props.api.listConnections({ plugin_instance_id: id }, { signal });
     if (!current()) return;
     setConnections(result.connections);
-    choose(result.connections.some((entry) => entry.connector_id === connectorID()) ? connectorID() : result.connections[0]?.connector_id ?? '');
+    // IMPORTANT: A refreshed authority revision cannot be paired with old draft
+    // content. Retain both the draft and its original CAS revision until save.
+    if (!preserveDraft || !dirty()) choose(result.connections.some((entry) => entry.connector_id === connectorID()) ? connectorID() : result.connections[0]?.connector_id ?? '');
     setLoaded(true);
   }
   async function run(action: (signal: AbortSignal, id: string, current: () => boolean) => Promise<void>) {
     const id = props.item?.pluginInstanceID;
-    if (!props.open || !props.ownerScope || !id || busy()) return;
+    if (props.authorityKey === false || !props.open || !props.ownerScope || !id || busy()) return;
     const currentGeneration = generation;
     const operation = new AbortController();
     controller = operation;
@@ -88,12 +95,16 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
     if (closeAfter && currentGeneration === generation) props.onOpenChange(false);
   }
   createEffect(on(() => [props.open, props.ownerScope, props.item?.pluginInstanceID,
-    props.item?.recoveryIdentity?.active_fingerprint, props.item?.managementRevision, props.canManage] as const,
-  ([open, scope, id]) => {
+    props.authorityKey, props.item?.recoveryIdentity?.active_fingerprint, props.item?.managementRevision, props.canManage] as const,
+  ([open, scope, id], previous) => {
+    const sameOwner = previous && previous[0] === open && previous[1] === scope && previous[2] === id;
     generation += 1; controller?.abort(); controller = undefined;
-    setReview(undefined); setBusy(false); setConnections([]); setLoaded(false); setError(undefined);
+    setReview(undefined); setBusy(false); setLoaded(false); setError(undefined);
+    // IMPORTANT: Owner replacement discards a draft. Temporary permission or
+    // transport loss only invalidates the review and current write admission.
+    if (!sameOwner) { setConnections([]); choose(''); }
     if (open && (!scope || !id)) { props.onOpenChange(false); return; }
-    if (open && scope && id) void run((signal, target, current) => refresh(signal, target, current));
+    if (open && scope && id && props.authorityKey !== false) void run((signal, target, current) => refresh(signal, target, current, Boolean(sameOwner)));
   }));
   onCleanup(() => { generation += 1; controller?.abort(); });
 
@@ -104,7 +115,7 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
     void run(async (signal, id, current) => {
       const result = await props.api.reviewConnection({
         plugin_instance_id: id, connector_id: connection.connector_id, destination: destination().trim(),
-        expected_revision: connection.revision,
+        expected_revision: draftRevision(),
         ...(methods().length ? { http_methods: methods() as NonNullable<Review['http_methods']> } : {}),
         ...(privatePrefixes.length ? { private_prefixes: privatePrefixes } : {}),
         ...(connection.secret_ref ? { secret_ref: connection.secret_ref } : {}),
@@ -124,14 +135,12 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
         if (kind === 'approve') await props.api.approveConnection({ plugin_instance_id: id, review_id: pending!.review_id }, { signal });
         else await props.api.revokeConnection({ plugin_instance_id: id, connector_id: connection!.connector_id, expected_revision: connection!.revision }, { signal });
       } catch (cause) { failure = cause; }
-      if (current()) await refresh(signal, id, current);
+      if (current()) await refresh(signal, id, current, Boolean(failure));
       if (failure) throw failure;
     });
   }
 
-  return <Dialog open={props.open && props.visible !== false} title={i18n.t('uiCopy.plugin.connections.title')}
-    onOpenChange={(open) => { if (!open && !busy()) { void cancelReview(true); } }}>
-    <div class="space-y-4" data-plugin-connections aria-busy={busy()}>
+  const body = () => <div class="space-y-4" data-plugin-connections aria-busy={busy()}>
       <Show when={busy() && !loaded()}><p role="status" class="text-sm text-muted-foreground">{i18n.t('common.status.loading')}</p></Show>
       <Show when={error()}>{(message) => <p role="alert" class="text-sm text-error">{message()}</p>}</Show>
       <Show when={!review()} fallback={<Show when={review()}>{(pending) => <>
@@ -152,22 +161,28 @@ export function PluginConnectionsDialog(props: Props): JSX.Element {
         <Show when={connections().length} fallback={<Show when={!busy()}><p class="text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.connections.empty')}</p></Show>}>
           <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.connector')}</span>
             <select class="w-full rounded-md border bg-background px-3 py-2" value={connectorID()} disabled={busy()} onChange={(event) => choose(event.currentTarget.value)}>
+              <Show when={dirty() && connectorID() && !selected()}><option value={connectorID()}>{connectorID()} · {i18n.t('settings.targetUnavailable')}</option></Show>
               <For each={connections()}>{(connection) => <option value={connection.connector_id}>{connection.connector_id} · {statusLabel(connection.status)}</option>}</For>
             </select>
           </label>
-          <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.destination')}</span><Input value={destination()} disabled={!editable()} onInput={(event) => setDestination(event.currentTarget.value)} /></label>
-          <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.privatePrefixes')}</span><Input value={prefixes()} disabled={!editable()} onInput={(event) => setPrefixes(event.currentTarget.value)} /><span class="block text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.connections.privateHelp')}</span></label>
+          <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.destination')}</span><Input value={destination()} disabled={!editable()} onInput={(event) => { setDirty(true); setDestination(event.currentTarget.value); }} /></label>
+          <label class="block space-y-1 text-sm"><span>{i18n.t('uiCopy.plugin.connections.privatePrefixes')}</span><Input value={prefixes()} disabled={!editable()} onInput={(event) => { setDirty(true); setPrefixes(event.currentTarget.value); }} /><span class="block text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.connections.privateHelp')}</span></label>
           <Show when={declaration()?.httpMethods.length}><fieldset class="flex flex-wrap gap-3 text-sm"><legend>{i18n.t('uiCopy.plugin.connections.methods')}</legend>
-            <For each={declaration()?.httpMethods}>{(method) => <label class="inline-flex items-center gap-2"><input type="checkbox" disabled={!editable()} checked={methods().includes(method)} onChange={(event) => setMethods((previous) => event.currentTarget.checked ? [...previous, method] : previous.filter((entry) => entry !== method))} />{method}</label>}</For>
+            <For each={declaration()?.httpMethods}>{(method) => <label class="inline-flex items-center gap-2"><input type="checkbox" disabled={!editable()} checked={methods().includes(method)} onChange={(event) => { setDirty(true); setMethods((previous) => event.currentTarget.checked ? [...previous, method] : previous.filter((entry) => entry !== method)); }} />{method}</label>}</For>
           </fieldset></Show>
           <Show when={selected()?.expires_at}>{(expires) => <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.connections.expires')}: {date(expires())}</p>}</Show>
         </Show>
         <div class="flex flex-wrap justify-end gap-2">
-          <Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="outline" loading={busy()} disabled={busy()} onClick={() => void run((signal, id, current) => refresh(signal, id, current))}>{i18n.t('common.actions.refresh')}</Button>
+          <Show when={dirty()}><Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="ghost" disabled={busy() || props.authorityKey === false} onClick={() => void run((signal, id, current) => refresh(signal, id, current, false))}>{i18n.t('filePreview.discardChanges')}</Button></Show>
+          <Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="outline" loading={busy()} disabled={busy() || props.authorityKey === false} onClick={() => void run((signal, id, current) => refresh(signal, id, current))}>{i18n.t('common.actions.refresh')}</Button>
           <Show when={selected()?.status === 'active'}><Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} variant="outline" disabled={!editable()} onClick={() => mutate('revoke')}>{i18n.t('uiCopy.plugin.connections.revoke')}</Button></Show>
-          <Show when={declaration()?.configurable}><Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} disabled={!editable() || !destination().trim() || (declaration()?.transport === 'http' && !methods().length)} onClick={prepareReview}>{i18n.t('uiCopy.plugin.connections.review')}</Button></Show>
+          <Show when={declaration()?.configurable}><Button class={PLUGIN_MOBILE_TOUCH_TARGET_CLASS} disabled={!editable() || !selected() || !destination().trim() || (declaration()?.transport === 'http' && !methods().length)} onClick={prepareReview}>{i18n.t('uiCopy.plugin.connections.review')}</Button></Show>
         </div>
       </Show>
-    </div>
-  </Dialog>;
+    </div>;
+  // IMPORTANT: The author preview editor lives in the global Settings dialog.
+  // This presentation reuses the same owner and review protocol, never a second store.
+  if (props.embedded) return <section hidden={!props.open || props.visible === false}><h3 class="mb-3 font-medium">{i18n.t('uiCopy.plugin.connections.title')}</h3>{body()}</section>;
+  return <Dialog open={props.open && props.visible !== false} title={i18n.t('uiCopy.plugin.connections.title')}
+    onOpenChange={(open) => { if (!open && !busy()) { void cancelReview(true); } }}>{body()}</Dialog>;
 }

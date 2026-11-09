@@ -187,7 +187,7 @@ describe('TerminalSettingsDialog', () => {
     expect(host.textContent).toContain('JetBrains Mono');
     expect(host.textContent).toContain('Terminal activity');
 
-    const themeRadios = Array.from(host.querySelectorAll<HTMLInputElement>('input[name="terminal-theme"]'));
+    const themeRadios = Array.from(host.querySelectorAll<HTMLInputElement>('input[type="radio"]'));
     expect(themeRadios).toHaveLength(TERMINAL_THEME_DEFINITIONS.length + 1);
     expect(new Set(themeRadios.map((input) => input.value)).size).toBe(21);
     expect(themeRadios.find((input) => input.value === 'system')?.checked).toBe(true);
@@ -255,7 +255,7 @@ describe('TerminalSettingsDialog', () => {
       />
     ), host);
 
-    const dark = host.querySelector<HTMLInputElement>('input[name="terminal-theme"][value="dark"]');
+    const dark = host.querySelector<HTMLInputElement>('input[type="radio"][value="dark"]');
     expect(dark?.checked).toBe(true);
     expect(onThemeChange).not.toHaveBeenCalled();
   });

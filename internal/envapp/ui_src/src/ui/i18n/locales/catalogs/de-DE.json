@@ -383,7 +383,10 @@
       "appearance": "Darstellung & Sprache",
       "browser": "Browser",
       "services": "Dienste",
-      "extensions": "Erweiterungen"
+      "extensions": "Erweiterungen",
+      "terminal": "Terminal",
+      "applications": "Host-Anwendungen & Desktop",
+      "containers": "Container"
     },
     "groups": {
       "overview": "Übersicht",
@@ -450,7 +453,30 @@
       "notProvided": "Nicht bereitgestellt",
       "emptyValue": "—"
     },
-    "targetUnavailable": "Dieses Einstellungsziel ist nicht mehr verfügbar."
+    "targetUnavailable": "Dieses Einstellungsziel ist nicht mehr verfügbar.",
+    "operationUnknown": "Das Ergebnis ist noch nicht bestätigt. Aktualisieren Sie den Status, bevor Sie weitere Änderungen vornehmen.",
+    "conversationDefaults": {
+      "title": "Persönliche Gesprächsvorgaben",
+      "description": "Gespeichertes Modell, Denkoptionen und Arbeitsverzeichnis für neue Gespräche. Die Auswahl im Eingabefeld aktualisiert diese Vorgaben ebenfalls.",
+      "environmentDirectory": "Arbeitsverzeichnis der Umgebung verwenden"
+    },
+    "workbench": {
+      "canvasTheme": "Workbench-Design",
+      "themes": {
+        "default": "Standard",
+        "vibrancy": "Lebendig",
+        "mica": "Glimmer",
+        "midnight": "Mitternacht",
+        "aurora": "Polarlicht",
+        "terminal": "Terminal"
+      }
+    },
+    "plugins": {
+      "installed": "Installierte Plugins",
+      "preview": "Autorenvorschau",
+      "previewEmpty": "Keine Plugin-Vorschau verfügbar",
+      "target": "Plugin-Konfiguration"
+    }
   },
   "flower": {
     "currentEnvironmentFallback": "Diese Umgebung",
@@ -2517,7 +2543,12 @@
       "historyUnavailable": "Diese Laufzeitumgebung unterstützt keine Einstellungen zur Verlaufsaufbewahrung.",
       "historyLoadFailed": "Verlaufseinstellungen konnten nicht geladen werden.",
       "historyChangeUnknown": "Die Änderung konnte nicht bestätigt werden. Laden Sie die aktuellen Einstellungen vor einem erneuten Versuch neu.",
-      "historyReload": "Einstellungen neu laden"
+      "historyReload": "Einstellungen neu laden",
+      "target": "Einstellungsziel",
+      "defaultsTarget": "Standardeinstellungen",
+      "widgetTarget": "Workbench-Terminal {number}",
+      "sessionTarget": "Sitzungsverlauf",
+      "historyAttachmentRequired": "Verbinden Sie diese Sitzung zuerst im Terminal, um die Aufbewahrungsgrenzen zu ändern. Das Anzeigen der Einstellungen übernimmt keine Terminalsteuerung."
     },
     "retryingOlderOutput": "Frühere Ausgabe wird synchronisiert...",
     "waitingForActivation": "Dieses Terminal auswählen, um fortzufahren.",

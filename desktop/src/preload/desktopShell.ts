@@ -3,7 +3,7 @@ import { OPEN_FILE_PREVIEW_WINDOW_CHANNEL } from '../shared/filePreviewWindow';
 
 import { RELEASE_FLOWER_SOURCE_CHANNEL, ASK_FLOWER_SOURCE_CHANNEL, SOURCE_SCREENSHOT_CHANNEL, type DesktopAskFlowerSource, MANUAL_SCREENSHOT_CHANNEL, parseManualScreenshotRequest } from '../shared/manualScreenshotIPC';
 
-import { REMOTE_DESKTOP_FILES_CHANNEL } from '../shared/hostApplicationWindowIPC';
+import { HOST_APPLICATION_SETTINGS_CHANNEL, REMOTE_DESKTOP_FILES_CHANNEL } from '../shared/hostApplicationWindowIPC';
 import { contextBridge, ipcRenderer } from 'electron';
 import { REMOTE_DESKTOP_DEPLOYMENT_CHANNEL, REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, parseDesktopDeploymentRequest, parseDesktopDeploymentProgress, type DesktopDeploymentRequest, type DesktopDeploymentResult, type DesktopDeploymentProgress } from '../shared/remoteDesktopDeployment';
 import { HOST_APPLICATION_COMPONENTS_CHANNEL, HOST_APPLICATION_COMPONENTS_PROGRESS, type HostApplicationComponentsRequest, type HostApplicationComponentsResult, type HostApplicationComponentsProgress } from '../shared/hostApplicationComponents';
@@ -92,6 +92,11 @@ export function bootstrapDesktopShellBridge(): void {
       const receive = (_event: unknown, value: unknown) => { const progress = parseDesktopDeploymentProgress(value); if (progress) listener(progress); };
       ipcRenderer.on(REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, receive);
       return () => ipcRenderer.removeListener(REMOTE_DESKTOP_DEPLOYMENT_PROGRESS, receive);
+    },
+    onHostApplicationSettings: (listener: () => void): (() => void) => {
+      const receive = () => listener();
+      ipcRenderer.on(HOST_APPLICATION_SETTINGS_CHANNEL, receive);
+      return () => ipcRenderer.removeListener(HOST_APPLICATION_SETTINGS_CHANNEL, receive);
     },
     onRemoteDesktopFiles: (listener: () => void): (() => void) => {
       const receive = () => listener();

@@ -11,6 +11,7 @@ import { PluginPlatformRequestError, type PluginExecutionEventList, type PluginR
 import { EXAMPLE_PLUGIN_PACKAGE, exampleInspection } from './plugins/examplePluginPackage.test-fixture';
 import type { PluginInventoryProjection } from './plugins/pluginTypes';
 let registerFlowerPageReader: typeof import('./flower/FlowerContextSource').registerFlowerPageReader;
+let settingsPageContext: typeof import('./pages/settings/EnvSettingsPageContext').EnvSettingsPageCtx;
 
 const getLocalRuntimeMock = vi.fn();
 const getLocalAccessStatusMock = vi.fn();
@@ -1094,7 +1095,7 @@ vi.mock('./plugins/PluginCenterView', async () => {
     if (pluginCenterViewState.renderActual) return actual.PluginCenterView(props);
     let rootRef: HTMLElement | undefined;
     createEffect(() => {
-      if (!(props.focusRequest > 0)) return;
+      if (props.visible === false || !(props.focusRequest > 0)) return;
       queueMicrotask(() => rootRef?.focus());
     });
     return (
@@ -1408,6 +1409,7 @@ vi.mock('./pages/EnvSettingsPage', async () => {
   return {
     EnvSettingsPage: (props: any) => {
       const env = useContext(EnvContext);
+      const SettingsProvider = settingsPageContext.Provider;
       createEffect(() => { settingsPageState.focusSeq = env?.settingsFocusSeq() ?? 0; settingsPageState.focusSection = env?.settingsFocusSection() ?? null; });
       const origin = env?.settingsOrigin?.() ?? null;
       return (
@@ -1417,7 +1419,7 @@ vi.mock('./pages/EnvSettingsPage', async () => {
           data-focus-section={settingsPageState.focusSection ?? ''}
           data-origin={origin?.kind ?? ''}
         >
-          <Show when={env?.settingsFocusSection() === 'plugins'}>{props.panels?.plugins?.()}</Show>
+          <Show when={env?.settingsFocusSection() === 'plugins'}><SettingsProvider value={{ env, canInteract: () => true, canAdmin: () => true, notify: { error: notificationErrorMock } } as any}>{props.panels?.plugins?.()}</SettingsProvider></Show>
           {origin?.kind === 'flower' ? (
             <button type="button" data-testid="mock-back-to-flower" onClick={() => env?.returnFromSettingsOrigin?.()}>
               Back to Flower
@@ -1612,6 +1614,10 @@ beforeEach(async () => {
   Object.defineProperty(window, 'sessionStorage', { configurable: true, value: sessionStorage });
   Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: sessionStorage });
   vi.resetModules();
+  // IMPORTANT: Cached vi.mock factories survive resetModules. Read the actual
+  // provider from this test's module graph so the real plugin settings consumer
+  // and its fixture never use two different Solid context identities.
+  ({ EnvSettingsPageCtx: settingsPageContext } = await import('./pages/settings/EnvSettingsPageContext'));
   ({ registerFlowerPageReader } = await import('./flower/FlowerContextSource'));
   // EnvAppShell loads PluginCenterView through Solid's lazy boundary. Resolve
   // the mocked module before each mount so the harness exercises the same
@@ -2040,6 +2046,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-testid="settings-page"]')).not.toBeNull();
       expect(settingsPageState.focusSection).toBe('plugins');
       expect(sidebarActiveTabValue).toBe('terminal');
+      await flushUntil(() => (host.querySelector('[data-plugin-center-view]') as HTMLElement).contains(document.activeElement));
       expect((host.querySelector('[data-plugin-center-view]') as HTMLElement).contains(document.activeElement)).toBe(true);
     } finally {
       dispose();
@@ -3571,6 +3578,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-testid="settings-page"]')).not.toBeNull();
       expect(settingsPageState.focusSection).toBe('plugins');
       expect(sidebarActiveTabValue).toBe('terminal');
+      await flushUntil(() => (host.querySelector('[data-plugin-center-view]') as HTMLElement).contains(document.activeElement));
       expect((host.querySelector('[data-plugin-center-view]') as HTMLElement).contains(document.activeElement)).toBe(true);
     } finally {
       dispose();

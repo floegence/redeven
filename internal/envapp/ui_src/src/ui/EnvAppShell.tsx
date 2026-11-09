@@ -1,3 +1,4 @@
+import { TerminalSettingsAttachmentsProvider } from './services/terminalSettingsTargets';
 import type { DesktopAskFlowerSource } from '../../../../../desktop/src/shared/manualScreenshotIPC';
 import { GlobalFlowerContextMenu } from '../../../../flower_ui/src/GlobalFlowerContextMenu';
 import type { ContextMenuRequest } from '@floegence/floe-webapp-core/ui';
@@ -228,6 +229,7 @@ import {
   type PluginSessionCredentialBinding,
 } from './services/pluginSessionCredential';
 import { createPluginSessionReadinessCoordinator } from './services/pluginSessionReadinessCoordinator';
+import { isHostApplicationSettingsRequest } from './services/hostApplicationSettingsTarget';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import { consumeAccessResumeTokenFromWindow } from './accessResume';
 import { CODE_SPACE_ID_ENV_UI, FLOE_APP_AGENT, FLOE_APP_CODE, FLOE_APP_PORT_FORWARD, type LauncherFloeApp } from './services/floeproxyContract';
@@ -2724,6 +2726,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   onMount(() => {
     const stopAsk = window.redevenDesktopShell?.onAskFlowerSource?.(receiveFlowerWindowHandoff);
     onCleanup(() => stopAsk?.());
+    const stopSettings = window.redevenDesktopShell?.onHostApplicationSettings?.(() => openSettings('applications'));
+    onCleanup(() => stopSettings?.());
     const stop = window.redevenDesktopShell?.onRemoteDesktopFiles?.(() => openSurface('files'));
     onCleanup(() => stop?.());
   });
@@ -4028,6 +4032,15 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   onCleanup(() => {
     accessRecoverySeq += 1;
     protocol.disconnect();
+  });
+
+  onMount(() => {
+    const openViewerSettings = (event: MessageEvent) => {
+      if (!isHostApplicationSettingsRequest(event)) return;
+      openSettings('applications'); window.focus();
+    };
+    window.addEventListener('message', openViewerSettings);
+    onCleanup(() => window.removeEventListener('message', openViewerSettings));
   });
 
   // Cross-window handshake: allow non-Env App sandbox windows (codespaces/3rd-party apps) to
@@ -5709,7 +5722,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           return setPluginPin(menu.placement, menu.inventoryKey, false);
         }}
       />
-      <TerminalSessionCatalogProvider accessReady={
+      <TerminalSettingsAttachmentsProvider><TerminalSessionCatalogProvider accessReady={
         !accessGateVisible() && !accessRecoveryBusy() && accessChannelReady()
         && protocol.status() === 'connected' && accessResumeClient() === protocol.session?.()
       }>
@@ -5796,7 +5809,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           </FilePreviewContext.Provider>
         </FileBrowserSurfaceContext.Provider>
         </DownloadContext.Provider>
-      </TerminalSessionCatalogProvider>
+      </TerminalSessionCatalogProvider></TerminalSettingsAttachmentsProvider>
     </SettingsPanelContext.Provider></EnvContext.Provider></FlowerContextSources.Provider></GlobalFlowerContextMenu>
   );
 }

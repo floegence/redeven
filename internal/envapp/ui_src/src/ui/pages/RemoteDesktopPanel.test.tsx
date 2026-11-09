@@ -10,10 +10,11 @@ import type { RemoteDesktopStatus } from '../services/remoteDesktopApi';
 const state = vi.hoisted(() => ({
   ssh: false, label: 'server', hostname: 'server.example', local: true, full: true, desktop: true,
   status: vi.fn(), create: vi.fn(), open: vi.fn(), disconnect: vi.fn(), save: vi.fn(), forget: vi.fn(), permission: vi.fn(),
-  deployment: vi.fn(), progress: vi.fn(), access: vi.fn(),
+  deployment: vi.fn(), progress: vi.fn(), access: vi.fn(), openSettings: vi.fn(),
 }));
 vi.mock('./EnvContext', () => ({ useEnvContext: () => ({
   env: () => ({ name: state.local ? 'Local Environment' : 'Research host', agent: { hostname: state.hostname }, permissions: { can_read: true, can_write: state.full, can_execute: state.full } }),
+  openSettings: state.openSettings,
   env_id: () => 'env-fixture', localRuntime: () => state.local ? {} : null,
 }) }));
 vi.mock('../services/desktopSessionContext', () => ({ readDesktopSessionContextSnapshot: () => state.label ? { label: state.label, target_kind: state.ssh ? 'ssh_environment' : 'local' } : null }));
@@ -42,19 +43,19 @@ afterEach(() => { dispose?.(); host.remove(); vi.restoreAllMocks(); });
 const button = (name: string) => [...host.querySelectorAll('button')].find(item => controlText(item) === name || item.getAttribute('aria-label') === name)!;
 async function mount() { dispose = render(() => <RemoteDesktopPanel />, host); await vi.waitFor(() => expect(state.status).toHaveBeenCalled()); await vi.waitFor(() => expect(host.querySelector('.remote-desktop-connect')).toBeTruthy()); }
 
-it('keeps ready connection focused and opens management as a separate view', async () => {
+it('keeps the connection view while opening canonical application settings', async () => {
   state.status.mockResolvedValue({ ...ready, access_state: 'enabled' });
   state.label = 'Local Environment';
   await mount();
+  const connection = host.querySelector('.remote-desktop-connect');
   expect(host.textContent).not.toContain('Local Environment');
   expect(host.querySelector('.host-access-permissions')).toBeNull();
   expect(host.querySelector('.host-access-management')).toBeNull();
   button('Access settings').click();
-  expect(host.querySelector('.remote-desktop-connect')).toBeNull();
-  expect(host.querySelector('.host-access-management')).not.toBeNull();
-  expect(host.querySelector('.host-access-permissions')).toBeNull();
-  button('Back to connection').click();
-  expect(host.querySelector('.remote-desktop-connect')).not.toBeNull();
+  expect(state.openSettings).toHaveBeenCalledExactlyOnceWith('applications');
+  expect(host.querySelector('.remote-desktop-connect')).toBe(connection);
+  expect(host.querySelector('.host-access-management')).toBeNull();
+  expect(state.access).not.toHaveBeenCalled();
 });
 
 it('keeps paused desktop explicit and enables only on connect', async () => {
@@ -68,19 +69,17 @@ it('keeps paused desktop explicit and enables only on connect', async () => {
   expect(state.access).toHaveBeenCalledExactlyOnceWith('desktop', 'enabled');
 });
 
-it('removes only desktop preferences after confirmation and preserves OS grants', async () => {
+it('leaves removal and OS authorization to canonical settings without changing connection state', async () => {
   state.status.mockResolvedValue({ ...ready, access_state: 'enabled' });
   await mount();
   button('Access settings').click();
-  button('Remove settings…').click();
+  expect(state.openSettings).toHaveBeenCalledExactlyOnceWith('applications');
+  expect(button('Remove settings…')).toBeUndefined();
   expect(state.access).not.toHaveBeenCalled();
-  state.status.mockResolvedValue({ ...ready, access_state: 'unconfigured' });
-  button('Remove settings…').click();
-  await vi.waitFor(() => expect(host.querySelector('.host-access-state')?.textContent).toBe('Not set up'));
-  expect(state.access).toHaveBeenCalledExactlyOnceWith('desktop', 'unconfigured');
   expect(state.permission).not.toHaveBeenCalled();
   expect(state.forget).not.toHaveBeenCalled();
   expect(state.create).not.toHaveBeenCalled();
+  expect(host.querySelector('.remote-desktop-connect')).not.toBeNull();
 });
 
 it('shows access mutation failures without claiming removal or connecting', async () => {
@@ -230,41 +229,31 @@ it('requires an explicit takeover instead of replacing an existing controller', 
 });
 
 
-it('exposes Wayland approval reuse before connecting and waits for the saved setting', async () => {
-  let saved!: () => void;
+it('shows Wayland consent readiness while keeping persistent approval settings in the dialog', async () => {
   const wayland = { ...ready, capabilities: { ...ready.capabilities, backend: 'wayland', state: 'ready', authorization: 'needs_consent' } };
   state.status.mockResolvedValue(wayland);
-  state.save.mockImplementation(() => new Promise<void>(resolve => { saved = resolve; }));
   await mount();
-  const sharing = host.querySelector<HTMLInputElement>('.remote-desktop-sharing [role=switch]')!;
-  expect(sharing).toBeTruthy(); expect(sharing.closest('details')).toBeNull();
-  expect(sharing.checked).toBe(false); expect(state.save).not.toHaveBeenCalled();
-  sharing.click();
-  await vi.waitFor(() => expect(state.save).toHaveBeenCalledWith(true));
-  expect(button('Connect to desktop').disabled).toBe(true);
-  state.status.mockResolvedValue({ ...wayland, unattended: true }); saved();
-  await vi.waitFor(() => expect(button('Connect to desktop').disabled).toBe(false));
-  expect(host.querySelector('.remote-desktop-state')?.textContent).toContain('First connection needs host approval');
+  expect(host.querySelector('.remote-desktop-sharing [role=switch]')).toBeNull();
+  expect(state.save).not.toHaveBeenCalled();
+  expect(host.querySelector('.remote-desktop-state')?.textContent).toContain('Host approval required for each connection');
   expect(host.querySelector('.remote-desktop-guidance')).not.toBeNull();
+  button('Access settings').click();
+  expect(state.openSettings).toHaveBeenCalledExactlyOnceWith('applications');
   button('Connect to desktop').click();
   await vi.waitFor(() => expect(state.create).toHaveBeenCalledOnce());
+  expect(state.save).not.toHaveBeenCalled();
 });
 
-
-it('only reports saved authorization from the native state and confirms forgetting it', async () => {
+it('reports saved native authorization without offering a second forget editor', async () => {
   const wayland = { ...ready, unattended: true, capabilities: { ...ready.capabilities, backend: 'wayland', authorization: 'saved' } };
   state.status.mockResolvedValue(wayland);
   await mount();
   expect(host.querySelector('.remote-desktop-state')?.textContent).toContain('Sharing approval saved');
-  host.querySelector<HTMLDetailsElement>('.remote-desktop-options')!.open = true;
-  button('Request approval again').click();
+  expect(button('Request approval again')).toBeUndefined();
+  button('Access settings').click();
+  expect(state.openSettings).toHaveBeenCalledExactlyOnceWith('applications');
   expect(state.forget).not.toHaveBeenCalled();
-  const confirm = [...document.querySelectorAll('button')].find(item => controlText(item) === 'Remove saved approval')!;
-  state.forget.mockResolvedValue({ authorization: 'needs_consent' });
-  state.status.mockResolvedValue({ ...wayland, capabilities: { ...wayland.capabilities, authorization: 'needs_consent' } });
-  confirm.click();
-  await vi.waitFor(() => expect(state.forget).toHaveBeenCalledOnce());
-  await vi.waitFor(() => expect(host.querySelector('.remote-desktop-state')?.textContent).toContain('First connection needs host approval'));
+  expect(state.create).not.toHaveBeenCalled();
 });
 
 it.each(['unknown', 'revoked', 'unsupported'] as const)('does not call %s approval saved', async authorization => {

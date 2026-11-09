@@ -1,3 +1,4 @@
+import { HOST_APPLICATION_SETTINGS_CHANNEL } from '../shared/hostApplicationWindowIPC';
 import { OPEN_FILE_PREVIEW_WINDOW_CHANNEL } from '../shared/filePreviewWindow';
 import { isSessionFilePreviewURL, openFilePreviewWindow } from './filePreviewWindow';
 import { resolveRunningSettingsTarget } from './runtimeSettingsTarget';
@@ -8667,6 +8668,13 @@ function createWebServiceBrowserController(
     if (request.presentation !== 'desktop' || sessionRecord.root_window.browserWindow.isDestroyed()) return;
     const root = sessionRecord.root_window.browserWindow;
     root.webContents.send(REMOTE_DESKTOP_FILES_CHANNEL);
+    presentAppWindow(root, { stealAppFocus: true });
+  }, () => {
+    // IMPORTANT: A viewer can open only its existing Env parent's Applications
+    // settings. Never resolve another environment or start a missing Runtime.
+    const root = sessionRecord.root_window.browserWindow;
+    if (root.isDestroyed()) return;
+    root.webContents.send(HOST_APPLICATION_SETTINGS_CHANNEL);
     presentAppWindow(root, { stealAppFocus: true });
   }) : () => {};
 

@@ -1815,7 +1815,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   openMessageFile?: (input: Readonly<{ path: string; action: 'preview' | 'reveal'; kind?: 'file' | 'directory'; signal?: AbortSignal }>) => Promise<void>;
   openMessageURL?: (input: Readonly<{ url: string; signal: AbortSignal }>) => Promise<void>;
   loadMessageFile?: (input: Readonly<{ path: string; signal: AbortSignal }>) => Promise<Blob>;
-  computerFrameRate?: Readonly<{ read: () => number; write: (fps: number) => void }>;
+  computerFrameRate?: Readonly<{ read: () => number; write: (fps: number) => void; subscribe?: (listener: (fps: number) => void) => () => void }>;
   inputComputerControl?: (input: FlowerComputerUserInput) => Promise<void>;
   setComputerViewer?: (input: Readonly<{
     observer_id: string; revision: number; thread_id?: string; target_id?: string; resource_ref?: string;

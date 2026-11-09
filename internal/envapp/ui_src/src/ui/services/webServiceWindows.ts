@@ -161,6 +161,8 @@ export async function openWebServiceRoute(
     browserTargetURL = route.url;
   }
 
+  if (win && presentation === 'application') registerSandboxWindow(win, { origin: new URL(browserTargetURL, window.location.href).origin, floe_app: FLOE_APP_PORT_FORWARD, code_space_id: forwardID, app_path: normalizeAppPath(appPath) });
+
   if (useDesktopWindow) {
     setStatus(copy.opening);
     const response = await openWebServiceWindowInDesktopShell({

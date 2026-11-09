@@ -10,3 +10,4 @@
 .redeven-theme-settings .redeven-theme-picker__theme-scroll { max-height: none; }
 
 .redeven-unified-settings-dialog-root { flex: 1; width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.redeven-unified-settings-dialog-header { flex-shrink: 0; min-width: 0; }

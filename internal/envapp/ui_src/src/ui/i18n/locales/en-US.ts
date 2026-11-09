@@ -1860,13 +1860,17 @@ export const enUS = defineDictionary({
     moveFailed: 'Move failed',
   },
   settings: {
+    plugins: {"installed": "Installed plugins", "preview": "Author preview", "previewEmpty": "No plugin previews available", "target": "Plugin configuration"},
+    "conversationDefaults": {"title": "Personal conversation defaults", "description": "Remembered model, reasoning and working directory for new conversations. Composer choices also update these defaults.", "environmentDirectory": "Use the environment working directory"}, "workbench": {"canvasTheme": "Workbench canvas theme", "themes": {"default": "Default", "vibrancy": "Vibrancy", "mica": "Mica", "midnight": "Midnight", "aurora": "Aurora", "terminal": "Terminal"}},
     runtimeTitle: 'Settings',
+    operationUnknown: 'The operation result is not confirmed. Refresh to check its status before making another change.',
     targetUnavailable: 'This settings target is no longer available.',
     backToFlower: 'Back to Flower',
     searchPlaceholder: 'Search settings',
     filteredSections: '{visible} of {total} sections',
     nav: {
       appearance: 'Appearance & Language', browser: 'Browser', services: 'Services', extensions: 'Extensions',
+      terminal: 'Terminal', applications: 'Host Applications & Desktop', containers: 'Containers',
       config: 'Config File',
       connection: 'Connection',
       agent: 'Runtime Status',

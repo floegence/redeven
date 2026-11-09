@@ -1,6 +1,6 @@
 import { createSignal, onCleanup } from 'solid-js';
 
-export const SETTINGS_DESTINATIONS = ['appearance', 'storage', 'terminal', 'browser', 'extensions', 'applications', 'services', 'plugins', 'config', 'connection', 'agent', 'runtime', 'logging', 'debug_console', 'codespaces', 'permission_policy', 'ai'] as const;
+export const SETTINGS_DESTINATIONS = ['appearance', 'storage', 'terminal', 'browser', 'extensions', 'applications', 'containers', 'services', 'plugins', 'config', 'connection', 'agent', 'runtime', 'logging', 'debug_console', 'codespaces', 'permission_policy', 'ai'] as const;
 export type SettingsSection = typeof SETTINGS_DESTINATIONS[number];
 export type SettingsTarget = Readonly<{ section: SettingsSection; resource?: string }>;
 
@@ -13,7 +13,7 @@ export function settingsProviderFocus(resource: string | undefined, sequence: nu
   } catch { return undefined; }
 }
 export function settingsTargetSupported(target: SettingsTarget) {
-  return !target.resource || ['terminal', 'browser', 'services', 'connection'].includes(target.section)
+  return !target.resource || ['terminal', 'browser', 'plugins', 'containers', 'services', 'connection'].includes(target.section)
     || target.section === 'ai' && !!settingsProviderFocus(target.resource, 0);
 }
 

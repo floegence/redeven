@@ -14,9 +14,8 @@ import { computerFramePath } from '../../../../../flower_ui/host/computerFramePa
 import { toolImagePath } from '../../../../../flower_ui/host/toolImagePath';
 import { messageFilePath } from '../../../../../flower_ui/host/messageFilePath';
 import { messageAttachmentPath } from '../../../../../flower_ui/host/messageAttachmentPath';
-import { COMPUTER_FRAME_RATE_KEY, computerFrameRate } from '../../../../../flower_ui/src/computerViewer';
+import { envComputerViewerFrameRate } from '../services/computerViewerPreferences';
 import type { FlowerComputerFrameSource } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { createFlowerModelReadResource, readFlowerModelDirectory, withFlowerModelDirectory, type FlowerModelReadResource } from '../../../../../flower_ui/src/modelDirectory';
@@ -893,10 +892,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (!response.ok) throw new Error('File preview is unavailable.');
       return response.blob();
     },
-    computerFrameRate: {
-      read: () => computerFrameRate(readUIStorageItem(COMPUTER_FRAME_RATE_KEY)),
-      write: (fps) => writeUIStorageItem(COMPUTER_FRAME_RATE_KEY, String(fps)),
-    },
+    computerFrameRate: envComputerViewerFrameRate,
     inputComputerControl: async (input) => {
       await fetchFlowerJSON('/_redeven_proxy/api/ai/computer/input', { method: 'POST', body: JSON.stringify(input) });
     },

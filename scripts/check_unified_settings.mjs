@@ -31,4 +31,23 @@ assert.match(read('desktop/src/welcome/App.tsx'), /browserTransferAvailable: \(\
 assert.match(read('internal/envapp/ui_src/src/ui/widgets/TerminalHistorySettings.tsx'), /props.canManage !== false/);
 assert.match(read('internal/envapp/ui_src/src/ui/pages/settings/sections/RuntimeConfigSection.tsx'), /presented\(\) && Boolean\(rootEditor\(\)\)/);
 assert.match(read('internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx'), /visible=\{props.visible\}/);
+// IMPORTANT: This inventory enumerates product-owned durable configuration.
+// Session actions and direct view shortcuts keep their established owner.
+const settings = read('internal/envapp/ui_src/src/ui/pages/settings/EnvSettingsDialog.tsx');
+for (const panel of ['TerminalSettingsPanel', 'ContainerSettingsPanel', 'ConversationDefaultsSettings', 'BrowserDisplaySettings', 'WorkbenchAppearanceSettings', 'PluginSettingsPanel']) assert.match(settings, new RegExp('<' + panel + '[ >]'));
+for (const [file, fragment] of [
+ ['internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx', "openSettings('terminal'"],
+ ['internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx', "openSettings('containers'"],
+ ['internal/envapp/ui_src/src/ui/pages/RemoteDesktopPanel.tsx', "openSettings('applications'"],
+ ['internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.tsx', '<ApplicationPictureSettings'],
+ ['internal/envapp/ui_src/src/ui/plugins/PluginCreationWorkspace.tsx', 'pluginAuthorSettingsResource'],
+]) assert.ok(read(file).includes(fragment), file + ': canonical settings route missing');
+assert.doesNotMatch(read('internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx'), /<TerminalSettingsDialog/);
+assert.doesNotMatch(read('internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx'), /setServiceConfigurationDrafts/);
+for (const viewer of ['macos', 'linux', 'viewer']) assert.doesNotMatch(read('internal/codeapp/appserver/host_application_viewer/' + viewer + '.js'), /localStorage\.setItem/);
+assert.match(read('internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts'), /computerFrameRate: envComputerViewerFrameRate/);
+assert.match(read('internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx'), /subscribeWorkbenchLocalPreferences/);
+const recovery = read('internal/envapp/ui_src/src/ui/pages/settings/ContainerSettingsPanel.tsx');
+assert.match(recovery, /getContainerOperationByRequestID/); assert.doesNotMatch(recovery, /listContainerOperations/);
+assert.match(read('internal/envapp/ui_src/src/ui/services/hostApplicationSettingsTarget.ts'), /event\.origin === owner\.origin/);
 console.log('Unified settings ownership contract passed.');

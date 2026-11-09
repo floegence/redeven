@@ -68,17 +68,10 @@
   const inputNoticeHint = document.createElement('p');
   inputNotice.append(inputNoticeTitle, inputNoticeHint); document.body.append(inputNotice);
   const picture = {mode:'auto'};
-  try {
-    const saved = localStorage.getItem('redeven.xpra-app.picture.v1');
-    if (['auto', 'clarity', 'smooth', 'data'].includes(saved)) picture.mode = saved;
-  } catch { /* Preferences are optional. */ }
-  const picturePanel = document.createElement('section');
-  picturePanel.className = 'mac-app-picture';
+  const picturePanel = document.createElement('section'); picturePanel.className = 'mac-app-picture';
   const pictureTitle = document.createElement('strong'); hostApplicationAppearance.copy(pictureTitle, 'picture');
-  const {modes, modeButtons} = createHostApplicationPictureModes(picture, () => {
-    try { localStorage.setItem('redeven.xpra-app.picture.v1', picture.mode); } catch { /* Preferences are optional. */ }
-    applyPicture();
-  });
+  const settingsLink = hostApplicationPicture.link();
+  hostApplicationPicture.subscribe(picture, () => applyPicture());
   const pictureHint = document.createElement('p'); hostApplicationAppearance.copy(pictureHint, 'pictureHint');
   const decoding = document.createElement('div'); decoding.className = 'mac-app-picture-statistics';
   const decodingRow = document.createElement('div');
@@ -98,7 +91,7 @@
   const httpsHint = document.createElement('p'); httpsHint.className = 'host-app-https-hint';
   hostApplicationAppearance.copy(httpsHint, 'httpsPerformanceHint');
   httpsHint.hidden = window.isSecureContext;
-  picturePanel.append(pictureTitle, modes, pictureHint, displayNotice, decoding, httpsHint);
+  picturePanel.append(pictureTitle, settingsLink, pictureHint, displayNotice, decoding, httpsHint);
   popover.append(windowPanel, picturePanel, helpPanel, quitPanel);
   const panels = {windows:windowPanel, picture:picturePanel, help:helpPanel, quit:quitPanel};
   const toggles = {windows:windowToggle, picture:controlsButton, help, quit};
@@ -123,7 +116,7 @@
     panelSection = section; popover.dataset.section = section;
     popover.hidden = false; panels[section].hidden = false;
     toggles[section].setAttribute('aria-expanded', 'true'); positionPopover();
-    (section === 'help' ? helpPanel : section === 'quit' ? cancelQuit : section === 'picture' ? modeButtons.get(picture.mode)
+    (section === 'help' ? helpPanel : section === 'quit' ? cancelQuit : section === 'picture' ? settingsLink
       : windowList.querySelector('[aria-pressed="true"]') || windowList.querySelector('button'))?.focus();
   }
   function currentWindow() {

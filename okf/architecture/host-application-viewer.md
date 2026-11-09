@@ -14,6 +14,9 @@ Runtime/native events own application facts; bootstrap and published SDK own vie
 ## Viewer state
 Use [Flowersec window transport](graphical-window-transport.md) for graphical state/picture/input. Reserve browser tab in initiating click, retain app identity through admission and use host launch deduplication for retry; closing pending tab cannot kill uncertain admission. Browser loading has no Desktop chrome/Node dependency. Pre-window launcher exit fails; a live slow process has no window timeout. Terminal records are bounded memory, lost on Runtime restart; expired routes reopen from library. Only confirmed final-window/app closure dismisses established viewing; empty inventory/transport loss proves no exit.
 
+## Picture settings ownership
+Env App Settings → Applications & Desktop owns picture mode and native resolution/frame-rate limits in `config.json` under `host_application_picture`, keyed only by authenticated user identity. Viewers use no-store read-only scoped endpoints and retain last confirmed state on network failure; there is one serialized request and pagehide abort. No viewer-local writer or silent preference import remains. Browser openers require registered source, exact origin and product viewer path; Desktop IPC requires exact window/frame/bootstrap identity and routes only to the existing Env window. Opening settings never starts a Runtime.
+
 ## Display and native streams
 Published compositor owns Wayland/Xwayland geometry,resize and bounded family/popups; Xpra uses selected v20/v21 client. Native chrome moves/maximizes/minimizes primary window. Missing paint/close request/transport proves no closure. Request source density for Clarity; quality/HTTPS cannot recover absent detail. [Certificates](../security/local-ui-network-exposure.md#certificates) owns trust: viewer never creates/trusts certs,changes protocol,restarts Runtime or downgrades TLS.
 

@@ -282,6 +282,7 @@ func (c *RemoteDesktopConfig) RememberApproval() bool {
 const RuntimeConfigVersion = 1
 
 type Config struct {
+	HostApplicationPictures  map[string]HostApplicationPicture   `json:"host_application_picture,omitempty"`
 	ConfigVersion            int                                 `json:"runtime_config_version"`
 	CloudRouteOperations     []rc.RouteOperation                 `json:"cloud_route_operations,omitempty"`
 	CloudAssociation         *CloudAssociation                   `json:"cloud_association,omitempty"`
@@ -345,6 +346,14 @@ type Config struct {
 func (c *Config) ValidateLocalMinimal() error {
 	if c == nil {
 		return errors.New("nil config")
+	}
+	for owner, picture := range c.HostApplicationPictures {
+		if strings.TrimSpace(owner) == "" {
+			return errors.New("invalid host application picture owner")
+		}
+		if err := picture.Validate(); err != nil {
+			return err
+		}
 	}
 	if c.HostAccess != nil {
 		for _, state := range []string{c.HostAccess.Applications, c.HostAccess.Desktop} {

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvWorkbenchPage } from './EnvWorkbenchPage';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
+import { subscribeWorkbenchLocalPreferences, writeWorkbenchTheme } from '../services/workbenchLocalPreferences';
 
 const storageMocks = vi.hoisted(() => ({
   isDesktopStateStorageAvailable: vi.fn(() => false),
@@ -979,6 +980,42 @@ describe('EnvWorkbenchPage', () => {
     document.body.innerHTML = '';
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
+  });
+
+  it('applies an external theme preference without resetting the active canvas state', async () => {
+    const host = document.createElement('div'); document.body.appendChild(host);
+    let preferences = localWorkbenchPreferences({ theme: 'mica', locked: true });
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => key === 'workbench:local_preferences:env-123' ? preferences : null) as any);
+    storageMocks.writeUIStorageJSON.mockImplementation((key: string, value: any) => { if (key === 'workbench:local_preferences:env-123') preferences = value; });
+    mount(() => <EnvWorkbenchPage />, host); await flushMicrotasks();
+    const before = surfaceApiMocks.lastStateAccessor();
+    preferences = { ...preferences, theme: 'aurora' };
+    window.dispatchEvent(new StorageEvent('storage', { key: 'workbench:local_preferences:env-123' }));
+    await flushMicrotasks();
+    const after = surfaceApiMocks.lastStateAccessor();
+    expect(after.theme).toBe('aurora');
+    expect(after.locked).toBe(true);
+    expect(after.widgets).toBe(before.widgets);
+    expect(after.viewport).toBe(before.viewport);
+    expect(after.selectedWidgetId).toBe(before.selectedWidgetId);
+    vi.advanceTimersByTime(200);
+    expect(preferences.theme).toBe('aurora');
+  });
+
+  it('shares HUD changes with Settings and preserves them through immediate global theme changes', async () => {
+    const host = document.createElement('div'); document.body.appendChild(host);
+    let preferences = localWorkbenchPreferences({ theme: 'mica' });
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => key === 'workbench:local_preferences:env-123' ? preferences : null) as any);
+    storageMocks.writeUIStorageJSON.mockImplementation((key: string, value: any) => { if (key === 'workbench:local_preferences:env-123') preferences = value; });
+    mount(() => <EnvWorkbenchPage />, host); await flushMicrotasks();
+    const observer = vi.fn(); const stop = subscribeWorkbenchLocalPreferences('workbench:local_preferences:env-123', observer);
+    try {
+      surfaceApiMocks.lastSetState((previous: any) => ({ ...previous, theme: 'midnight', locked: true, mode: 'background', activeTool: 'select' }));
+      expect(observer).toHaveBeenLastCalledWith(expect.objectContaining({ theme: 'midnight', locked: true, mode: 'background' }));
+      writeWorkbenchTheme('workbench:local_preferences:env-123', 'aurora');
+      expect(surfaceApiMocks.lastStateAccessor()).toMatchObject({ theme: 'aurora', locked: true, mode: 'background', activeTool: 'select' });
+      expect(preferences).toMatchObject({ theme: 'aurora', locked: true, mode: 'background', activeTool: 'select' });
+    } finally { stop(); }
   });
 
   it('hydrates the runtime snapshot while ignoring old frontend layout storage', async () => {

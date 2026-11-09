@@ -17,8 +17,8 @@ export type PluginDraft = Readonly<{
   updated_at: number;
 }>;
 export const pluginCreationAPI = '/_redeven_proxy/api/plugin-creation';
-export const listPluginDrafts = () =>
-  fetchSessionJSON<readonly PluginDraft[]>(`${pluginCreationAPI}/drafts`, { method: 'GET' });
+export const listPluginDrafts = (signal?: AbortSignal) =>
+  fetchSessionJSON<readonly PluginDraft[]>(`${pluginCreationAPI}/drafts`, { method: 'GET', ...(signal ? { signal } : {}) });
 export const getPluginDraft = (id: string) =>
   fetchSessionJSON<PluginDraft>(`${pluginCreationAPI}/drafts/${encodeURIComponent(id)}`, { method: 'GET' });
 export const pluginDraftForThread = (id: string) =>

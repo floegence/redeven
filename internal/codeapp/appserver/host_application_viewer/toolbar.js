@@ -123,36 +123,3 @@ function createHostApplicationHoldFeedback(ownerDocument) {
     dispose() { element.remove(); },
   };
 }
-
-function createHostApplicationPictureModes(picture, changed) {
-  const modeButtons = new Map();
-  const modes = document.createElement('div');
-  modes.className = 'mac-app-picture-modes';
-  modes.setAttribute('role', 'group');
-  hostApplicationAppearance.copy(modes, 'picture', 'aria-label');
-  for (const mode of ['auto', 'clarity', 'smooth', 'data']) {
-    const button = document.createElement('button');
-    button.dataset.pictureMode = mode;
-    const label = document.createElement('span');
-    hostApplicationAppearance.copy(label, 'picture' + mode[0].toUpperCase() + mode.slice(1));
-    button.append(label);
-    button.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg>');
-    button.setAttribute('aria-pressed', String(picture.mode === mode));
-    button.onclick = () => {
-      if (picture.mode === mode) return;
-      picture.mode = mode;
-      for (const [value, control] of modeButtons) control.setAttribute('aria-pressed', String(value === mode));
-      changed();
-    };
-    modeButtons.set(mode, button); modes.append(button);
-  }
-  modes.addEventListener('keydown', event => {
-    const buttons = [...modeButtons.values()];
-    const index = buttons.indexOf(document.activeElement);
-    const offset = {ArrowRight:1, ArrowLeft:-1, ArrowDown:2, ArrowUp:-2}[event.key];
-    const next = event.key === 'Home' ? buttons[0] : event.key === 'End' ? buttons.at(-1)
-      : offset && index >= 0 ? buttons[(index + offset + buttons.length) % buttons.length] : null;
-    if (next) { event.preventDefault(); next.focus(); }
-  });
-  return {modes, modeButtons};
-}

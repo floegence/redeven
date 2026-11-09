@@ -757,3 +757,44 @@ func TestContainerOperationEventSnapshotExposesStructuredProgress(t *testing.T) 
 		t.Fatalf("operation event snapshot status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestContainerOperationExactRecoveryAndAdmissionEvidence(t *testing.T) {
+	service := newContainerAPITestService(t)
+	const channel = "ch_container_recovery"
+	server := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channel, session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true})}
+	raw := json.RawMessage(`{"engine":"docker","name":"recovery-data","driver":"local"}`)
+	preflight, err := service.Preflight(context.Background(), containerresource.PreflightRequest{Method: containerengine.MethodVolumesCreate, Request: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := containerresource.CreateOperationRequest{RequestID: "request-recovery", Method: containerengine.MethodVolumesCreate, Request: raw, RequestHash: preflight.RequestHash, PlanHash: preflight.PlanHash}
+	body, _ := json.Marshal(request)
+	admitted := serveContainerAPI(t, server, channel, http.MethodPost, containerOperationsAPIBase, string(body))
+	if admitted.Code != http.StatusAccepted || admitted.Header().Get("Container-Operation-Admission") != "" {
+		t.Fatalf("admission status=%d marker=%q body=%s", admitted.Code, admitted.Header().Get("Container-Operation-Admission"), admitted.Body.String())
+	}
+	recovery := serveContainerAPI(t, server, channel, http.MethodGet, containerOperationsAPIBase+"/by-request/request-recovery", "")
+	if recovery.Code != http.StatusOK || !strings.Contains(recovery.Body.String(), `"request_id":"request-recovery"`) {
+		t.Fatalf("recovery: %d %s", recovery.Code, recovery.Body.String())
+	}
+	missing := serveContainerAPI(t, server, channel, http.MethodGet, containerOperationsAPIBase+"/by-request/request-missing", "")
+	if missing.Code != http.StatusNotFound || missing.Header().Get("Container-Operation-Admission") != "" {
+		t.Fatalf("absence is not rejection: %d %s", missing.Code, missing.Body.String())
+	}
+	rejected := serveContainerAPI(t, server, channel, http.MethodPost, containerOperationsAPIBase, "{")
+	if rejected.Header().Get("Container-Operation-Admission") != "rejected" {
+		t.Fatal("invalid admission did not mark rejection")
+	}
+	request.RequestID = "request-stale"
+	request.PlanHash = "sha256:stale"
+	body, _ = json.Marshal(request)
+	uncertain := serveContainerAPI(t, server, channel, http.MethodPost, containerOperationsAPIBase, string(body))
+	if uncertain.Code == http.StatusAccepted || uncertain.Header().Get("Container-Operation-Admission") != "" {
+		t.Fatal("storage boundary failure falsely claims rejection")
+	}
+	denied := &Server{containers: service, resolveSessionMeta: resolveMetaForTest(channel, session.Meta{})}
+	response := serveContainerAPI(t, denied, channel, http.MethodGet, containerOperationsAPIBase+"/by-request/request-recovery", "")
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("recovery bypassed permission: %d", response.Code)
+	}
+}

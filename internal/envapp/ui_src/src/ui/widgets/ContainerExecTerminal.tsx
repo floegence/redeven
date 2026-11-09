@@ -8,6 +8,7 @@ import { useRedevenRpc } from '../protocol/redeven_v1';
 import { createRedevenTerminalLiveBundle, createTerminalConnId } from '../services/terminalTransport';
 import { ensureTerminalPreferencesInitialized, resolveTerminalUserTheme, useTerminalPreferences } from '../services/terminalPreferences';
 import { createResolvedTerminalFont } from '../services/terminalFonts';
+import { trackTerminalSettingsControllers, useTerminalSettingsAttachments } from '../services/terminalSettingsTargets';
 import { TerminalFontStatus } from './TerminalFontStatus';
 import { TerminalSessionRuntime } from './TerminalSessionRuntime';
 
@@ -26,6 +27,9 @@ export function ContainerExecTerminal(props: ContainerExecTerminalProps) {
   const floe = useResolvedFloeConfig();
   const connID = createTerminalConnId();
   const live = createRedevenTerminalLiveBundle(rpc, () => protocol.session?.(), connID);
+  const tracked = trackTerminalSettingsControllers(live);
+  const attachments = useTerminalSettingsAttachments();
+  const unregister = attachments?.register({ widgetID: null, sessions: () => [{ id: props.sessionID, name: props.name }], controllers: tracked.controllers, ready: () => connected(), transport: tracked.transport });
   ensureTerminalPreferencesInitialized(floe.persist);
   const preferences = useTerminalPreferences();
   const resolvedFont = createResolvedTerminalFont(preferences.fontFamilyId);
@@ -35,7 +39,7 @@ export function ContainerExecTerminal(props: ContainerExecTerminalProps) {
     live.transport.syncConnectionEpoch(protocol.session?.() ?? null);
   });
 
-  onCleanup(() => live.transport.dispose());
+  onCleanup(() => { unregister?.(); tracked.transport.dispose(); });
 
   const connected = () => protocol.status() === 'connected' && Boolean(protocol.session?.());
   const session = createMemo<TerminalSessionInfo>(() => ({
@@ -72,7 +76,7 @@ export function ContainerExecTerminal(props: ContainerExecTerminalProps) {
         canOpenFilePreview={() => false}
         bottomInsetPx={() => 0}
         connId={connID}
-        transport={live.transport}
+        transport={tracked.transport}
         eventSource={live.eventSource}
         registerViewport={() => undefined}
         registerSurfaceElement={() => undefined}

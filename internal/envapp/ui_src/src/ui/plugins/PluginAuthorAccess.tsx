@@ -9,6 +9,10 @@ import type { PluginInventoryItem, PluginLifecycleCommand } from './pluginTypes'
 
 type Props = {
   workspaceID: string;
+  visible?: boolean;
+  embeddedConnections?: boolean;
+  authorityKey?: unknown;
+  refreshRevision?: number;
   canManage: boolean;
   pluginInstanceID: string;
   onChanged: () => Promise<void>;
@@ -17,22 +21,27 @@ type Props = {
 
 export function PluginAuthorAccess(props: Props): JSX.Element {
   const i18n = useI18n();
+  // IMPORTANT: Draft lifetime is the exact preview identity. Revalidation and
+  // management permission changes revoke admission, never the retained editor.
   const scope = createMemo(() => ({ workspace: props.workspaceID, instance: props.pluginInstanceID }));
+  const authority = createMemo(() => ({ scope: scope(), key: props.authorityKey, canManage: props.canManage }));
   const api = createMemo(() => createPluginLifecycleAPI(createAuthorPlatformClient(scope().workspace), []));
   const [item, setItem] = createSignal<PluginInventoryItem>();
   const [loading, setLoading] = createSignal(true);
   const [failed, setFailed] = createSignal(false);
   const [pending, setPending] = createSignal(false);
   const [connections, setConnections] = createSignal(false);
+  const permissionAdmission = createMemo(() => ({ authority: authority(), loading: loading(), failed: failed(), pending: pending(), revision: item()?.managementRevision, authorization: item()?.authorization?.revisions }));
   let controller: AbortController | undefined;
   let disposed = false;
 
   async function load() {
+    if (props.authorityKey === false) return;
     controller?.abort();
     const request = new AbortController();
     controller = request;
-    const target = scope();
-    const current = () => !disposed && !request.signal.aborted && scope() === target;
+    const target = scope(), access = authority();
+    const current = () => !disposed && !request.signal.aborted && scope() === target && authority() === access;
     setLoading(true);
     setFailed(false);
     try {
@@ -48,24 +57,30 @@ export function PluginAuthorAccess(props: Props): JSX.Element {
     }
   }
 
-  createEffect(
-    on(scope, () => {
-      setItem(undefined);
-      setConnections(false);
-      setPending(false);
-      void load();
-    }),
-  );
+  let previousScope: ReturnType<typeof scope> | undefined;
+  createEffect(on(authority, access => {
+    controller?.abort(); controller = undefined;
+    if (previousScope !== access.scope) {
+      setItem(undefined); setConnections(false); previousScope = access.scope;
+    }
+    setPending(false);
+    if (access.key === false) { setLoading(false); setFailed(true); }
+    else void load();
+  }));
+  createEffect(on(() => props.refreshRevision, () => {
+    if (props.authorityKey !== false) void load();
+  }, { defer: true }));
   onCleanup(() => {
     disposed = true;
     controller?.abort();
   });
 
   async function command(value: PluginLifecycleCommand) {
-    if (!props.canManage || pending() || loading() || failed()) return;
+    if (props.authorityKey === false || props.visible === false || !props.canManage || pending() || loading() || failed()) return;
     if (value.type !== 'grant_permission' && value.type !== 'revoke_permission') return;
-    const target = scope();
-    const current = () => !disposed && scope() === target;
+    const target = scope(), access = authority();
+    if (value.pluginInstanceID !== target.instance) return;
+    const current = () => !disposed && scope() === target && authority() === access;
     setPending(true);
     try {
       await api().execute(value);
@@ -100,23 +115,27 @@ export function PluginAuthorAccess(props: Props): JSX.Element {
       <Show when={item()}>
         {(value) => (
           <>
-            <PluginPermissionInventory
+            <Show when={permissionAdmission()} keyed>{_admission => <PluginPermissionInventory
+              visible={props.visible}
               item={value()}
-              canManage={props.canManage && !failed() && !loading()}
+              canManage={props.visible !== false && props.canManage && !failed() && !loading()}
               commandPending={pending()}
               onCommand={(action) => void command(action)}
-            />
-            <Show when={value().networkConnectors?.length}>
+            />}</Show>
+            <Show when={!props.embeddedConnections && value().networkConnectors?.length}>
               <Button size="sm" variant="outline" disabled={failed() || loading()} onClick={() => setConnections(true)}>
                 {i18n.t('uiCopy.plugin.connections.title')}
               </Button>
             </Show>
             <PluginConnectionsDialog
-              open={connections()}
+              embedded={props.embeddedConnections}
+              visible={props.visible}
+              open={props.embeddedConnections ? Boolean(value().networkConnectors?.length) : connections()}
               onOpenChange={setConnections}
               item={value()}
               ownerScope={scope()}
-              canManage={props.canManage}
+              authorityKey={props.authorityKey}
+              canManage={props.canManage && !failed() && !loading() && !pending()}
               api={api()}
             />
           </>

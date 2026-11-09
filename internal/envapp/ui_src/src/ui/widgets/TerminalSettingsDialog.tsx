@@ -65,7 +65,8 @@ type TerminalSettingsDialogProps = {
   ownerID?: string;
   followInput?: boolean;
   onFollowInputChange?: (value: boolean) => void;
-  retentionTransport?: RedevenTerminalTransport;
+  retentionTransport?: Pick<RedevenTerminalTransport, 'historyRetention' | 'configureHistoryRetention'>;
+  retentionAuthority?: unknown;
   retentionSessionId?: string | null;
   retentionCanManage?: boolean;
   userTheme: string;
@@ -197,6 +198,7 @@ function TerminalThemePreview(props: { colors: TerminalThemeColors }) {
 }
 
 function TerminalThemeOptionCard(props: {
+  groupName: string;
   item: (typeof TERMINAL_THEME_ITEMS)[number];
   label: string;
   colors: TerminalThemeColors;
@@ -208,7 +210,7 @@ function TerminalThemeOptionCard(props: {
     <label class="group relative block min-w-0 cursor-pointer">
       <input
         type="radio"
-        name="terminal-theme"
+        name={props.groupName}
         value={props.item.id}
         checked={props.selected}
         onChange={props.onSelect}
@@ -243,6 +245,7 @@ function TerminalThemeOptionCard(props: {
 }
 
 export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
+  const themeGroupName = createUniqueId();
   const i18n = useI18n();
   const resolvedFont = createResolvedTerminalFont(() => props.fontFamilyId);
   const [fontQuery, setFontQuery] = createSignal('');
@@ -366,7 +369,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
           aria-label={i18n.t('terminal.settings.themeTitle')}
         >
           <div class="sm:col-span-2">
-            <TerminalThemeOptionCard
+            <TerminalThemeOptionCard groupName={themeGroupName}
               item={SYSTEM_THEME_ITEM}
               label={itemLabel(SYSTEM_THEME_ITEM)}
               colors={itemColors(SYSTEM_THEME_ITEM)}
@@ -377,7 +380,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
           </div>
           <For each={TERMINAL_THEME_GROUPS}>
             {(group) => {
-              const labelId = `terminal-theme-${group.appearance}-group-label`;
+              const labelId = `${themeGroupName}-${group.appearance}-label`;
               return (
                 <div
                   class="grid grid-cols-1 gap-2 sm:col-span-2 sm:grid-cols-2"
@@ -393,7 +396,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
                   </div>
                 <For each={group.items}>
                   {(item) => (
-                    <TerminalThemeOptionCard
+                    <TerminalThemeOptionCard groupName={themeGroupName}
                       item={item}
                       label={itemLabel(item)}
                       colors={itemColors(item)}
@@ -492,7 +495,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         <section class="space-y-3">
           <Checkbox checked={props.followInput ?? true} onChange={value => props.onFollowInputChange?.(value)}
             label={i18n.t('terminal.settings.followInput')} size="sm" />
-          <Show when={props.embedded || props.retentionTransport}><TerminalHistorySettings open={props.open} canManage={props.retentionCanManage} transport={props.retentionTransport} sessionId={props.retentionSessionId} /></Show>
+          <Show when={props.embedded || props.retentionTransport}><TerminalHistorySettings authority={props.retentionAuthority} open={props.open} canManage={props.retentionCanManage} transport={props.retentionTransport} sessionId={props.retentionSessionId} /></Show>
         </section>
         <section class="space-y-3">
         <SectionTitle

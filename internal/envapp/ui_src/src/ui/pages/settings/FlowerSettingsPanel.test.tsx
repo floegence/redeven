@@ -11,11 +11,12 @@ let surface!: FlowerSettingsSurfaceProps;
 vi.mock('../../../../../../flower_ui/src/settings/FlowerSettingsSurface', () => ({ FlowerSettingsSurface: (props: FlowerSettingsSurfaceProps) => { surface = props; return <div data-settings-panel />; } }));
 let dispose: (() => void) | undefined;
 afterEach(() => { dispose?.(); document.body.replaceChildren(); });
-function mount() {
+function mount(failLoad = false) {
   const host = document.createElement('div'); document.body.append(host);
   let directory!: (value: FlowerModelDirectory) => void;
   const snapshot = settingsSnapshot();
   const adapter = { loadSettings: vi.fn(async () => snapshot), canMutate: true, chatGPTAuth: vi.fn(async () => ({})), loadChatGPTAccounts: vi.fn(async () => []), discoverProviderModels: vi.fn(async () => ({})), saveDefaultPermission: vi.fn(async () => snapshot), subscribeModelDirectory: (listener: typeof directory) => { directory = listener; return vi.fn(); } } as unknown as FlowerSurfaceAdapter;
+  if (failLoad) vi.mocked(adapter.loadSettings).mockRejectedValueOnce(new Error('settings offline'));
   const [canEdit, setCanEdit] = createSignal(true);
   dispose = render(() => <FlowerSettingsPanel adapter={adapter} canEdit={canEdit()} copy={DEFAULT_FLOWER_SURFACE_COPY} onOpenComputer={() => undefined} />, host);
   return { adapter, setCanEdit, directory: (value: FlowerModelDirectory) => directory(value) };
@@ -59,4 +60,14 @@ it('does not publish account success after disposal during its reload', async ()
   const action = surface.chatGPTAuth!('sign-out', { scope_id: 'test' });
   await vi.waitFor(() => expect(finish).toBeTypeOf('function')); dispose?.(); dispose = undefined; finish(settingsSnapshot());
   await expect(action).rejects.toThrow();
+});
+
+it('contains an initial resource failure and retries inside the same host', async () => {
+ const fixture = mount(true);
+ await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain('settings offline'));
+ expect(document.querySelector('[data-settings-panel]')).toBeNull();
+ const retry = [...document.querySelectorAll('button')].find(button => button.textContent?.includes(DEFAULT_FLOWER_SURFACE_COPY.chat.handlerRetry));
+ expect(retry).toBeTruthy(); retry!.click();
+ await vi.waitFor(() => expect(document.querySelector('[data-settings-panel]')).not.toBeNull());
+ expect(fixture.adapter.loadSettings).toHaveBeenCalledTimes(2);
 });

@@ -657,6 +657,9 @@ func (g *Server) handleContainerOperationRoute(w http.ResponseWriter, r *http.Re
 		parts = strings.Split(rest, "/")
 	}
 	if r.Method == http.MethodPost && len(parts) == 0 {
+		// IMPORTANT: This marker proves rejection only before operation admission.
+		// Remove it before entering storage; a failed commit can be uncertain.
+		w.Header().Set("Container-Operation-Admission", "rejected")
 		var request containerresource.CreateOperationRequest
 		if err := decodeContainerResourceJSON(r, &request); err != nil {
 			writeContainerResourceError(w, err)
@@ -678,6 +681,7 @@ func (g *Server) handleContainerOperationRoute(w http.ResponseWriter, r *http.Re
 			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: err.Error(), ErrorCode: "ADMIN_REQUIRED"})
 			return true
 		}
+		w.Header().Del("Container-Operation-Admission")
 		operation, err := g.containers.CreateOperation(r.Context(), request)
 		if err != nil {
 			g.appendContainerAudit(meta, "container_resource_operation_create", "failure", request.Method, preflight, err)
@@ -711,6 +715,23 @@ func (g *Server) handleContainerOperationRoute(w http.ResponseWriter, r *http.Re
 	}
 	if len(parts) == 0 {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return true
+	}
+	if r.Method == http.MethodGet && len(parts) == 2 && parts[0] == "by-request" {
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return true
+		}
+		requestID, err := decodeResourcePathSegment(parts[1])
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		operation, err := g.containers.OperationByRequestID(r.Context(), requestID)
+		if err != nil {
+			writeContainerResourceError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: operation})
 		return true
 	}
 	operationID, err := decodeResourcePathSegment(parts[0])

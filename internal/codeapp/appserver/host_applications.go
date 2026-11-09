@@ -36,6 +36,10 @@ func (g *Server) handleHostApplicationsAPI(w http.ResponseWriter, r *http.Reques
 		g.updateHostAccess(w, r, meta, false)
 		return true
 	}
+	if r.URL.Path == hostApplicationsAPI+"/picture" {
+		g.handleHostApplicationPicture(w, r, meta)
+		return true
+	}
 	if g.hostApps == nil {
 		writeHostAppError(w, hostapps.ErrUnavailable)
 		return true
@@ -255,6 +259,14 @@ func (g *Server) guardHostApplicationSession(w http.ResponseWriter, r *http.Requ
 		g.serveDistFile(w, r, "window-transport.js")
 		return true
 	}
+	if path == hostApplicationBoot+"picture" {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return true
+		}
+		g.handleHostApplicationPicture(w, r, meta)
+		return true
+	}
 	if path == hostApplicationBoot+"state" {
 		w.Header().Set("Cache-Control", "no-store")
 		password := ""
@@ -301,7 +313,7 @@ func (g *Server) serveHostApplicationBoot(w http.ResponseWriter, r *http.Request
 		Name, Nonce, Locale, Theme, TransportScript string
 		Config, Script                              template.JS
 		Style                                       template.CSS
-	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, base + windowTransportScript, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationViewportJS + "\n" + hostApplicationInputJS + "\n" + hostApplicationPointerJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationToolbarJS + "\n" + hostApplicationCanvasJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationInputCSS + "\n" + hostApplicationPointerCSS + "\n" + hostApplicationCSS)})
+	}{s.Application.Name, nonce, s.Presentation.Locale, s.Presentation.ShellTheme, base + windowTransportScript, template.JS(config), template.JS(hostApplicationCatalogJS + "\n" + hostApplicationViewportJS + "\n" + hostApplicationInputJS + "\n" + hostApplicationPointerJS + "\n" + hostApplicationAppearanceJS + "\n" + hostApplicationConnectionJS + "\n" + hostApplicationPictureJS + "\n" + hostApplicationToolbarJS + "\n" + hostApplicationCanvasJS + "\n" + script), template.CSS(hostApplicationAppearanceCSS + "\n" + hostApplicationInputCSS + "\n" + hostApplicationPointerCSS + "\n" + hostApplicationCSS)})
 }
 
 //go:embed host_application_viewer/viewer.html
@@ -388,3 +400,6 @@ func (g *Server) serveHostApplicationAssets(w http.ResponseWriter, r *http.Reque
 	next.URL.Path, next.URL.RawPath = "/"+resource, ""
 	assets.ServeHTTP(w, next)
 }
+
+//go:embed host_application_viewer/picture.js
+var hostApplicationPictureJS string

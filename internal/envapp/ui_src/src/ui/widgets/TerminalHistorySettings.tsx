@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
+import { createEffect, on, untrack, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import type { TerminalHistoryRetentionLimits, TerminalHistoryRetentionState } from '@floegence/floeterm-terminal-web/live';
 import { useI18n } from '../i18n';
@@ -9,7 +9,7 @@ import type { RedevenTerminalTransport } from '../services/terminalTransport';
 type Defaults = { supported: boolean; can_manage: boolean; defaults: TerminalHistoryRetentionLimits };
 const endpoint = '/_redeven_proxy/api/terminal/history-retention';
 
-export function TerminalHistorySettings(props: { open: boolean; canManage?: boolean; transport?: RedevenTerminalTransport; sessionId?: string | null }) {
+export function TerminalHistorySettings(props: { open: boolean; canManage?: boolean; transport?: Pick<RedevenTerminalTransport, 'historyRetention' | 'configureHistoryRetention'>; sessionId?: string | null; authority?: unknown }) {
   const i18n = useI18n();
   const [defaults, setDefaults] = createSignal<Defaults | null>(null);
   const [current, setCurrent] = createSignal<TerminalHistoryRetentionState | null>(null);
@@ -33,7 +33,7 @@ export function TerminalHistorySettings(props: { open: boolean; canManage?: bool
     setLoading(true); setFailed(false); setMessage(''); setConfirmation(null); setDefaults(null); setCurrent(null);
     const [saved, session] = await Promise.allSettled([
       fetchLocalApiJSON<Defaults>(endpoint, { method: 'GET' }),
-      sessionId && props.transport?.historyRetention ? props.transport.historyRetention(sessionId) : Promise.resolve(null),
+      sessionId ? props.transport?.historyRetention ? props.transport.historyRetention(sessionId) : fetchLocalApiJSON<TerminalHistoryRetentionState>(endpoint + '?session_id=' + encodeURIComponent(sessionId), { method: 'GET' }) : Promise.resolve(null),
     ]);
     if (request !== epoch) return;
     setLoading(false);
@@ -53,9 +53,10 @@ export function TerminalHistorySettings(props: { open: boolean; canManage?: bool
   };
   createEffect(() => {
     const open = props.open, id = props.sessionId;
-    if (open) void load(id);
+    if (open) untrack(() => { void load(id); });
     else { epoch += 1; setConfirmation(null); }
   });
+  createEffect(on(() => [props.authority, props.transport, props.canManage], () => { setConfirmation(null); }));
   onCleanup(() => { disposed = true; epoch += 1; });
   const save = async (target: 'defaults' | 'current') => {
     const selected = target === 'current' ? confirmation() : null;
@@ -109,6 +110,7 @@ export function TerminalHistorySettings(props: { open: boolean; canManage?: bool
       </div>
       <Show when={!canManageDefaults()}><p class="text-xs text-muted-foreground">{i18n.t('terminal.settings.historyAdminOnly')}</p></Show>
     </Show>
+    <Show when={props.sessionId && !props.transport?.configureHistoryRetention}><p class="text-xs text-muted-foreground">{i18n.t('terminal.settings.historyAttachmentRequired')}</p></Show>
     <Show when={confirmation()}><div role="alert" class="space-y-2 rounded-md border border-border p-3">
       <p class="text-xs">{i18n.t('terminal.settings.historyConfirm')}</p>
       <div class="flex flex-wrap gap-2">

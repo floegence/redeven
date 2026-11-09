@@ -40,21 +40,11 @@
     });
   }
   let streamVersion = 0, receivedBytes = 0, paintedFrames = 0, measuredAt = performance.now(), paintTick;
-  const picture = {mode:'auto'}, preferenceKey = 'redeven.native-app.picture.v1';
-  try {
-    const saved = localStorage.getItem(preferenceKey);
-    if (['auto','clarity','smooth','data'].includes(saved)) picture.mode = saved;
-  } catch { /* Picture preferences are optional in private browsing. */ }
-  const picturePanel = document.createElement('section');
-  picturePanel.tabIndex=-1; picturePanel.id = 'picture-settings'; picturePanel.className = 'mac-app-picture';
-  hostApplicationAppearance.copy(picturePanel, 'picture', 'aria-label');
-  const pictureTitle = document.createElement('strong');
-  hostApplicationAppearance.copy(pictureTitle, 'picture'); picturePanel.append(pictureTitle);
-  const {modes, modeButtons} = createHostApplicationPictureModes(picture, () => {
-    try {localStorage.setItem(preferenceKey,picture.mode);} catch { /* Preferences are optional. */ }
-    configurePicture();
-  });
-  picturePanel.append(modes);
+  const picture = {mode:'auto'};
+  const picturePanel = document.createElement('section'); picturePanel.className = 'mac-app-picture';
+  const settingsLink = hostApplicationPicture.link();
+  picturePanel.append(settingsLink);
+  hostApplicationPicture.subscribe(picture, () => configurePicture());
   const pictureHint = document.createElement('p'); picturePanel.append(pictureHint);
   const statistics = document.createElement('div'); statistics.className = 'mac-app-picture-statistics';
   const statisticValues = {};
@@ -216,7 +206,6 @@
   function syncChrome() {
     const available=['active','waiting','captureUnavailable'].includes(document.body.dataset.state);
     chrome.controlsButton.disabled=!available;
-    for(const button of modeButtons.values())button.disabled=streamVersion!==2;
     hostApplicationAppearance.copy(pictureHint,streamVersion===2?'nativePictureHint':'pictureUpgradeHint');
     keyboard.disabled=!valid(current); help.disabled=!available; close.disabled=!valid(current);
     windowToggle.disabled=!available||!windows.length; quit.disabled=!available||!windows.length;
@@ -276,7 +265,7 @@
       const opening=panel!==name; binding.pointer.reset(); binding.input.reset(); collapse();
       if(!opening)return;
       panel=name; popover.dataset.section=name; popover.hidden=false; panels[name].hidden=false; toggle.setAttribute('aria-expanded','true'); positionPanel();
-      (name==='windows'?windowList.querySelector('[aria-pressed="true"]')||windowList.querySelector('button'):name==='quit'?cancelQuit:name==='picture'?(streamVersion===2?modeButtons.get(picture.mode):picturePanel):helpPanel)?.focus();
+      (name==='windows'?windowList.querySelector('[aria-pressed="true"]')||windowList.querySelector('button'):name==='quit'?cancelQuit:name==='picture'?settingsLink:helpPanel)?.focus();
     };
   }
   keyboard.onclick=()=>{const visible=!binding.keyboardVisible;collapse();binding.pointer.reset();binding.input.reset();binding.input.setKeyboardVisible(visible);};

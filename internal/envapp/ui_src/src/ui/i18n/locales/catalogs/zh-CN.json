@@ -383,7 +383,10 @@
       "appearance": "外观与语言",
       "browser": "浏览器",
       "services": "服务",
-      "extensions": "扩展"
+      "extensions": "扩展",
+      "terminal": "终端",
+      "applications": "主机应用与桌面",
+      "containers": "容器"
     },
     "groups": {
       "overview": "概览",
@@ -450,7 +453,30 @@
       "notProvided": "未提供",
       "emptyValue": "—"
     },
-    "targetUnavailable": "此设置目标已不可用。"
+    "targetUnavailable": "此设置目标已不可用。",
+    "operationUnknown": "尚未确认操作结果。请刷新查看状态，再进行其他更改。",
+    "conversationDefaults": {
+      "title": "个人会话默认值",
+      "description": "新会话使用记住的模型、推理选项和工作目录。在输入区选择时也会更新这些默认值。",
+      "environmentDirectory": "使用环境工作目录"
+    },
+    "workbench": {
+      "canvasTheme": "Workbench 画布主题",
+      "themes": {
+        "default": "默认",
+        "vibrancy": "灵动",
+        "mica": "云母",
+        "midnight": "午夜",
+        "aurora": "极光",
+        "terminal": "终端"
+      }
+    },
+    "plugins": {
+      "installed": "已安装插件",
+      "preview": "作者预览",
+      "previewEmpty": "暂无插件预览",
+      "target": "插件配置"
+    }
   },
   "flower": {
     "currentEnvironmentFallback": "当前环境",
@@ -2517,7 +2543,12 @@
       "historyUnavailable": "此 运行时 不支持历史保留设置。",
       "historyLoadFailed": "无法加载历史设置。",
       "historyChangeUnknown": "无法确认修改是否成功。请重新加载当前设置后再操作。",
-      "historyReload": "重新加载设置"
+      "historyReload": "重新加载设置",
+      "target": "设置对象",
+      "defaultsTarget": "默认偏好",
+      "widgetTarget": "Workbench 终端 {number}",
+      "sessionTarget": "会话历史",
+      "historyAttachmentRequired": "请先在终端中连接此会话，再修改其历史保留限制。查看设置不会接管终端。"
     },
     "retryingOlderOutput": "正在同步较早的输出...",
     "waitingForActivation": "选择此终端以继续。",

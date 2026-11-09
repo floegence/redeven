@@ -7358,12 +7358,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [receivedComputerFPS, setReceivedComputerFPS] = createSignal(0);
   let computerRateWindow = 0, computerRateFrames = 0, computerLastFrameAt = 0;
   let computerRateChanging = false;
+  let computerRateRevision = 0;
+  const applyComputerFrameRate = (fps: number | undefined) => {
+    const next = computerFrameRate(fps);
+    if (next === viewerFPS() && !computerRateChanging) return;
+    const revision = ++computerRateRevision;
+    computerRateChanging = true;
+    // IMPORTANT: Preference updates wait for queued input but never request
+    // control or open the viewer. Later preferences supersede older callbacks.
+    void computerInputQueue.then(() => {
+      if (surfaceDisposed || revision !== computerRateRevision) return;
+      setViewerFPS(next); computerRateChanging = false;
+    });
+  };
   const changeComputerFrameRate = (fps: number) => {
     const next = computerFrameRate(fps);
     props.adapter.computerFrameRate?.write(next);
-    computerRateChanging = true;
-    void computerInputQueue.then(() => { setViewerFPS(next); computerRateChanging = false; });
+    applyComputerFrameRate(next);
   };
+  createEffect(on(() => props.adapter.computerFrameRate, preference => {
+    let current = true;
+    applyComputerFrameRate(preference?.read());
+    const unsubscribe = preference?.subscribe?.(fps => { if (current) applyComputerFrameRate(fps); });
+    onCleanup(() => { current = false; unsubscribe?.(); computerRateRevision++; computerRateChanging = false; });
+  }));
   const computerCurrentVerified = () => (threadCache().views.get(selectedThreadID())?.version ?? 0) > 0;
   const resumeComputerViewer = () => batch(() => {
     if (computerControlDisconnected() && (!computerObserverID() || !computerCurrentVerified())) return;

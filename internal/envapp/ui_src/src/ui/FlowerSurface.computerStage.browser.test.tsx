@@ -10,7 +10,7 @@ import { render } from 'solid-js/web';
 import type { FlowerThreadSnapshot, FlowerComputerUserInput, FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { FlowerComputerStage } from '../../../../flower_ui/src/FlowerComputerStage';
-import { activityItem, activityTimeline, adapter, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
+import { activityItem, activityTimeline, adapter, disposeRenderedSurface, renderSurfaceWithAdapterProps, runtimeCurrentView, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 const STAGE_STATES = { awaiting_control: 'Waiting for you to take control', historical: 'Historical screenshot', stopped: 'Computer task stopped', disconnected: 'Connection lost', taking_control:'Taking control', user_control:'You are controlling', checking: 'Checking page', paused:'Viewing paused', running: 'Computer running', awaiting_user: 'Waiting for input or approval', completed: 'Computer task completed', failed: 'Computer task failed' };
 
@@ -389,6 +389,8 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   const inputComputerControl = vi.fn(async (_input: FlowerComputerUserInput) => undefined);
   const submitInput = vi.fn(async () => ({ thread_id: threadID, consumed_prompt_id: 'tool-input:result-control', current: { ...canonical, view_version: 3, activity: 'idle' as const, interactions: [], last_outcome: 'completed' as const } }));
   const saveRate = vi.fn();
+  let observeRate: ((fps: number) => void) | undefined;
+  const stopRateObservation = vi.fn();
   let deliver: (envelope: FlowerLiveStreamEnvelope) => void = () => undefined;
   let autoFrame = true;
   let sequence = 0;
@@ -397,7 +399,7 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
       session_id: request.observer_id, viewer_revision: request.revision, target_id: 'browser-main', interaction_id: request.interaction_id, frame_id: String(++sequence), mime_type: 'image/png', sequence,
     } }), 20);
   });
-  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), computerFrameRate: { read: () => 5, write: saveRate }, inputComputerControl, submitInput, setComputerViewer, loadComputerFrame: vi.fn(async () => png()),
+  const surface = renderSurfaceWithAdapterProps({ ...adapter(true), computerFrameRate: { read: () => 5, write: saveRate, subscribe: listener => { observeRate = listener; return stopRateObservation; } }, inputComputerControl, submitInput, setComputerViewer, loadComputerFrame: vi.fn(async () => png()),
     connectLiveStream: async function* ({ signal }) {
       yield { schema_version: 3, kind: 'ready', baseline_complete: true, observer_id: 'takeover-observer', summaries: [paused] };
       while (!signal.aborted) {
@@ -422,10 +424,21 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
     expect(getComputedStyle(control).cursor).toBe('pointer');
   }
   expect(document.querySelector('.flower-computer-stage')).toBeNull();
+  expect(observeRate).toBeTypeOf('function');
+  observeRate!(10);
+  await Promise.resolve();
+  expect(document.querySelector('.flower-computer-stage')).toBeNull();
+  expect(setComputerViewer).not.toHaveBeenCalled();
+  expect(inputComputerControl).not.toHaveBeenCalled();
+  expect(saveRate).not.toHaveBeenCalled();
   controlButton()!.click();
   await waitFor(() => (document.querySelector<HTMLImageElement>('.flower-computer-stage img') as HTMLImageElement | null)?.naturalWidth === 1);
   const rate = document.querySelector<HTMLSelectElement>('.flower-computer-frame-rate select')!;
-  expect(rate.value).toBe('5');
+  expect(rate.value).toBe('10');
+  observeRate!(15);
+  await waitFor(() => setComputerViewer.mock.calls.at(-1)?.[0].fps === 15);
+  expect(rate.value).toBe('15');
+  expect(saveRate).not.toHaveBeenCalled();
   rate.value = '30'; rate.dispatchEvent(new Event('change', { bubbles: true }));
   await waitFor(() => setComputerViewer.mock.calls.at(-1)?.[0].fps === 30);
   expect(saveRate).toHaveBeenLastCalledWith(30);
@@ -438,8 +451,19 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
       keyboard.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: key, bubbles: true }));
     } else keyboard.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
   };
+  let finishFirstInput!: () => void;
+  inputComputerControl.mockImplementationOnce(() => new Promise<undefined>(resolve => { finishFirstInput = () => resolve(undefined); }));
   sendKey('s');
   await waitFor(() => inputComputerControl.mock.calls.length === 1);
+  const viewerBeforeRateChange = setComputerViewer.mock.calls.length;
+  observeRate!(3); observeRate!(10);
+  await Promise.resolve();
+  expect(setComputerViewer).toHaveBeenCalledTimes(viewerBeforeRateChange);
+  expect(rate.value).toBe('30');
+  finishFirstInput();
+  await waitFor(() => setComputerViewer.mock.calls.at(-1)?.[0].fps === 10);
+  expect(rate.value).toBe('10');
+  expect(saveRate).toHaveBeenCalledExactlyOnceWith(30);
   expect(inputComputerControl).toHaveBeenLastCalledWith(expect.objectContaining({ thread_id: threadID, interaction_id: 'tool-input:result-control', action: 'type', text: 's' }));
   expect(submitInput).not.toHaveBeenCalled();
   const firstURL = document.querySelector<HTMLImageElement>('.flower-computer-stage img')!.src;
@@ -508,6 +532,11 @@ it('opens user-only pixels for canonical takeover without submitting typing as c
   await waitFor(() => submitInput.mock.calls.length === 1);
   expect(submitInput).toHaveBeenCalledWith(expect.objectContaining({ answers: { computer_control: { choice_id: 'Return control to Flower' } } }));
   await waitFor(() => document.querySelector('.flower-computer-stage') === null);
+  disposeRenderedSurface(surface);
+  expect(stopRateObservation).toHaveBeenCalledOnce();
+  const viewerCallsAfterDispose = setComputerViewer.mock.calls.length;
+  observeRate!(3); await Promise.resolve();
+  expect(setComputerViewer).toHaveBeenCalledTimes(viewerCallsAfterDispose);
 });
 
 it.each([1440, 390])('shows compact historical screenshot thumbnails with saved-image preview at %s px', async (width) => {

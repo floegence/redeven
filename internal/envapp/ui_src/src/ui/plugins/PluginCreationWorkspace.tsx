@@ -31,7 +31,8 @@ import {
   type AuthorInstallOperation,
 } from './pluginAuthorApi';
 import { InspectionReview } from './ExternalPluginInstallDialog';
-import { PluginAuthorAccess } from './PluginAuthorAccess';
+import { useSettingsPanelHost } from '../../../../../settings_ui/src/SettingsPanelHost';
+import { pluginAuthorSettingsResource } from './pluginSettingsTarget';
 import type { PluginSurfaceContextMenuEvent } from '@floegence/redevplugin-ui';
 import { PluginCanvasComment } from './PluginCanvasComment';
 import { PluginCreationCanvasBackground } from './PluginCreationCanvasBackground';
@@ -66,6 +67,7 @@ export type PluginCreationWorkspaceProps = Readonly<{
 
 export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JSX.Element {
   const i18n = useI18n();
+  const settingsHost = useSettingsPanelHost();
   const initialID = props.draftID;
   const requestID = crypto.randomUUID();
   const [draft, setDraft] = createSignal<PluginDraft>();
@@ -176,7 +178,6 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
   };
 
   const [tab, setTab] = createSignal<'conversation' | 'preview'>('conversation');
-  const [accessOpen, setAccessOpen] = createSignal(false);
   const [checks, setChecks] = createSignal(false);
   const [deleteOpen, setDeleteOpen] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
@@ -852,7 +853,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
             ...(!currentInstalled() && installedInstance() && props.onOpenInstalled ? [{ id: 'open', label: i18n.t('common.actions.open'), disabled: openingInstalled() }] : []),
             ...(narrow() && pendingArtifact() && currentArtifact() ? [{ id: 'apply', label: i18n.t('uiCopy.plugin.creation.apply'), disabled: reviewing() || applying() || installationUnsettled() }] : []),
             ...(narrow() && preview() ? [{ id: 'comment', label: i18n.t('uiCopy.plugin.creation.comment') }] : []),
-            ...(snapshot()?.preview.plugin_instance_id ? [{ id: 'permissions', label: i18n.t('uiCopy.plugin.external.permissions') }] : []),
+            ...(settingsHost && snapshot()?.preview.plugin_instance_id ? [{ id: 'permissions', label: i18n.t('uiCopy.plugin.external.permissions') }] : []),
             { id: 'checks', label: i18n.t('uiCopy.plugin.creation.checks') },
             { id: 'rename', label: i18n.t('uiCopy.plugin.creation.rename') },
             { id: 'delete', label: i18n.t('uiCopy.plugin.creation.deleteDraft') },
@@ -865,7 +866,8 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
             } else if (id === 'comment') {
               selectComment();
             } else if (id === 'permissions') {
-              setAccessOpen(true);
+              const owner = draft(), instance = snapshot()?.preview.plugin_instance_id;
+              if (owner?.workspace_id && instance) settingsHost?.open({ section: 'plugins', resource: pluginAuthorSettingsResource({ draftID: owner.id, workspaceID: owner.workspace_id, pluginInstanceID: instance }) });
             } else if (id === 'checks') {
               setChecks(true);
             } else if (id === 'rename') {
@@ -1085,19 +1087,6 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
           </div>
         </section>
       </div>
-      <Dialog open={accessOpen()} onOpenChange={setAccessOpen} title={i18n.t('uiCopy.plugin.external.permissions')}>
-        <Show when={accessOpen() && snapshot()?.preview.plugin_instance_id}>
-          {(id) => (
-            <PluginAuthorAccess
-              workspaceID={draft()!.workspace_id!}
-              pluginInstanceID={id() as string}
-              canManage={Boolean(props.canManage)}
-              onChanged={refresh}
-              onError={fail}
-            />
-          )}
-        </Show>
-      </Dialog>
       <Dialog open={renameOpen()} onOpenChange={setRenameOpen} title={i18n.t('uiCopy.plugin.creation.rename')}>
         <form
           class="space-y-3 p-3"

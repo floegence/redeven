@@ -14,6 +14,7 @@ const harness = vi.hoisted(() => ({
     is_owner: true,
   },
   setEnvironment: (_value: unknown) => undefined as void,
+  openSettings: vi.fn(),
   goActivity: vi.fn(),
   askFlower: vi.fn(),
   notify: { info: vi.fn(), error: vi.fn(), success: vi.fn() },
@@ -189,9 +190,12 @@ vi.mock('./EnvContext', async () => {
       env_id: () => 'env-26',
       openFlowerTurnLauncher: harness.askFlower,
       goActivity: harness.goActivity,
+      openSettings: harness.openSettings,
     }),
   };
 });
+
+vi.mock('./settings/EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canAdmin: () => harness.permissions.can_admin, canInteract: () => true }) }));
 
 vi.mock('../services/uiStorage', () => ({
   readUIStorageJSON: (key: string, fallback: unknown) => harness.storageValues.get(key) ?? fallback,
@@ -229,6 +233,7 @@ vi.mock('../services/containerResourcesApi', () => ({
   preflightContainerOperation: harness.preflight,
   createContainerExecSession: harness.createExecSession,
   deleteContainerExecSession: harness.deleteExecSession,
+  ContainerOperationRejectedError: class extends Error {},
   subscribeContainerOperation: vi.fn(),
   tailContainerLogs: vi.fn(),
 }));
@@ -237,6 +242,7 @@ vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({ fs: { list: harness.fsList } }),
 }));
 
+import { ContainerSettingsPanel } from './settings/ContainerSettingsPanel';
 import { EnvContainersPage } from './EnvContainersPage';
 import { LocalApiError } from '../services/localApi';
 import { requestContainerResourceNavigation } from '../services/containerResourceNavigation';
@@ -271,6 +277,7 @@ describe('native Containers page', () => {
     });
     harness.setEnvironment({ permissions: harness.permissions });
     harness.goActivity.mockReset();
+    harness.openSettings.mockReset();
     harness.notify.info.mockReset();
     harness.notify.error.mockReset();
     harness.notify.success.mockReset();
@@ -476,9 +483,9 @@ describe('native Containers page', () => {
     configure?.click();
     await settle();
 
-    expect(harness.getServiceConfiguration).toHaveBeenCalledWith('container_service_docker');
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.engineConfiguration');
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
+    expect(harness.openSettings).toHaveBeenCalledWith('containers', { resource: 'container_service_docker' });
+    expect(harness.getServiceConfiguration).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-dialog]')).toBeNull();
   });
 
   it.each(['activity', 'workbench'] as const)('hands one blocked engine to the existing launcher in %s without configuration authority', async (variant) => {
@@ -851,23 +858,21 @@ describe('native Containers page', () => {
     };
     harness.preflight.mockResolvedValue(preflight);
     const host = document.createElement('div'); document.body.append(host);
-    dispose = render(() => <EnvContainersPage />, host); await settle();
-    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click(); await settle();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-service-card button')).find(button => button.textContent === 'containers.services.configure')!.click(); await settle();
+    dispose = render(() => <ContainerSettingsPanel resource="container_service_docker" />, host); await settle();
     const label = applyMode === 'save' ? 'containers.services.save' : 'containers.services.saveRestart';
-    const save = () => Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button')).find(button => button.textContent === label)!;
+    const save = () => Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="container-settings-panel"] button')).find(button => button.textContent === label)!;
     save().click(); await settle();
-    expect(host.querySelectorAll('[data-dialog]')).toHaveLength(1);
-    expect(host.querySelector('[data-dialog] input')).toBeNull();
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.configurationRisk');
+    expect(host.querySelectorAll('[data-testid="container-settings-panel"]')).toHaveLength(1);
+    expect(host.querySelector('section[aria-label="containers.review.title"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="container-settings-panel"]')?.textContent).toContain('Raw risk');
     expect(harness.preflight).toHaveBeenCalledWith('container.services.configuration.update', expect.objectContaining({ confirmation_name: 'Docker Engine', apply_mode: applyMode, base_revision: 'sha256:engine' }));
     expect(harness.createOperation).not.toHaveBeenCalled();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button')).find(button => button.textContent === 'containers.actions.cancel')!.click(); await settle();
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="container-settings-panel"] button')).find(button => button.textContent === 'containers.actions.cancel')!.click(); await settle();
+    expect(host.querySelector('[data-testid="container-settings-panel"]')?.textContent).toContain('~/.docker/daemon.json');
     save().click(); await settle();
-    save().click(); await settle();
-    expect(harness.createOperation).toHaveBeenCalledExactlyOnceWith(preflight, harness.preflight.mock.calls.at(-1)?.[1]);
-    expect(host.querySelector('[data-dialog]')).toBeNull();
+    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === 'containers.actions.run')!.click(); await settle();
+    expect(harness.createOperation).toHaveBeenCalledExactlyOnceWith(preflight, harness.preflight.mock.calls.at(-1)?.[1], expect.stringMatching(/^envapp-/));
+    expect(host.querySelector('[data-testid="container-settings-panel"]')).not.toBeNull();
   });
 
   it('edits one complete Docker CLI document without exposing registry credentials', async () => {
@@ -885,43 +890,36 @@ describe('native Containers page', () => {
     });
     const host = document.createElement('div');
     document.body.append(host);
-    dispose = render(() => <EnvContainersPage />, host);
+    dispose = render(() => <ContainerSettingsPanel resource="container_service_desktop" />, host);
     await settle();
 
-    host.querySelector<HTMLButtonElement>('[aria-label="containers.services.title"]')?.click();
-    await settle();
-    Array.from(host.querySelectorAll<HTMLButtonElement>('.container-service-card button'))
-      .find((button) => button.textContent?.includes('containers.services.configure'))
-      ?.click();
-    await settle();
-
-    expect(harness.getServiceConfiguration).toHaveBeenCalledWith('container_service_desktop');
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('~/.docker/daemon.json');
-    const dockerCLITab = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] [role="tab"]'))
+    expect(harness.getServiceConfiguration).toHaveBeenCalledWith('container_service_desktop', expect.any(AbortSignal));
+    expect(host.querySelector('[data-testid="container-settings-panel"]')?.textContent).toContain('~/.docker/daemon.json');
+    const dockerCLITab = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="container-settings-panel"] [role="tab"]'))
       .find((button) => button.textContent?.includes('containers.services.dockerCLI'));
     dockerCLITab?.click();
     await settle();
-    expect(host.querySelector('[data-dialog]')?.textContent).toContain('containers.services.dockerCLIScope');
-    expect(host.querySelector('[data-dialog]')?.textContent).not.toContain('containers.services.openSettings');
-    expect(host.querySelectorAll('[data-dialog] .container-service-cli-setting-card')).toHaveLength(2);
-    const outputFormats = host.querySelector<HTMLDetailsElement>('[data-dialog] .container-service-cli-disclosure');
+    expect(host.querySelector('[data-testid="container-settings-panel"]')?.textContent).toContain('containers.services.dockerCLIScope');
+    expect(host.querySelector('[data-testid="container-settings-panel"]')?.textContent).not.toContain('containers.services.openSettings');
+    expect(host.querySelectorAll('[data-testid="container-settings-panel"] .container-service-cli-setting-card')).toHaveLength(2);
+    const outputFormats = host.querySelector<HTMLDetailsElement>('[data-testid="container-settings-panel"] .container-service-cli-disclosure');
     expect(outputFormats?.open).toBe(false);
     expect(outputFormats?.textContent).toContain('docker ps');
     expect(outputFormats?.textContent).toContain('psFormat');
-    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] [role="tab"]'))
+    Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="container-settings-panel"] [role="tab"]'))
       .find((button) => button.textContent?.includes('containers.services.proxies'))
       ?.click();
     await settle();
-    const httpProxy = host.querySelectorAll<HTMLInputElement>('[data-dialog] .container-service-cli-profile input')[1] ?? null;
+    const httpProxy = host.querySelectorAll<HTMLInputElement>('[data-testid="container-settings-panel"] .container-service-cli-profile input')[1] ?? null;
     expect(httpProxy).not.toBeNull();
     httpProxy!.value = 'http://updated-proxy.example.test:3128';
     httpProxy!.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    const save = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-dialog] button'))
+    const save = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="container-settings-panel"] button'))
       .find((button) => button.textContent?.includes('containers.services.save'));
     expect(save?.disabled).toBe(false);
     save?.click();
     await settle();
-    expect(host.querySelector('[data-dialog] input')).toBeNull();
+    expect(host.querySelector('section[aria-label="containers.review.title"]')).not.toBeNull();
     expect(harness.createOperation).not.toHaveBeenCalled();
     expect(harness.preflight).toHaveBeenCalledWith('container.services.configuration.update', expect.objectContaining({
       source_id: 'docker_cli',
@@ -1226,7 +1224,8 @@ describe('native Containers page', () => {
     });
     expect(harness.storageWrites.some((entry) => entry.key === 'containers:activity' && (entry.value as { version?: number }).version === 2)).toBe(true);
     expect(harness.resourceDetails).toHaveBeenCalledWith('containers', 'container-1', 'docker', 'docker-primary', expect.any(AbortSignal));
-    expect(readPage()).toMatchObject({ view: 'containers', selected_resource: { id: 'container-1', engine: 'docker', endpoint_id: 'docker-primary' }, query: '' });
+    expect(readPage()).toMatchObject({ view: 'containers', query: '' });
+    expect(readPage()).not.toHaveProperty('selected_resource');
     expect(readPage()).not.toHaveProperty('resources');
   });
 

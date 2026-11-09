@@ -196,3 +196,11 @@ function replaceBytesPreservingTimes(file, value) {
     futimesSync(fd, stat.atime, stat.mtime);
   } finally { closeSync(fd); }
 }
+
+
+test('development profiles never follow a branch or treat persisted state as a build cache', () => {
+  const source = readFileSync(new URL('./dev_desktop.sh', import.meta.url), 'utf8');
+  assert.match(source, /IMPORTANT: Profile identity follows the checkout, not its current branch/);
+  assert.match(source, /DEVELOPMENT_OWNER="\$\{checkout_name\}-\$\{checkout_checksum\}"/);
+  assert.match(source, /Clearing\nbuild caches does not migrate or repair persisted data/);
+});

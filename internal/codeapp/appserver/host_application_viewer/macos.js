@@ -73,48 +73,13 @@
   hostApplicationAppearance.copy(pictureTitle, 'picture');
   picturePanel.append(pictureTitle);
   const picture = { mode: 'auto', max_dimension: 0, frame_rate: 0 };
-  const preferenceKey = 'redeven.mac-app.picture.v1';
-  try {
-    const saved = JSON.parse(localStorage.getItem(preferenceKey));
-    if (saved && ['auto', 'clarity', 'smooth', 'data'].includes(saved.mode)
-      && [0, 1600, 1920, 2560, 3840, 4096].includes(saved.max_dimension)
-      && [0, 15, 24, 30, 60].includes(saved.frame_rate)) {
-      picture.mode = saved.mode;
-      picture.max_dimension = saved.max_dimension;
-      picture.frame_rate = saved.frame_rate;
-    }
-  } catch { /* Private browsing may disable preference storage. */ }
   let videoSupported = false;
-  const {modes, modeButtons} = createHostApplicationPictureModes(picture, () => { savePicture(); configurePicture(); });
-  picturePanel.append(modes);
+  const settingsLink = hostApplicationPicture.link();
+  picturePanel.append(settingsLink);
+  hostApplicationPicture.subscribe(picture, () => configurePicture());
   const pictureHint = document.createElement('p');
   hostApplicationAppearance.copy(pictureHint, 'pictureHint');
   picturePanel.append(pictureHint);
-  const advanced = document.createElement('details');
-  const advancedTitle = document.createElement('summary');
-  const advancedLabel = document.createElement('span');
-  hostApplicationAppearance.copy(advancedLabel, 'pictureAdvanced'); advancedTitle.append(advancedLabel);
-  advancedTitle.insertAdjacentHTML('beforeend', chevron);
-  advanced.append(advancedTitle);
-  for (const [field, title, values, unit] of [
-    ['max_dimension', 'pictureResolution', [0, 1600, 1920, 2560, 3840, 4096], 'px'],
-    ['frame_rate', 'pictureFrameRate', [0, 15, 24, 30, 60], 'FPS'],
-  ]) {
-    const label = document.createElement('label');
-    const text = document.createElement('span'); hostApplicationAppearance.copy(text, title);
-    const select = document.createElement('select');
-    hostApplicationAppearance.copy(select, title, 'aria-label');
-    for (const value of values) {
-      const option = document.createElement('option'); option.value = String(value);
-      if (value === 0) hostApplicationAppearance.copy(option, 'pictureAuto');
-      else option.textContent = `${value} ${unit}`;
-      select.append(option);
-    }
-    select.value = String(picture[field]);
-    select.onchange = () => { picture[field] = Number(select.value); savePicture(); configurePicture(); };
-    label.append(text, select); advanced.append(label);
-  }
-  picturePanel.append(advanced);
   const statistics = document.createElement('div');
   statistics.className = 'mac-app-picture-statistics';
   const statisticValues = {};
@@ -133,9 +98,6 @@
     statisticValues.bandwidth.textContent = `${hostApplicationAppearance.number(receivedBytes * 8 / elapsed / 1e6, 2)} Mb/s`;
     receivedBytes = 0; paintedFrames = 0; measuredAt = now;
   }, 1000);
-  function savePicture() {
-    try { localStorage.setItem(preferenceKey, JSON.stringify(picture)); } catch { /* Preferences are optional. */ }
-  }
   let controlling = false;
   function configurePicture(action = 'configure', takeover = false) {
     if (socket?.readyState !== WebSocket.OPEN) return;
@@ -211,7 +173,7 @@
       send({action:'menu'});
     } else {
       const selected = windowEntries.get(current?.window)?.button;
-      (section === 'help' ? helpPanel : section === 'windows' ? selected || windowList.querySelector('button') : section === 'quit' ? cancelQuit : modeButtons.get(picture.mode))?.focus();
+      (section === 'help' ? helpPanel : section === 'windows' ? selected || windowList.querySelector('button') : section === 'quit' ? cancelQuit : settingsLink)?.focus();
     }
   }
   function parentMenu() {

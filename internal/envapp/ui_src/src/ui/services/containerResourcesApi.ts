@@ -1,6 +1,6 @@
 import { readSessionEvents } from './sessionHTTP';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
-import { fetchLocalApi, fetchLocalApiJSON } from './localApi';
+import { fetchLocalApi, fetchLocalApiJSON, readApiJSONResponse } from './localApi';
 
 export type ContainerEngine = 'docker' | 'podman';
 export type ContainerResourceView = 'containers' | 'images' | 'volumes' | 'compose-projects' | 'pods';
@@ -482,20 +482,39 @@ export async function preflightContainerOperation(method: string, request: unkno
   });
 }
 
+export class ContainerOperationRejectedError extends Error {
+  constructor(cause: unknown) { super(cause instanceof Error ? cause.message : String(cause), { cause }); }
+}
+
 export async function createContainerOperation(
   preflight: ContainerPreflight,
   request: unknown,
+  requestID = `envapp-${secureRandomUUID()}`,
 ): Promise<ContainerOperation> {
-  return fetchLocalApiJSON<ContainerOperation>('/_redeven_proxy/api/container-resource-operations', {
+  const response = await fetchLocalApi('/_redeven_proxy/api/container-resource-operations', {
     method: 'POST',
     body: JSON.stringify({
-      request_id: `envapp-${secureRandomUUID()}`,
+      request_id: requestID,
       method: preflight.method,
       request,
       request_hash: preflight.request_hash,
       plan_hash: preflight.plan_hash,
     }),
   });
+  try { return (await readApiJSONResponse<ContainerOperation>(response)).data; }
+  catch (cause) {
+    if (response.headers.get('Container-Operation-Admission') === 'rejected') throw new ContainerOperationRejectedError(cause);
+    throw cause;
+  }
+}
+
+export async function getContainerOperation(operationID: string): Promise<ContainerOperation> {
+  return fetchLocalApiJSON<ContainerOperation>(`/_redeven_proxy/api/container-resource-operations/${encodeURIComponent(operationID)}`, { method: 'GET', cache: 'no-store' });
+}
+
+// IMPORTANT: A missing request is still uncertain; this read never authorizes replay.
+export async function getContainerOperationByRequestID(requestID: string): Promise<ContainerOperation> {
+  return fetchLocalApiJSON<ContainerOperation>(`/_redeven_proxy/api/container-resource-operations/by-request/${encodeURIComponent(requestID)}`, { method: 'GET', cache: 'no-store' });
 }
 
 export async function listContainerOperations(): Promise<ContainerOperation[]> {
@@ -514,10 +533,10 @@ export async function listContainerServices(signal?: AbortSignal): Promise<Conta
   return response.services ?? [];
 }
 
-export async function getContainerServiceConfiguration(serviceID: string): Promise<ContainerServiceConfiguration> {
+export async function getContainerServiceConfiguration(serviceID: string, signal?: AbortSignal): Promise<ContainerServiceConfiguration> {
   return fetchLocalApiJSON<ContainerServiceConfiguration>(
     `/_redeven_proxy/api/container-resources/services/${encodeURIComponent(serviceID)}/configuration`,
-    { method: 'GET', cache: 'no-store' },
+    { method: 'GET', cache: 'no-store', signal },
   );
 }
 

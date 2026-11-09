@@ -63,6 +63,9 @@ recovery screen; only its explicit migration action requests authorization.
 Keep the encryption key with this profile.
 Unchanged source, dependencies and toolchains reuse a verified build.
 Changed or damaged inputs rebuild automatically; --rebuild forces preparation.
+The profile follows the checkout across branches. Older source may reject newer
+stored data; use a compatible Runtime or an isolated REDEVEN_STATE_ROOT. Clearing
+build caches does not migrate or repair persisted data.
 Retained plugin storage is checked before stopping or building. If relocation is
 required, --relocate-storage explicitly stops this profile, runs the offline
 relocation with its normal locks and journal, and then starts Desktop.
@@ -186,6 +189,9 @@ resolve_development_state_root() {
 
   checkout_name="$(printf '%s' "$(basename "$ROOT_DIR")" | tr -cs '[:alnum:]_.-' '-')"
   checkout_checksum="$(printf '%s' "$ROOT_DIR" | cksum | awk '{print $1}')"
+	# IMPORTANT: Profile identity follows the checkout, not its current branch.
+	# A source downgrade must never reset or repair a newer upstream store. Use
+	# an isolated REDEVEN_STATE_ROOT or return to a compatible published runtime.
 	DEVELOPMENT_OWNER="${checkout_name}-${checkout_checksum}"
   explicit_root="${REDEVEN_STATE_ROOT:-}"
   if [ -n "$explicit_root" ]; then

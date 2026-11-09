@@ -1,11 +1,18 @@
 .redeven-settings-shell { container: redeven-settings / inline-size; }
+.redeven-settings-shell > .redeven-settings-header { padding: 10px 16px; border-bottom: 1px solid var(--floe-line); }
+.redeven-env-settings-dialog-header { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 16px; border-bottom: 1px solid var(--floe-line); }
+.redeven-env-settings-dialog-header-main { flex: 1; min-width: 0; }
+.redeven-env-settings-dialog-close { width: 32px; height: 32px; }
+.redeven-unified-settings-dialog { container: redeven-settings / inline-size; }
 .redeven-settings-mobile-nav { display: none; }
 @container redeven-settings (width < 768px) {
-  .redeven-settings-header { padding: 5px 12px; gap: 8px; }
+  .redeven-settings-shell > .redeven-settings-header { padding: 5px 12px; }
+  .redeven-env-settings-dialog-header { padding: 5px 12px; }
+  .redeven-settings-header { gap: 8px; }
   .redeven-settings-header > div { flex: 1; }
   .redeven-settings-breadcrumb { display: none; }
   .redeven-settings-mobile-nav { display: block; }
-  .redeven-settings-header button { min-width: 44px; min-height: 44px; }
+  .redeven-settings-header button, .redeven-env-settings-dialog-close { min-width: 44px; min-height: 44px; }
   .redeven-settings-header select { min-height: 44px; font-size: var(--floe-type-control); }
   .redeven-settings-header > button > span { display: none; }
 }

@@ -33,9 +33,10 @@ export type AuthorInstallOperation = Readonly<{
   };
 }>;
 export const authorWorkspacePath = (id: string) => `${redevPluginAPIPath}/author/workspaces/${encodeURIComponent(id)}`;
-async function request<T>(id: string, action: string, data?: unknown): Promise<T> {
+async function request<T>(id: string, action: string, data?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetchAuthenticatedReDevPlugin(`${authorWorkspacePath(id)}/${action}`, {
     method: data === undefined ? 'GET' : 'POST',
+    ...(signal ? { signal } : {}),
     ...(data === undefined ? {} : { body: JSON.stringify(data), headers: { 'Content-Type': 'application/json' } }),
   });
   const result = await response.json();
@@ -62,6 +63,9 @@ export function createAuthorPlatformClient(id: string): PluginPlatformClient {
   return new PluginPlatformClient({ fetch });
 }
 const loadCatalog = async (id: string) => (await createAuthorPlatformClient(id).catalog()).plugins;
+// IMPORTANT: Settings discovery only reads identity; never resume, apply, or create a preview.
+export const authorPreviewIdentity = (id: string, signal?: AbortSignal) =>
+  request<Pick<AuthorSnapshot, 'preview'>>(id, 'status', undefined, signal);
 export const authorStatus = async (id: string): Promise<AuthorSnapshot> => {
   const state = await request<Omit<AuthorSnapshot, 'plugins'>>(id, 'status');
   return { ...state, plugins: state.preview.plugin_instance_id ? await loadCatalog(id) : [] };

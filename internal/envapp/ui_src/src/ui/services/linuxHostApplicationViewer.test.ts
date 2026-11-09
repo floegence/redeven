@@ -7,7 +7,7 @@ const {JSDOM}=createRequire(import.meta.url)('jsdom') as {JSDOM:new(html:string,
 const root=resolve(process.cwd(),'../../codeapp/appserver/host_application_viewer');
 const nativeModule=execFileSync('go',['list','-m','-f','{{.Dir}}','github.com/floegence/floe-native-apps'],{encoding:'utf8'}).trim();
 const nativeFrames=readFileSync(resolve(nativeModule,'desktop_frames.js'),'utf8');
-const source=nativeFrames+'\n'+['catalog.generated.js','viewport.generated.js','remote-input.generated.js','remote-pointer.generated.js','appearance.js','connection.js','toolbar.js','canvas.js','linux.js'].map(name=>readFileSync(resolve(root,name),'utf8')).join('\n');
+const source=nativeFrames+'\n'+['catalog.generated.js','viewport.generated.js','remote-input.generated.js','remote-pointer.generated.js','appearance.js','connection.js','picture.js','toolbar.js','canvas.js','linux.js'].map(name=>readFileSync(resolve(root,name),'utf8')).join('\n');
 const html=readFileSync(resolve(root,'viewer.html'),'utf8').split('<script nonce=')[0].replace('{{.Style}}','').replace('{{.Locale}}','en-US');
 let dom:InstanceType<typeof JSDOM>;
 const drain=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};
@@ -17,6 +17,10 @@ async function viewer(platform='Linux x86_64', icon='', streamVersion=2) {
   const w=dom.window;
   Object.defineProperty(w.navigator,'platform',{value:platform});
   const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({state:'running',password:'fixture'})});
+  let picture = {mode:'auto', max_dimension:0, frame_rate:0};
+  const pictureFetch=vi.fn(async () => ({ok:true,json:async()=>({ok:true,data:picture})}));
+  const request=(url: string, init?: RequestInit) => url.endsWith('/picture') ? pictureFetch() : fetch(url, init);
+  const setPicture=async(next:Partial<typeof picture>)=>{picture={...picture,...next};w.dispatchEvent(new w.Event('focus'));await drain();};
   const bitmap=vi.fn().mockResolvedValue({width:640,height:480,close:vi.fn()});
   vi.spyOn(w.HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:vi.fn()} as unknown as CanvasRenderingContext2D);
   const native={request:vi.fn()};
@@ -30,7 +34,7 @@ async function viewer(platform='Linux x86_64', icon='', streamVersion=2) {
     state(generation=1,window=1){this.message({event:'state',connection:1,state:{state:'running',window,generation,windows:[{window,parent:0,title:'Native document'}]}});}
     frame(generation=1,window=1){this.message({event:'frame',bytes:3,frame:{encoding:'png',sequence:++this.sequence,connection:1,window,generation,width:640,height:480}});this.onmessage?.({data:new w.ArrayBuffer(3)});}
   }
-  Object.assign(w,{TextDecoder,TextEncoder,fetch,WebSocket:Socket,createImageBitmap:bitmap,redevenHostApplicationWindow:native,matchMedia:()=>({matches:false})});
+  Object.assign(w,{TextDecoder,TextEncoder,fetch:request,WebSocket:Socket,createImageBitmap:bitmap,redevenHostApplicationWindow:native,matchMedia:()=>({matches:false})});
   w.eval(`class FloeRemoteCursor {reset(){}hide(){}receive(){}dispose(){}}\nconst config=${JSON.stringify({base:'/pf/test',backend:'wayland',icon,copy:{packageUnavailable:'The application package runtime is unavailable',controls:'Controls',windows:'Windows',input:'Input',keyboard:'Keyboard',waiting:'Waiting',reconnect:'Reconnect',operationFailed:'Action failed',inputUnavailable:'Input unavailable',quit:'Quit',cancel:'Cancel',touchHelp:'Touch controls'}})};\nconst windowTransport = {fetch: window.fetch, WebSocket: window.WebSocket};\n${source}`);
   await drain();const socket=()=>Socket.instances.at(-1)!;
   socket().message({event:'attached',version:1,stream_version:streamVersion,connection:1,state:{state:'running',window:1,generation:1,windows:[{window:1,parent:0,title:'Native document'}]}});
@@ -38,7 +42,7 @@ async function viewer(platform='Linux x86_64', icon='', streamVersion=2) {
   const activate=async()=>{socket().frame();await drain();await new Promise(resolve=>w.requestAnimationFrame(resolve));socket().messages.length=0;};
   const key=(type:string,key:string,code:string,options:Record<string,unknown>={})=>input.dispatchEvent(new w.KeyboardEvent(type,{key,code,bubbles:true,cancelable:true,...options}));
   const text=(text:string)=>{input.dispatchEvent(new w.CompositionEvent('compositionstart'));input.dispatchEvent(new w.CompositionEvent('compositionend',{data:text}));};
-  return {w,socket,input,activate,key,text,bitmap,fetch,native,operations:()=>socket().messages.filter(m=>m.method==='input').map(m=>m.operation)};
+  return {w,socket,input,activate,key,text,bitmap,fetch,pictureFetch,setPicture,native,operations:()=>socket().messages.filter(m=>m.method==='input').map(m=>m.operation)};
 }
 describe('native Linux viewer',()=>{
   it('keeps one canvas and editor with native picture controls',async()=>{
@@ -51,20 +55,26 @@ describe('native Linux viewer',()=>{
     await v.activate();
     const toggle=v.w.document.querySelector<HTMLButtonElement>('.mac-app-controls-toggle')!;
     toggle.click();expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    const smooth=v.w.document.querySelector<HTMLButtonElement>('[data-picture-mode="smooth"]')!;
-    smooth.click();smooth.click();
+    const settings=v.w.document.querySelector<HTMLButtonElement>('[data-picture-settings]')!;
+    expect(v.w.document.activeElement).toBe(settings);
+    settings.click();
+    expect(v.native.request).toHaveBeenCalledExactlyOnceWith('settings');
+    expect(v.socket().messages.filter(m=>m.method==='configure_stream')).toEqual([]);
+    await v.setPicture({mode:'smooth'});
     expect(v.socket().messages.filter(m=>m.method==='configure_stream')).toEqual([expect.objectContaining({mode:'smooth'})]);
-    expect(v.w.localStorage.getItem('redeven.native-app.picture.v1')).toBe('smooth');
-    expect(smooth.getAttribute('aria-pressed')).toBe('true');
+    expect(v.w.localStorage.getItem('redeven.native-app.picture.v1')).toBeNull();
+    expect(v.w.document.querySelector('[data-picture-mode]')).toBeNull();
     expect(v.fetch).toHaveBeenCalledTimes(1);
     v.w.document.dispatchEvent(new v.w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
     expect(toggle.getAttribute('aria-expanded')).toBe('false');expect(v.w.document.activeElement).toBe(toggle);
   });
-  it('keeps retained PNG sessions viewable and explains disabled quality modes',async()=>{
+  it('keeps retained PNG sessions viewable and explains unsupported quality',async()=>{
     const v=await viewer('Linux x86_64','',0);await v.activate();
     expect(v.input.disabled).toBe(false);
     expect(v.socket().messages.some(m=>m.method==='configure_stream')).toBe(false);
-    expect([...v.w.document.querySelectorAll<HTMLButtonElement>('[data-picture-mode]')].every(b=>b.disabled)).toBe(true);
+    expect(v.w.document.querySelector('[data-picture-mode]')).toBeNull();
+    await v.setPicture({mode:'smooth'});
+    expect(v.socket().messages.some(m=>m.method==='configure_stream')).toBe(false);
     expect(v.w.document.querySelector('[data-app-copy="pictureUpgradeHint"]')).not.toBeNull();
   });
   it('composes reference-dependent patches before acknowledging them',async()=>{

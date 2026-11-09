@@ -3,7 +3,7 @@ type: UI Contract
 title: Terminal fonts across client devices
 tags: [ui, terminal, fonts, activity, workbench, desktop]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -20,6 +20,9 @@ No fallback changes a persisted preference.
 Activity preferences stay on the client. Unknown saved IDs are retained and resolved through the same visible fallback; no protocol or storage-field migration is introduced.
 
 Existing clipping and navigation apply when the canonical grid does not fit the local viewport.
+
+## Unified settings ownership
+Env App Settings → Terminal discovers catalog sessions, Workbench widgets and live container-exec attachments. Contextual gears carry exact session/widget IDs. Client defaults and shared widget fonts remain different scopes; widget writes use a fresh snapshot and its revision, preserving all session placement. A removed target never falls through to defaults. Applying current-session history requires an already-held controller, and settings never attaches or takes control. Radio groups are unique per retained target. Resolved font changes resize the existing viewport without recreating its session.
 
 ## Settings presentation
 Terminal settings start with the actual resolved font and current theme preview. Narrow galleries retain one readable card column, including at 320px and 200% zoom.

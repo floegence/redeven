@@ -249,6 +249,16 @@ func (s *Service) Operation(ctx context.Context, operationID string) (Operation,
 	return s.store.operation(ctx, strings.TrimSpace(operationID))
 }
 
+// OperationByRequestID observes admission without replaying a mutation.
+// IMPORTANT: Absence is not rejection: an original request may still be in flight.
+func (s *Service) OperationByRequestID(ctx context.Context, requestID string) (Operation, error) {
+	requestID = strings.TrimSpace(requestID)
+	if !validPublicID(requestID) {
+		return Operation{}, ErrOperationNotFound
+	}
+	return s.store.operationByRequestID(ctx, requestID)
+}
+
 func (s *Service) Operations(ctx context.Context, limit int) ([]Operation, error) {
 	return s.store.operations(ctx, limit)
 }

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower personal conversation preferences
 tags: [ai, flower, preferences, composer, persistence]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -13,6 +13,9 @@ Explicit model, directory and model-owned reasoning choices are remembered per a
 
 ## Ownership and persistence
 `ai_conversation_preferences` belongs to product schema v11. Transactional v10→v11 validates source/target shapes, preserves data and never infers preferences from old threads. Missing stable scope cannot read another user's defaults.
+
+## Global settings
+Env App Settings → Flower exposes personal defaults separately from the runtime model profile. It reuses the composer adapter and CAS endpoint, model directory, reasoning control and scoped directory picker. Opening never writes effective fallbacks; each explicit selection patches only its chosen field. Scope, connection generation and current permissions fence late completions. Composer choices remain direct shortcuts to this same memory.
 
 ## Selection events
 Patch only the chosen field. Existing-thread edits must succeed before saving memory; memory failure cannot roll back confirmed thread state. Explicit Default differs from absent memory; Default/budget and Off/budget semantics remain.
@@ -27,7 +30,7 @@ Catalog refresh is reserved for configuration changes, preventing model/reasonin
 
 # Boundaries
 
-This is Redeven product preference policy using already published Floret capabilities, not a generic upstream settings framework. Runtime catalogs, filesystem scope, canonical Thread settings, and immutable Turn execution remain authoritative. Model and directory recovery use existing controls and host notifications, not new switches, save buttons, or confirmation dialogs.
+This is Redeven product preference policy using already published Floret capabilities, not a generic upstream settings framework. Runtime catalogs, filesystem scope, canonical Thread settings, and immutable Turn execution remain authoritative. Model and directory recovery reuse the model selector and directory picker; there is no second preference database or automatic conflict retry.
 
 # Evidence
 

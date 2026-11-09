@@ -6,7 +6,7 @@ const { JSDOM } = createRequire(import.meta.url)('jsdom') as {
 };
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const shared = ['catalog.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'appearance.js', 'connection.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
+const shared = ['catalog.generated.js', 'remote-input.generated.js', 'remote-pointer.generated.js', 'appearance.js', 'connection.js', 'picture.js'].map(file => readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer', file), 'utf8')).join('\n');
 const source = shared + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/toolbar.js'), 'utf8') + '\n' + readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.js'), 'utf8');
 const html = readFileSync(resolve(process.cwd(), '../../codeapp/appserver/host_application_viewer/viewer.html'), 'utf8').split('<script nonce=')[0].replace('{{.Style}}', '').replace('{{.Locale}}', 'en-US');
 const copy = {videoDecoding:'Video decoding', videoAvailable:'Available', videoUnavailable:'Unavailable', httpsPerformanceHint:'Enable HTTPS', starting:'Starting', connecting:'Connecting', reconnecting:'Reconnecting', disconnected:'Disconnected', failed:'Failed', ended:'Ended', retry:'Retry', reconnect:'Reconnect', connectionHint:'Return to your application'};
@@ -18,7 +18,10 @@ afterEach(() => { dom?.window.close(); });
 async function viewer(deferredInitialization = false, native = false, lexicalClient = false, initial?: Record<string, string>, video?: { secure: boolean; encodings: string[] }, savedPicture?: string, pointerVersion = 1, connected = true, preparationVersion: number | null = 1) {
   dom = new JSDOM(html, { url:'http://localhost/pf/test/_redeven_host_app/', runScripts:'dangerously', pretendToBeVisual:true });
   const fetch = vi.fn().mockResolvedValue({ok:true, json:async () => ({state:'running', password:'private'})});
-  dom.window.fetch = fetch;
+  let picture = {mode:savedPicture ?? 'auto', max_dimension:0, frame_rate:0};
+  const pictureFetch = vi.fn(async () => ({ok:true,json:async()=>({ok:true,data:picture})}));
+  dom.window.fetch = ((url: string, init?: RequestInit) => url.endsWith('/picture') ? pictureFetch() : fetch(url, init)) as typeof dom.window.fetch;
+  const setPicture = async (next: Partial<typeof picture>) => {picture={...picture,...next};dom.window.dispatchEvent(new dom.window.Event('focus'));await drain();};
   Object.assign(dom.window, {matchMedia: () => ({matches:false})});
   Object.defineProperty(dom.window, 'isSecureContext', {value:video?.secure ?? true});
   dom.window.requestAnimationFrame = cb => { cb(0); return 1; };
@@ -29,7 +32,6 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
     return vi.fn();
   }) };
   if (native) Object.assign(dom.window, { redevenHostApplicationWindow: nativeWindow });
-  if (savedPicture) dom.window.localStorage.setItem('redeven.xpra-app.picture.v1', savedPicture);
   dom.window.eval(`const windowTransport = {fetch:window.fetch,WebSocket:window.WebSocket}; const config = ${JSON.stringify({base:'/pf/test', release:'/_redeven_proxy/api/host-applications/sessions/test/detach', copy, icon:'', initial})};\n${source}`);
   await drain();
   const frame = dom.window.document.querySelector('iframe')!;
@@ -88,7 +90,7 @@ async function viewer(deferredInitialization = false, native = false, lexicalCli
     if (lexicalClient && preparationVersion !== null) Object.assign(frame.contentWindow!, {floeXpraViewer:{...bootstrap,getClient:()=>client}});
   }
   frame.dispatchEvent(new dom.window.Event('load'));
-  return {frame, doc, client, appWindow, fetch, nativeWindow, unsubscribeDisplay,
+  return {frame, doc, client, appWindow, fetch, pictureFetch, setPicture, nativeWindow, unsubscribeDisplay,
     displayChanged: (state: Partial<DisplayState>) => { displayState = {...displayState, ...state}; displayListener(displayState); },
     windowStateChanged: (state: { maximized: boolean; minimized: boolean }) => windowStateChanged(state), state:() => dom.window.document.body.dataset.state};
 }
@@ -166,7 +168,7 @@ describe('host application viewer', () => {
     expect(v.client.set_display_density).toHaveBeenCalledWith('native');
     expect(dom.window.document.querySelector('.host-app-video-status')?.getAttribute('data-app-copy')).toBe('videoAvailable');
     v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
-    dom.window.document.querySelector<HTMLButtonElement>('[data-picture-mode="clarity"]')!.click();
+    await v.setPicture({mode:'clarity'});
     expect(v.client.set_display_density).toHaveBeenCalledOnce();
     expect(v.client.send_control_refresh).toHaveBeenCalledOnce();
   });
@@ -197,7 +199,8 @@ describe('host application viewer', () => {
     expect(dom.window.document.querySelector('[data-app-copy="pictureDensityLimitHint"]')).not.toBeNull();
     const calls = v.client.send.mock.calls.length;
     dom.window.document.documentElement.lang = 'zh-CN'; await drain();
-    expect(dom.window.document.querySelector('[data-picture-mode="clarity"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(dom.window.document.querySelector('[data-picture-mode]')).toBeNull();
+    expect(v.client.set_display_density).toHaveBeenLastCalledWith('native');
     expect(v.client.send).toHaveBeenCalledTimes(calls);
   });
 
@@ -224,11 +227,11 @@ describe('host application viewer', () => {
     v.displayChanged({available:false});
     v.appWindow(1); v.client._new_window(1);
     v.client.do_send_damage_sequence(1, 1, 100, 100, 10, '');
-    dom.window.document.querySelector<HTMLButtonElement>('[data-picture-mode="clarity"]')!.click();
+    await v.setPicture({mode:'clarity'});
     expect(dom.window.document.querySelector('[data-app-copy="pictureBackendLimitHint"]')).not.toBeNull();
     expect(v.client.close).not.toHaveBeenCalled();
     expect(v.client.send_close_window).not.toHaveBeenCalled();
-    dom.window.document.querySelector<HTMLButtonElement>('[data-picture-mode="auto"]')!.click();
+    await v.setPicture({mode:'auto'});
     expect(dom.window.document.querySelector('[data-app-copy="pictureBackendLimitHint"]')).not.toBeNull();
   });
 
@@ -365,11 +368,14 @@ describe('host application viewer', () => {
     entries[1].click();
     expect(v.client.focused_wid).toBe(second.wid);
     button('.mac-app-controls-toggle').click();
-    button('[data-picture-mode="clarity"]').click();
+    const settings = button('[data-picture-settings]');
+    expect(dom.window.document.activeElement).toBe(settings);
+    settings.click(); expect(v.nativeWindow.request).toHaveBeenCalledWith('settings');
+    await v.setPicture({mode:'clarity'});
     expect(v.client.send).toHaveBeenCalledWith(['quality', 95]);
     expect(v.client.set_display_density).toHaveBeenLastCalledWith('native');
     expect(v.client.send_control_refresh).toHaveBeenLastCalledWith(100, {'refresh-now':true});
-    button('[data-picture-mode="auto"]').click();
+    await v.setPicture({mode:'auto'});
     expect(v.client.set_display_density).toHaveBeenLastCalledWith('logical');
     expect(v.client.send).toHaveBeenCalledWith(['quality', -1]);
     expect(v.client.close).not.toHaveBeenCalled();
@@ -733,9 +739,8 @@ it('disables unsupported pointer input while preserving the image', async () => 
 
 it('does not send quality or layout commands for repeated mode selections', async () => {
   const v = await viewer(); v.appWindow(1); v.client._new_window(1); v.client.do_send_damage_sequence(1,1,100,100,10,'');
-  const button=dom.window.document.querySelector<HTMLButtonElement>('[data-picture-mode="clarity"]')!;
-  button.click();const count=v.client.send.mock.calls.length;
-  for(let i=0;i<20;i++)button.click();
+  await v.setPicture({mode:'clarity'});const count=v.client.send.mock.calls.length;
+  for(let i=0;i<20;i++)await v.setPicture({mode:'clarity'});
   expect(v.client.send).toHaveBeenCalledTimes(count);
   expect(v.client.set_display_density).toHaveBeenCalledOnce();
 });

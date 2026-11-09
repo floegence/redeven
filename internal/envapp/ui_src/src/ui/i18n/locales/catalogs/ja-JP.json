@@ -383,7 +383,10 @@
       "appearance": "外観と言語",
       "browser": "ブラウザー",
       "services": "サービス",
-      "extensions": "拡張機能"
+      "extensions": "拡張機能",
+      "terminal": "ターミナル",
+      "applications": "ホストアプリとデスクトップ",
+      "containers": "コンテナー"
     },
     "groups": {
       "overview": "概要",
@@ -450,7 +453,30 @@
       "notProvided": "提供されません",
       "emptyValue": "—"
     },
-    "targetUnavailable": "この設定対象は利用できなくなりました。"
+    "targetUnavailable": "この設定対象は利用できなくなりました。",
+    "operationUnknown": "操作結果を確認できていません。次の変更を行う前に、更新して状態を確認してください。",
+    "conversationDefaults": {
+      "title": "個人用の会話の既定値",
+      "description": "新しい会話で使用するモデル、推論設定、作業ディレクトリです。入力欄での選択も既定値に反映されます。",
+      "environmentDirectory": "環境の作業ディレクトリを使用"
+    },
+    "workbench": {
+      "canvasTheme": "Workbench キャンバスのテーマ",
+      "themes": {
+        "default": "既定",
+        "vibrancy": "鮮やか",
+        "mica": "マイカ",
+        "midnight": "ミッドナイト",
+        "aurora": "オーロラ",
+        "terminal": "ターミナル"
+      }
+    },
+    "plugins": {
+      "installed": "インストール済みプラグイン",
+      "preview": "作成者プレビュー",
+      "previewEmpty": "プラグインのプレビューはありません",
+      "target": "プラグイン設定"
+    }
   },
   "flower": {
     "currentEnvironmentFallback": "この環境",
@@ -2517,7 +2543,12 @@
       "historyUnavailable": "この ランタイム は履歴保持の設定に対応していません。",
       "historyLoadFailed": "履歴設定を読み込めませんでした。",
       "historyChangeUnknown": "変更結果を確認できません。再試行する前に現在の設定を読み直してください。",
-      "historyReload": "設定を再読み込み"
+      "historyReload": "設定を再読み込み",
+      "target": "設定対象",
+      "defaultsTarget": "既定の設定",
+      "widgetTarget": "Workbench ターミナル {number}",
+      "sessionTarget": "セッション履歴",
+      "historyAttachmentRequired": "履歴の保持上限を変更するには、先にターミナルでこのセッションに接続してください。設定の表示だけで制御権が移ることはありません。"
     },
     "retryingOlderOutput": "以前の出力を同期しています...",
     "waitingForActivation": "続行するにはこのターミナルを選択してください。",

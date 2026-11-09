@@ -28,7 +28,6 @@ import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
   getThemeColors,
-  isTerminalThemeName,
   normalizeTerminalExecutionContextInfo,
   normalizeTerminalWorkStateInfo,
   type Logger,
@@ -56,9 +55,6 @@ import {
 import {
   ensureTerminalPreferencesInitialized,
   resolveTerminalUserTheme,
-  TERMINAL_MAX_FONT_SIZE,
-  TERMINAL_MIN_FONT_SIZE,
-  type TerminalMobileInputMode,
   useTerminalPreferences,
 } from '../services/terminalPreferences';
 import {
@@ -88,7 +84,7 @@ import { attachAskFlowerContextAction, type EnvFlowerTurnLauncherContextItem } f
 import { basenameFromAbsolutePath, normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
 import { canonicalAbsolutePath } from '../utils/canonicalAbsolutePath';
 import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
-import { TerminalSettingsDialog } from './TerminalSettingsDialog';
+import { trackTerminalSettingsControllers, terminalSettingsResource, useTerminalSettingsAttachments } from '../services/terminalSettingsTargets';
 import { createResolvedTerminalFont } from '../services/terminalFonts';
 import { TerminalFontStatus } from './TerminalFontStatus';
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
@@ -1029,8 +1025,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [groupDeleteTarget, setGroupDeleteTarget] = createSignal<TerminalGroup | null>(null);
 
   const [searchOpen, setSearchOpen] = createSignal(false);
-  const [settingsOpen, setSettingsOpen] = createSignal(false);
-  const [settingsSessionID, setSettingsSessionID] = createSignal<string | null>(null);
   const [searchQuery, setSearchQuery] = createSignal('');
   const [sessionFilterQuery, setSessionFilterQuery] = createSignal('');
   const [localSessionDrawerOpen, setLocalSessionDrawerOpen] = createSignal(false);
@@ -1102,7 +1096,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const groupPathPicker = useEnvFilesystemPicker();
 
   const terminalLive = createRedevenTerminalLiveBundle(rpc, () => protocol.session?.(), connId);
-  const transport = terminalLive.transport;
+  const settingsControllers = trackTerminalSettingsControllers(terminalLive);
+  const transport = settingsControllers.transport;
   const eventSource = terminalLive.eventSource;
   const fallbackSessionsCoordinator = terminalCatalog
     ? null
@@ -1132,6 +1127,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const terminalFocusOwner = () => viewActive() && displayModeSelected() && workbenchSelected();
   const isEmbeddedWidget = Boolean(String(widgetId ?? '').trim());
   const permissionReady = () => env.env.state === 'ready';
+  const settingsAttachments = useTerminalSettingsAttachments();
+  const unregisterSettingsAttachment = settingsAttachments?.register({
+    widgetID: widgetId, controllers: settingsControllers.controllers,
+    ready: () => connected() && permissionReady() && Boolean(env.env()?.permissions?.can_read && env.env()?.permissions?.can_execute),
+    transport,
+  });
+  onCleanup(() => unregisterSettingsAttachment?.());
   const canBrowseFiles = createMemo(() => connected() && permissionReady() && Boolean(env.env()?.permissions?.can_read));
 
   const captureSessionMutationFence = (): terminal_session_mutation_fence => ({
@@ -1247,39 +1249,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const isMobileLayout = () => layout.isMobile();
 
-  let fontSelectionGeneration = 0;
-  const resizeAfterFontSelection = async (persist: () => void | Promise<void>) => {
-    const generation = ++fontSelectionGeneration;
+  // IMPORTANT: Settings may change from any surface. Resize the existing
+  // viewport after resolved font changes, without taking controller ownership.
+  createEffect(on(() => [fontSize(), fontFamily()], () => {
     const sid = activeSessionId();
-    try {
-      await persist();
-    } catch {
-      // The shared preference owner reports persistence failures.
-      return;
-    }
-    queueMicrotask(() => {
-      if (generation !== fontSelectionGeneration || sid !== activeSessionId()) return;
-      if (sid) viewportRegistry.get(sid)?.forceResize();
-    });
-  };
-
-  const persistFontSize = (value: number) => {
-    const shared = sharedGeometryPreferences();
-    void resizeAfterFontSelection(() => shared
-      ? shared.onFontSizeChange(normalizeTerminalFontSize(value))
-      : terminalPrefs.setFontSize(value));
-  };
-
-  const persistFontFamily = (id: string) => {
-    const shared = sharedGeometryPreferences();
-    void resizeAfterFontSelection(() => shared
-      ? shared.onFontFamilyChange(normalizeTerminalFontFamilyId(id))
-      : terminalPrefs.setFontFamily(id));
-  };
-
-  const persistMobileInputMode = (value: TerminalMobileInputMode) => {
-    terminalPrefs.setMobileInputMode(value);
-  };
+    queueMicrotask(() => { if (sid === activeSessionId() && sid) viewportRegistry.get(sid)?.forceResize(); });
+  }, { defer: true }));
 
   const terminalThemeName = createMemo<TerminalThemeName>(() => {
     const selected = resolveTerminalUserTheme(userTheme());
@@ -2060,12 +2035,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         }
       }
     }
-  };
-
-  const handleThemeChange = (value: string): boolean => {
-    if (value !== 'system' && !isTerminalThemeName(value)) return false;
-    terminalPrefs.setUserTheme(value);
-    return true;
   };
 
   let prevSessionsSnapshot: TerminalSessionInfo[] = [];
@@ -4057,35 +4026,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     handleMobileKeyboardPayload(suggestion.insertText);
   };
 
-  const handleMobileInputModeChange = (
-    value: TerminalMobileInputMode,
-    options?: { focusTerminal?: boolean },
-  ) => {
-    persistMobileInputMode(value);
-    if (!isMobileLayout()) return;
-
-    if (value === 'floe') {
-      setMobileKeyboardVisible(true);
-      if (options?.focusTerminal !== false) {
-        openFloeMobileKeyboard();
-      }
-      return;
-    }
-
-    setMobileKeyboardVisible(false);
-    if (options?.focusTerminal !== false) {
-      restoreActiveTerminalFocus();
-    }
-  };
-
   const handleSettingsOpenChange = (open: boolean) => {
-    // IMPORTANT: Retained settings owns the exact session captured on opening.
-    if (open) { setSettingsSessionID(activeSessionId() || null); env.openSettings('terminal', { resource: accessibilityIdPrefix }); }
-    setSettingsOpen(open);
-    if (!open) {
-      const sid = activeSessionId();
-      if (sid) restoreTerminalSessionFocus(captureTerminalFocusRestoreIntent(sid), { activate: false });
-    }
+    if (!open) return;
+    // IMPORTANT: Contextual settings carries stable resource identity. The global
+    // owner discovers targets without mounting or focusing a terminal session.
+    const id = activeSessionId();
+    env.openSettings('terminal', { resource: widgetId
+      ? terminalSettingsResource({ kind: 'widget', id: widgetId, ...(id ? { sessionId: id } : {}) })
+      : id ? terminalSettingsResource({ kind: 'session', id }) : undefined });
   };
 
   const moreItems = createMemo<DropdownItem[]>(() => {
@@ -5533,31 +5481,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 </div>
               </Show>
             </div>
-
-            <TerminalSettingsDialog
-              ownerID={accessibilityIdPrefix}
-              open={settingsOpen()}
-              userTheme={userTheme()}
-              fontSize={fontSize()}
-              fontFamilyId={fontFamilyId()}
-              mobileInputMode={mobileInputMode()}
-              systemAppearance={theme.resolvedTheme()}
-              followInput={terminalPrefs.followInput()}
-              onFollowInputChange={terminalPrefs.setFollowInput}
-              retentionTransport={transport}
-              retentionSessionId={settingsSessionID()}
-              retentionCanManage={connected() && permissionReady() && Boolean(env.env()?.permissions?.can_admin || env.env()?.permissions?.is_owner)}
-              workIndicatorEnabled={workIndicatorEnabled()}
-              fontScope={sharedGeometryPreferences() ? 'shared-workbench' : 'local'}
-              minFontSize={TERMINAL_MIN_FONT_SIZE}
-              maxFontSize={TERMINAL_MAX_FONT_SIZE}
-              onOpenChange={handleSettingsOpenChange}
-              onThemeChange={handleThemeChange}
-              onFontSizeChange={persistFontSize}
-              onFontFamilyChange={persistFontFamily}
-              onMobileInputModeChange={(value) => handleMobileInputModeChange(value, { focusTerminal: false })}
-              onWorkIndicatorEnabledChange={terminalPrefs.setWorkIndicatorEnabled}
-            />
 
             <TerminalGroupEditorDialog
               open={groupEditorTarget() !== null}

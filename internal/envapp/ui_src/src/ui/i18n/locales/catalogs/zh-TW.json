@@ -383,7 +383,10 @@
       "appearance": "外觀與語言",
       "browser": "瀏覽器",
       "services": "服務",
-      "extensions": "擴充功能"
+      "extensions": "擴充功能",
+      "terminal": "終端機",
+      "applications": "主機應用程式與桌面",
+      "containers": "容器"
     },
     "groups": {
       "overview": "概覽",
@@ -450,7 +453,30 @@
       "notProvided": "未提供",
       "emptyValue": "—"
     },
-    "targetUnavailable": "此設定目標已無法使用。"
+    "targetUnavailable": "此設定目標已無法使用。",
+    "operationUnknown": "尚未確認操作結果。請重新整理查看狀態，再進行其他變更。",
+    "conversationDefaults": {
+      "title": "個人對話預設值",
+      "description": "新對話使用記住的模型、推理選項和工作目錄。在輸入區選擇時也會更新這些預設值。",
+      "environmentDirectory": "使用環境工作目錄"
+    },
+    "workbench": {
+      "canvasTheme": "Workbench 畫布佈景主題",
+      "themes": {
+        "default": "預設",
+        "vibrancy": "鮮明",
+        "mica": "雲母",
+        "midnight": "午夜",
+        "aurora": "極光",
+        "terminal": "終端機"
+      }
+    },
+    "plugins": {
+      "installed": "已安裝外掛",
+      "preview": "作者預覽",
+      "previewEmpty": "目前沒有外掛預覽",
+      "target": "外掛設定"
+    }
   },
   "flower": {
     "currentEnvironmentFallback": "目前環境",
@@ -2517,7 +2543,12 @@
       "historyUnavailable": "此 執行環境 不支援歷史保留設定。",
       "historyLoadFailed": "無法載入歷史設定。",
       "historyChangeUnknown": "無法確認變更是否成功。請重新載入目前設定後再操作。",
-      "historyReload": "重新載入設定"
+      "historyReload": "重新載入設定",
+      "target": "設定對象",
+      "defaultsTarget": "預設偏好",
+      "widgetTarget": "Workbench 終端機 {number}",
+      "sessionTarget": "工作階段歷程",
+      "historyAttachmentRequired": "請先在終端機中連接此工作階段，再修改歷程保留限制。檢視設定不會接管終端機。"
     },
     "retryingOlderOutput": "正在同步較早的輸出...",
     "waitingForActivation": "選取此終端以繼續。",

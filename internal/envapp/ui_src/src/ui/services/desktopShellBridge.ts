@@ -47,6 +47,7 @@ export interface DesktopShellBridge {
   onManagedEntranceRequest?: (listener: (request: import('../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC').ManagedEntrancePreparationRequest) => Promise<unknown>) => () => void;
   remoteDesktopDeployment?: (request: DesktopDeploymentRequest) => Promise<DesktopDeploymentResult>;
   onRemoteDesktopDeploymentProgress?: (listener: (value: DesktopDeploymentProgress) => void) => () => void;
+  onHostApplicationSettings?: (listener: () => void) => () => void;
   onRemoteDesktopFiles?: (listener: () => void) => () => void;
   openConnectionCenter?: () => Promise<void>;
   openAdvancedSettings?: () => Promise<void>;

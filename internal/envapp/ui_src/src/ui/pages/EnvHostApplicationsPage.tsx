@@ -1,3 +1,5 @@
+import { ApplicationPictureSettings } from './settings/ApplicationPictureSettings';
+import { DesktopAuthorizationSettings } from './settings/DesktopAuthorizationSettings';
 import { useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import type { FlowerPageContextRegistrar } from '../flower/flowerPageContext';
@@ -854,6 +856,8 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     </Show>
     <Show when={props.settingsOnly}>
       <div class="host-access-settings p-4">
+        <ApplicationPictureSettings allowed={canLaunch()} macOS={isMac()} />
+        <DesktopAuthorizationSettings status={desktopStatus() ?? undefined} allowed={canLaunch() && !desktopBusy() && !desktopRefreshing()} refresh={refreshDesktop} />
         <Show when={displayError()}><p role="alert" class="host-app-error">{displayError()}</p></Show>
         <Show when={nativeLaunch()}><p class="host-access-local-note">{i18n.t('hostAccess.nativeReady')}</p></Show>
         <HostAccessFeatureSettings feature="applications" state={accessState()} ready={Boolean(catalog()?.availability.ready)} allowed={canLaunch()} busy={accessBusy()} onChange={changeAccess} onReconfigure={() => {

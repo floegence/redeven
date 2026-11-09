@@ -4,7 +4,7 @@ import { desktopWindowChromeSnapshotForWindow } from './windowChrome';
 import type { BrowserWindow, IpcMainEvent, WebContents } from 'electron';
 import { HOST_APPLICATION_WINDOW_ACTION_CHANNEL, HOST_APPLICATION_WINDOW_STATE_CHANNEL, isHostApplicationWindowAction } from '../shared/hostApplicationWindowIPC';
 
-export function attachHostApplicationWindow(win: BrowserWindow, contents: WebContents, entryURL: string, appearance?: () => Readonly<{theme: DesktopRendererThemeSnapshot; locale: RedevenLocale}>, openFiles?: () => void): () => void {
+export function attachHostApplicationWindow(win: BrowserWindow, contents: WebContents, entryURL: string, appearance?: () => Readonly<{theme: DesktopRendererThemeSnapshot; locale: RedevenLocale}>, openFiles?: () => void, openSettings?: () => void): () => void {
   const entry = new URL(entryURL);
   const isBootstrap = (url: string): boolean => {
     try {
@@ -26,6 +26,7 @@ export function attachHostApplicationWindow(win: BrowserWindow, contents: WebCon
     if (win.isDestroyed() || contents.isDestroyed() || event.sender !== contents
       || event.senderFrame !== contents.mainFrame || !isBootstrap(event.senderFrame.url)) return;
     switch (action) {
+      case 'settings': openSettings?.(); return;
       case 'enter-fullscreen':
       case 'exit-fullscreen':
         if (!entry.pathname.endsWith('/_redeven_desktop/')) return;

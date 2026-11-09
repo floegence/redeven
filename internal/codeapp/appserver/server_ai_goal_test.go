@@ -45,9 +45,9 @@ func TestServerAIGoalReviewDetailPreservesEvidenceWhileWaitingForUser(t *testing
 			writeEvent(map[string]any{"type": "response.output_text.delta", "delta": "Confirm target"})
 		} else {
 			step := calls.Add(1)
-			name, args := "goal", `{"operation":"review","expected_version":1,"outcome":"blocked","evidence":"The target must be selected by the user."}`
+			name, args := "goal_manage", `{"operation":"review","expected_version":1,"outcome":"blocked","evidence":"The target must be selected by the user."}`
 			if step > 1 {
-				name, args = "ask_user", `{"reason_code":"user_decision_required","required_from_user":["target"],"evidence_refs":[],"questions":[{"id":"target","header":"Target","question":"Which target should be used?","response_mode":"write","is_secret":false}]}`
+				name, args = "user_ask", `{"reason_code":"missing_external_input","required_from_user":["target"],"evidence_refs":[],"questions":[{"id":"target","header":"Target","question":"Which target should be used?","response_mode":"write","is_secret":false}]}`
 			}
 			callID := fmt.Sprintf("goal-review-%d", step)
 			item := map[string]any{"type": "function_call", "id": callID, "call_id": callID, "name": name, "arguments": args}
@@ -107,7 +107,7 @@ func TestServerAIGoalReviewDetailPreservesEvidenceWhileWaitingForUser(t *testing
 		t.Fatalf("HTTP detail changed waiting or Goal state: %s", response.Body.String())
 	}
 	for _, item := range view.Items {
-		if item.Activity == nil || item.Activity.ToolName != "goal" {
+		if item.Activity == nil || item.Activity.ToolName != "goal_manage" {
 			continue
 		}
 		if item.Activity.Presentation != nil || item.ActivitySummary == nil {

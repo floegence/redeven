@@ -30,7 +30,7 @@ function mount(overrides: Partial<PluginConnectionsAPI> = {}, initialManage = tr
   const [visible, setVisible] = createSignal(true);
   const [canManage, setCanManage] = createSignal(initialManage); const [currentItem, setItem] = createSignal(item);
   const api = {
-    listConnections: vi.fn(async () => ({ connections: [connection] })),
+    listConnections: vi.fn<PluginConnectionsAPI['listConnections']>(async () => ({ connections: [connection] })),
     reviewConnection: vi.fn(async () => ({ review: reviewed })),
     approveConnection: vi.fn(async () => active),
     cancelConnectionReview: vi.fn(async () => ({ canceled: true as const })),
@@ -159,4 +159,20 @@ it.each(['zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR',
   await loadEnvAppDictionary(locale); mount({}, true, true); await ready();
   expect(document.body.textContent).not.toContain('uiCopy.plugin.connections');
   expect(document.body.textContent).not.toContain('Private networks (optional)');
+});
+
+it('retains draft content and original CAS on refresh until an explicit discard', async () => {
+  const mounted = mount(); await ready();
+  await page.getByRole('textbox', { name: 'Destination', exact: true }).fill('https://draft.example/');
+  await page.getByRole('checkbox', { name: 'GET', exact: true }).click();
+  vi.mocked(mounted.api.listConnections).mockResolvedValue({ connections: [{ ...active, revision: 9, destination: 'https://confirmed.example/' }] });
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click(); await ready();
+  await expect.element(page.getByRole('textbox', { name: 'Destination', exact: true })).toHaveValue('https://draft.example/');
+  await page.getByRole('button', { name: 'Review connection', exact: true }).click();
+  expect(mounted.api.reviewConnection).toHaveBeenLastCalledWith(expect.objectContaining({ expected_revision: 0, destination: 'https://draft.example/' }), expect.anything());
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click(); await ready();
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click(); await ready();
+  await expect.element(page.getByRole('textbox', { name: 'Destination', exact: true })).toHaveValue('https://confirmed.example/');
+  await page.getByRole('button', { name: 'Review connection', exact: true }).click();
+  expect(mounted.api.reviewConnection).toHaveBeenLastCalledWith(expect.objectContaining({ expected_revision: 9, destination: 'https://confirmed.example/' }), expect.anything());
 });

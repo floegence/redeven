@@ -594,11 +594,14 @@ describe('EnvSettingsPage', () => {
 
     const navLabels = SETTINGS_NAV_ITEMS.map((item) => item.label);
     expect(navLabels).toEqual([
-      'Appearance & Language', 'Terminal', 'Browser', 'Applications & Desktop', 'Services', 'Extensions', 'Plugin Center', 'Storage & Recovery',
+      'Appearance & Language', 'Terminal', 'Browser', 'Host Applications & Desktop', 'Containers', 'Services', 'Extensions', 'Plugin Center', 'Storage & Recovery',
       'Config File', 'Connection', 'Runtime Status', 'Shell & Workspace', 'Codespaces & Tooling', 'Logging', 'Permission Policy', 'Flower', 'Debug Console',
     ]);
     const renderedIDs = Array.from(host.querySelectorAll('[data-settings-nav-item]')).map(node => node.getAttribute('data-settings-nav-item'));
     expect(renderedIDs).toEqual(SETTINGS_GROUPS.flatMap(group => group.sections));
+    expect(host.querySelector('[data-settings-nav-item="terminal"]')?.textContent).toBe('Terminal');
+    expect(host.querySelector('[data-settings-nav-item="applications"]')?.textContent).toBe('Host Applications & Desktop');
+    expect(host.querySelector('[data-settings-nav-item="containers"]')?.textContent).toBe('Containers');
     expect(host.querySelector('[data-settings-nav-item="appearance"]')?.getAttribute('aria-current')).toBe('page');
     expect(host.querySelector('[data-settings-nav-item="connection"]')?.hasAttribute('aria-current')).toBe(false);
     const settingsSidebar = host.querySelector('.floe-settings-layout__sidebar');

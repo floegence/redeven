@@ -1,6 +1,6 @@
 import { createFlowerContextTarget, registerFlowerPageReader } from '../flower/FlowerContextSource';
 import './runtime-settings-compact.css';
-import { For, Show, createMemo, type JSX } from 'solid-js';
+import { For, Show, createMemo, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { ChevronLeft, ChevronRight, Search, X, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Select, SettingsLayout, SettingsNavigation } from '@floegence/floe-webapp-core/ui';
@@ -29,6 +29,7 @@ const NAV_SEARCH_KEYWORDS: Record<EnvSettingsSection, string[]> = {
   terminal: ['terminal', 'history', 'font', 'input'],
   browser: ['browser', 'chrome', 'chromium'],
   applications: ['applications', 'desktop', 'access'],
+  containers: ['containers', 'docker', 'podman', 'proxy', 'credentials'],
   services: ['services', 'network', 'storage', 'resources'],
   extensions: ['skills', 'mcp', 'agent plugins'],
   plugins: ['plugin', 'connections'],
@@ -57,9 +58,10 @@ function filterNavItems(query: string, items: readonly SettingsNavItem[]): Setti
 function navLabel(section: EnvSettingsSection, fallback: string, t: ReturnType<typeof useI18n>['t']): string {
   switch (section) {
     case 'appearance': return t('settings.nav.appearance');
-    case 'terminal': return t('terminal.settings.title');
+    case 'terminal': return t('settings.nav.terminal');
     case 'browser': return t('settings.nav.browser');
-    case 'applications': return t('hostAccess.settings');
+    case 'applications': return t('settings.nav.applications');
+    case 'containers': return t('settings.nav.containers');
     case 'services': return t('settings.nav.services');
     case 'extensions': return t('settings.nav.extensions');
     case 'plugins': return t('uiCopy.plugin.centerTitle');
@@ -116,7 +118,15 @@ const sectionComponents: Partial<Record<EnvSettingsSection, () => JSX.Element>> 
   debug_console: DebugConsoleSection,
 };
 
-function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue; panels?: Partial<Record<EnvSettingsSection, () => JSX.Element>>; onNavigate?: (section: EnvSettingsSection) => void } = {}) {
+type EnvSettingsPageProps = {
+  initialSection?: EnvSettingsSection;
+  context?: EnvSettingsPageContextValue;
+  panels?: Partial<Record<EnvSettingsSection, () => JSX.Element>>;
+  onNavigate?: (section: EnvSettingsSection) => void;
+  onHeaderChange?: (header: JSX.Element) => void;
+};
+
+function EnvSettingsPageContent(props: EnvSettingsPageProps = {}) {
   const ctx = props.context ?? useEnvSettingsPage();
   registerFlowerPageReader(() => ({ section: ctx.activeSection() }));
   const i18n = useI18n();
@@ -138,10 +148,11 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue; 
   });
   const returnToFlower = createMemo(() => ctx.env.settingsOrigin()?.kind === 'flower');
 
-  return (
-    <div class={cn('redeven-settings-shell relative h-full min-h-0 flex flex-col', redevenSurfaceRoleClass('main'))}>
-      <div class="redeven-settings-header flex items-center justify-between gap-3 border-b px-4 py-2.5 shrink-0">
-        <div class="flex items-center gap-3 min-w-0">
+  // IMPORTANT: One controller owns navigation, refresh and the projected header.
+  // Moving its DOM into the dialog slot must not create a second settings owner.
+  const header = (
+      <div class="redeven-settings-header flex items-center justify-between gap-3 shrink-0">
+        <div class="flex flex-1 items-center gap-3 min-w-0">
           <Show when={returnToFlower()}>
             <button
               type="button"
@@ -154,9 +165,9 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue; 
             </button>
           </Show>
           <div class="redeven-settings-breadcrumb flex min-w-0 items-center gap-3">
-          <span class="text-xs font-medium text-muted-foreground truncate">{i18n.t('settings.runtimeTitle')}</span>
+          <span class="shrink-0 text-sm font-semibold">{i18n.t('settings.runtimeTitle')}</span>
           <ChevronRight class="h-3 w-3 shrink-0 text-muted-foreground" />
-          <span class="truncate text-xs text-foreground">{navLabel(sectionSelection.visual(), '', i18n.t)}</span>
+          <span class="truncate text-sm text-muted-foreground" title={navLabel(sectionSelection.visual(), '', i18n.t)}>{navLabel(sectionSelection.visual(), '', i18n.t)}</span>
           </div>
           <div class="redeven-settings-mobile-nav min-w-0 flex-1"><Select
           value={sectionSelection.visual()}
@@ -165,11 +176,20 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue; 
           ariaLabel={i18n.t('settings.runtimeTitle')} class="w-full"
         /></div>
         </div>
-        <Button size="sm" variant="outline" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} aria-label={i18n.t('common.actions.refresh')} class="gap-1.5 shrink-0">
+        <Button size="sm" variant="ghost" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} aria-label={i18n.t('common.actions.refresh')} class="gap-1.5 shrink-0">
           <RefreshIcon class="w-3.5 h-3.5" />
           <span class="hidden sm:inline">{i18n.t('common.actions.refresh')}</span>
         </Button>
       </div>
+  );
+  if (props.onHeaderChange) {
+    onMount(() => props.onHeaderChange?.(header));
+    onCleanup(() => props.onHeaderChange?.(null));
+  }
+
+  return (
+    <div class={cn('redeven-settings-shell relative h-full min-h-0 flex flex-col', redevenSurfaceRoleClass('main'))}>
+      <Show when={!props.onHeaderChange}>{header}</Show>
 
       <SettingsLayout class="redeven-settings-body"
         sidebar={<SettingsNavigation
@@ -246,17 +266,17 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue; 
   );
 }
 
-export function EnvSettingsPage(props: { initialSection?: EnvSettingsSection; context?: EnvSettingsPageContextValue; panels?: Partial<Record<EnvSettingsSection, () => JSX.Element>>; onNavigate?: (section: EnvSettingsSection) => void } = {}) {
+export function EnvSettingsPage(props: EnvSettingsPageProps = {}) {
   if (props.context) {
     return (
       <EnvSettingsPageCtx.Provider value={props.context}>
-        <EnvSettingsPageContent context={props.context} panels={props.panels} onNavigate={props.onNavigate} />
+        <EnvSettingsPageContent context={props.context} panels={props.panels} onNavigate={props.onNavigate} onHeaderChange={props.onHeaderChange} />
       </EnvSettingsPageCtx.Provider>
     );
   }
   return (
     <EnvSettingsPageProvider initialSection={props.initialSection}>
-      <EnvSettingsPageContent panels={props.panels} onNavigate={props.onNavigate} />
+      <EnvSettingsPageContent panels={props.panels} onNavigate={props.onNavigate} onHeaderChange={props.onHeaderChange} />
     </EnvSettingsPageProvider>
   );
 }

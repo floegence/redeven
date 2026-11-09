@@ -7,6 +7,8 @@ import { FloeConfigProvider } from '@floegence/floe-webapp-core';
 import { bindSessionHTTP } from '../services/sessionHTTP';
 import { I18nProvider } from '../i18n';
 import { PluginCreationWorkspace } from './PluginCreationWorkspace';
+import { SettingsPanelContext } from '../../../../../settings_ui/src/SettingsPanelHost';
+import { pluginAuthorSettingsResource } from './pluginSettingsTarget';
 import { createFlowerComposerDraftCoordinator, type FlowerEmbeddedConversation } from '../../../../../flower_ui/src';
 import type { PluginDraft } from './pluginCreationApi';
 import { removePluginComposer } from './pluginComposerPersistence';
@@ -71,7 +73,7 @@ afterEach(async () => {
   document.body.replaceChildren();
   await media.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
 });
-function mount(canManage = true) {
+function mount(canManage = true, settingsOpen = vi.fn()) {
   const [visible, setVisible] = createSignal(true);
   const onBack = vi.fn();
   const submit = vi.fn();
@@ -82,6 +84,7 @@ function mount(canManage = true) {
     () => (
       <FloeConfigProvider>
         <I18nProvider>
+        <SettingsPanelContext.Provider value={{ open: settingsOpen, close: () => {}, target: () => null, present: () => false, register: () => () => {} }}>
           <PluginCreationWorkspace
             draftCoordinator={createFlowerComposerDraftCoordinator()}
             draftID="draft-1"
@@ -103,12 +106,13 @@ function mount(canManage = true) {
               })
             }
           />
+        </SettingsPanelContext.Provider>
         </I18nProvider>
       </FloeConfigProvider>
     ),
     host,
   );
-  return { host, onBack, submit, setVisible };
+  return { host, onBack, submit, setVisible, settingsOpen };
 }
 it.each([false, true])('reconciles a bound project before opening only for managers (manager: %s)', async canManage => {
   draft = { ...baseDraft, thread_id: 'thread-1' };
@@ -647,4 +651,17 @@ it('shows actual failed build stages and bounded command output', async () => {
   await expect.element(page.getByText('npm run typecheck', { exact: true })).toBeVisible();
   await expect.element(page.getByText('ui/timer.ts: Unknown timerState', { exact: true })).toBeVisible();
   await expect.element(page.getByText('Showing partial content (truncated).', { exact: true })).toBeVisible();
+});
+
+it('routes preview permissions to the global settings dialog with exact author identity', async () => {
+  const original = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (...args) => String(args[0]).endsWith('/status')
+    ? Response.json({ data: { artifacts: [], preview: { plugin_instance_id: 'preview-exact', generation: 1 }, plugins: [] } })
+    : original(...args));
+  const { settingsOpen } = mount();
+  await expect.element(page.getByText('Task timer', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'More actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Permissions', exact: true }).click();
+  expect(settingsOpen).toHaveBeenCalledWith({ section: 'plugins', resource: pluginAuthorSettingsResource({ draftID: 'draft-1', workspaceID: 'author-1', pluginInstanceID: 'preview-exact' }) });
+  expect(document.querySelector('[data-plugin-author-access]')).toBeNull();
 });

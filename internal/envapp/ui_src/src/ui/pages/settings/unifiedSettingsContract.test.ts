@@ -9,6 +9,12 @@ describe('unified settings ownership gate', () => {
     expect(shell).not.toContain("component: EnvSettingsPage, sidebar:");
     expect(shell).toContain('<EnvSettingsDialog');
   });
+  it('routes container configuration to the discoverable global owner', () => {
+    expect(source('./settingsStructure.ts')).toContain("id: 'containers'");
+    expect(source('../EnvContainersPage.tsx')).toContain("env.openSettings('containers', { resource: service.service_id })");
+    expect(source('../EnvContainersPage.tsx')).not.toContain('container-service-configuration-dialog');
+    expect(source('./EnvSettingsDialog.tsx')).toContain('ContainerSettingsPanel');
+  });
   it('uses one provider editor and makes storage discoverable', () => {
     const section = source('./sections/FlowerSection.tsx');
     expect(section).toContain('FlowerSettingsSurface');

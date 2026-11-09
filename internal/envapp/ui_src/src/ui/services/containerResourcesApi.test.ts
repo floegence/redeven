@@ -9,11 +9,14 @@ const localApiMocks = vi.hoisted(() => ({
   fetchLocalApiJSON: vi.fn(),
 }));
 
-vi.mock('./localApi', () => localApiMocks);
+vi.mock('./localApi', async original => ({ ...await original<typeof import('./localApi')>(), ...localApiMocks }));
 
 import {
   createComposeProjectDefinition,
   createContainerOperation,
+  ContainerOperationRejectedError,
+  getContainerOperation,
+  getContainerOperationByRequestID,
   deleteComposeProjectDefinition,
   getComposeProjectDefinition,
   getContainerImageBuildHistory,
@@ -144,13 +147,13 @@ describe('native container resources API', () => {
   it('submits only the recomputed preflight hashes with the mutation request', async () => {
     const request = { engine: 'docker', endpoint_id: 'endpoint/primary', name: 'cache data' };
     localApiMocks.fetchLocalApiJSON
-      .mockResolvedValueOnce(preflight)
-      .mockResolvedValueOnce(operation('queued'));
+      .mockResolvedValueOnce(preflight);
+    localApiMocks.fetchLocalApi.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, data: operation('queued') }), { status: 202 }));
 
     await expect(preflightContainerOperation(preflight.method, request)).resolves.toEqual(preflight);
     await expect(createContainerOperation(preflight, request)).resolves.toMatchObject({ state: 'queued' });
 
-    const createCall = localApiMocks.fetchLocalApiJSON.mock.calls[1];
+    const createCall = localApiMocks.fetchLocalApi.mock.calls[0];
     expect(createCall[0]).toBe('/_redeven_proxy/api/container-resource-operations');
     expect(JSON.parse(String(createCall[1]?.body))).toMatchObject({
       method: preflight.method,
@@ -301,3 +304,16 @@ beforeEach(async () => {
   releaseTestTransport = await bindTestSessionHTTP(localApiMocks.fetchLocalApi);
 });
 afterEach(() => releaseTestTransport?.());
+
+
+it.each([true, false])('uses only explicit pre-admission evidence for rejection (marker=%s)', async marker => {
+  localApiMocks.fetchLocalApi.mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, error: 'operation failed' }), { status: 400, headers: marker ? { 'Container-Operation-Admission': 'rejected' } : {} }));
+  try { await createContainerOperation(preflight, {}); throw new Error('expected failure'); }
+  catch (error) { expect(error instanceof ContainerOperationRejectedError).toBe(marker); }
+});
+it('looks up exact operation and request IDs with no-store reads', async () => {
+  localApiMocks.fetchLocalApiJSON.mockResolvedValue(operation('succeeded'));
+  await getContainerOperation('operation/exact'); await getContainerOperationByRequestID('request/exact');
+  expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/container-resource-operations/operation%2Fexact', { method: 'GET', cache: 'no-store' });
+  expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/container-resource-operations/by-request/request%2Fexact', { method: 'GET', cache: 'no-store' });
+});

@@ -7,7 +7,7 @@ import { DesktopThemeState } from './desktopThemeState';
 import { attachHostApplicationWindow } from './hostApplicationWindow';
 import { HOST_APPLICATION_WINDOW_ACTION_CHANNEL as actionChannel, HOST_APPLICATION_WINDOW_STATE_CHANNEL as stateChannel } from '../shared/hostApplicationWindowIPC';
 
-function fixture(appearance?: Parameters<typeof attachHostApplicationWindow>[3], desktop = false, openFiles?: () => void) {
+function fixture(appearance?: Parameters<typeof attachHostApplicationWindow>[3], desktop = false, openFiles?: () => void, openSettings?: () => void) {
   const url = `http://127.0.0.1:18181/pf/owned/${desktop ? '_redeven_desktop' : '_redeven_host_app'}/`;
   const state = { maximized:false, minimized:false, fullscreen:false };
   const win = Object.assign(new EventEmitter(), {
@@ -16,12 +16,31 @@ function fixture(appearance?: Parameters<typeof attachHostApplicationWindow>[3],
     unmaximize: vi.fn(() => { state.maximized = false; }), setFullScreen: vi.fn((value: boolean) => { state.fullscreen = value; }),
   });
   const contents = Object.assign(new EventEmitter(), { isDestroyed: () => false, mainFrame:{url}, getURL: () => contents.mainFrame.url, send: vi.fn() });
-  const publish = attachHostApplicationWindow(win as unknown as BrowserWindow, contents as unknown as WebContents, url, appearance, openFiles);
+  const publish = attachHostApplicationWindow(win as unknown as BrowserWindow, contents as unknown as WebContents, url, appearance, openFiles, openSettings);
   const send = (action: unknown, override: Record<string, unknown> = {}) => contents.emit('ipc-message', {sender:contents, senderFrame:contents.mainFrame, ...override} as unknown as IpcMainEvent, actionChannel, action);
   return {win, contents, state, send, publish};
 }
 
 describe('native host application window controls', () => {
+  it.each([false, true])('opens settings only for the exact authenticated viewer owner (desktop=%s)', desktop => {
+    const settings = vi.fn();
+    const viewer = fixture(undefined, desktop, undefined, settings);
+    viewer.send('settings', { sender: {} });
+    viewer.send('settings', { senderFrame: { url: viewer.contents.mainFrame.url } });
+    expect(settings).not.toHaveBeenCalled();
+    viewer.send('settings');
+    expect(settings).toHaveBeenCalledOnce();
+    expect(viewer.win.close).not.toHaveBeenCalled();
+    const entry = viewer.contents.mainFrame.url;
+    for (const url of [entry.replace('/pf/owned/', '/pf/other/'), entry.replace(':18181/', ':18182/'), 'https://untrusted.example/_redeven_host_app/', 'about:blank']) {
+      viewer.contents.mainFrame.url = url; viewer.send('settings');
+    }
+    expect(settings).toHaveBeenCalledOnce();
+    viewer.contents.mainFrame.url = entry;
+    viewer.contents.emit('destroyed'); viewer.send('settings');
+    expect(settings).toHaveBeenCalledOnce();
+  });
+
   it('routes fullscreen only through the exact desktop window owner', () => {
     const application = fixture();
     application.send('enter-fullscreen');
