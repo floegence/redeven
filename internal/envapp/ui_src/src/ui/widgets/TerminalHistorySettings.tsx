@@ -1,5 +1,5 @@
 import { createEffect, on, untrack, createMemo, createSignal, onCleanup, Show } from 'solid-js';
-import { Button, Input } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, SettingsSection, SettingsList, SettingRow } from '@floegence/floe-webapp-core/ui';
 import type { TerminalHistoryRetentionLimits, TerminalHistoryRetentionState } from '@floegence/floeterm-terminal-web/live';
 import { useI18n } from '../i18n';
 import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
@@ -85,25 +85,23 @@ export function TerminalHistorySettings(props: { open: boolean; canManage?: bool
       }
     } finally { setSaving(false); }
   };
-  return <section class="space-y-3" aria-busy={loading() || saving()} data-terminal-history-settings>
-    <h3 class="text-[13px] font-medium">{i18n.t('terminal.settings.historyTitle')}</h3>
-    <p class="text-xs text-muted-foreground">{i18n.t('terminal.settings.historyDescription')}</p>
+  return <SettingsSection title={i18n.t('terminal.settings.historyTitle')} description={i18n.t('terminal.settings.historyDescription')} aria-busy={loading() || saving()} data-terminal-history-settings>
     <Show when={defaults()?.supported}>
-      <div class="grid gap-3 sm:grid-cols-2">
-        <label class="space-y-1 text-xs">{i18n.t('terminal.settings.historyLines')}
-          <Input type="text" inputmode="numeric" value={lines()} disabled={saving()} placeholder={i18n.t('terminal.settings.historyDefault')}
+      <SettingsList>
+        <SettingRow title={i18n.t('terminal.settings.historyLines')} control={
+          <Input aria-label={i18n.t('terminal.settings.historyLines')} class="w-full sm:w-48" type="text" inputmode="numeric" value={lines()} disabled={saving()} placeholder={i18n.t('terminal.settings.historyDefault')}
             onInput={event => { setLines(event.currentTarget.value); setConfirmation(null); }} aria-invalid={limits() === null} />
-        </label>
-        <label class="space-y-1 text-xs">{i18n.t('terminal.settings.historyMemory')}
-          <Input type="text" inputmode="decimal" value={memory()} disabled={saving()} placeholder={i18n.t('terminal.settings.historyDefault')}
+        } />
+        <SettingRow title={i18n.t('terminal.settings.historyMemory')} control={
+          <Input aria-label={i18n.t('terminal.settings.historyMemory')} class="w-full sm:w-48" type="text" inputmode="decimal" value={memory()} disabled={saving()} placeholder={i18n.t('terminal.settings.historyDefault')}
             onInput={event => { setMemory(event.currentTarget.value); setConfirmation(null); }} aria-invalid={limits() === null} />
-        </label>
-      </div>
+        } />
+      </SettingsList>
       <Show when={limits() === null}><p role="alert" class="text-xs text-destructive">{i18n.t('terminal.settings.historyInvalid')}</p></Show>
       <Show when={current()}>{state => <p class="text-xs text-muted-foreground" data-terminal-history-effective>
         {i18n.t('terminal.settings.historyEffective', { lines: state().effective.max_lines === null ? '∞' : String(state().effective.max_lines), memory: state().effective.max_bytes === null ? '∞' : formatTerminalHistoryMemory(state().effective.max_bytes) })}
       </p>}</Show>
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap justify-end gap-2">
         <Button size="sm" variant="outline" class="h-auto min-h-8 whitespace-normal text-center" disabled={!valid() || !canManageDefaults()} onClick={() => void save('defaults')}>{i18n.t('terminal.settings.historySaveDefaults')}</Button>
         <Button size="sm" variant="outline" class="h-auto min-h-8 whitespace-normal text-center" disabled={!valid() || !current() || !props.sessionId || !props.transport?.configureHistoryRetention}
           onClick={() => setConfirmation({ sessionId: props.sessionId!, limits: limits()! })}>{i18n.t('terminal.settings.historyApplyCurrent')}</Button>
@@ -113,12 +111,12 @@ export function TerminalHistorySettings(props: { open: boolean; canManage?: bool
     <Show when={props.sessionId && !props.transport?.configureHistoryRetention}><p class="text-xs text-muted-foreground">{i18n.t('terminal.settings.historyAttachmentRequired')}</p></Show>
     <Show when={confirmation()}><div role="alert" class="space-y-2 rounded-md border border-border p-3">
       <p class="text-xs">{i18n.t('terminal.settings.historyConfirm')}</p>
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap justify-end gap-2">
         <Button size="sm" variant="primary" class="h-auto min-h-8 whitespace-normal text-center" onClick={() => void save('current')}>{i18n.t('terminal.settings.historyApplyCurrent')}</Button>
         <Button size="sm" variant="ghost" onClick={() => setConfirmation(null)}>{i18n.t('common.actions.cancel')}</Button>
       </div>
     </div></Show>
     <Show when={message()}><p role={failed() ? 'alert' : 'status'} class="text-xs" classList={{ 'text-destructive': failed() }}>{message()}</p></Show>
     <Show when={failed()}><Button size="sm" variant="outline" disabled={loading() || saving()} onClick={() => void load(props.sessionId)}>{i18n.t('terminal.settings.historyReload')}</Button></Show>
-  </section>;
+  </SettingsSection>;
 }

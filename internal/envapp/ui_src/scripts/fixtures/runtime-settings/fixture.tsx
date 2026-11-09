@@ -2,6 +2,9 @@ import { createSignal } from 'solid-js';
 import type { EnvSettingsSection } from '../../../src/ui/pages/EnvContext';
 import type { EnvSettingsPageContextValue } from '../../../src/ui/pages/settings/EnvSettingsPageContext';
 import type { AgentSettingsResponse } from '../../../src/ui/pages/settings/types';
+import { mapEnvFlowerSettings } from '../../../src/ui/flower/envLocalFlowerSurfaceAdapter';
+import type { FlowerSurfaceAdapter } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { serializeFlowerProvider } from '../../../../../flower_ui/src/settings/modelSelection';
 
 // Acceptance-only data. Production entrypoints never import this module.
 export function createRuntimeSettingsFixture() {
@@ -45,9 +48,27 @@ export function createRuntimeSettingsFixture() {
   const readiness = { snapshot: readinessSnapshot, loading: () => false, retryPending: () => false, busyStartedAt: () => null, startupElapsedMs: () => null, longStartupReadySequence: () => 0, refresh: async () => ready, retry: async () => ready, pause() {}, resume: async () => ready, dispose() {} };
   const [codeRuntimeStatus, setCodeRuntimeStatus] = createSignal<import('../../../src/ui/services/codeRuntimeApi').CodeRuntimeStatus>({ updated_at_unix_ms: 1, active_runtime: { present: true, detection_state: 'ready', source: 'managed', version: '4.109.1', binary_path: '/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server' }, managed_runtime: { present: true, detection_state: 'ready', source: 'managed', version: '4.109.1' }, managed_runtime_source: 'managed', managed_runtime_version: '4.109.1', managed_prefix: '/Users/alex/.redeven/apps/code', shared_runtime_root: '/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64', installed_versions: ['4.109.1', '4.108.2'].map((version, index) => ({ version, selected_by_local_environment: index === 0, removable: index !== 0, detection_state: 'ready', binary_path: `/Users/alex/.redeven-dev/redeven-1854757905/code-shared/code-server/darwin-arm64/versions/${version}/bin/code-server` })), operation: { state: 'idle', log_tail: [] } });
   const noop = () => undefined;
+  // IMPORTANT: Exercise the same model-profile/defaults boundary as the shared
+  // Flower settings owner, rather than the retired runtime-local editor shape.
+  const flowerAdapter: Pick<FlowerSurfaceAdapter, 'loadSettings' | 'saveDefaultPermission' | 'saveModelProfile' | 'discoverProviderModels'> = {
+    loadSettings: async (_refresh, signal) => { signal?.throwIfAborted(); return mapEnvFlowerSettings(settings()); },
+    saveDefaultPermission: async permission_type => {
+      if (!canAdmin()) throw new Error('Settings authority is unavailable');
+      requests.push({ url: '/_redeven_proxy/api/ai/defaults', init: { method: 'PUT', body: JSON.stringify({ permission_type }) } });
+      setSettings(current => ({ ...current, ai: { ...current.ai!, permission_type } }));
+      return mapEnvFlowerSettings(settings());
+    },
+    saveModelProfile: async draft => {
+      if (!canAdmin()) throw new Error('Settings authority is unavailable');
+      requests.push({ url: '/_redeven_proxy/api/ai/provider_bundle', init: { method: 'PUT', body: JSON.stringify(draft) } });
+      setSettings(current => ({ ...current, ai: { ...current.ai!, current_model_id: draft.model_profile.current_model_id, providers: draft.model_profile.providers.map(provider => serializeFlowerProvider(provider) as NonNullable<NonNullable<AgentSettingsResponse['ai']>['providers']>[number]) } }));
+      return mapEnvFlowerSettings(settings());
+    },
+    discoverProviderModels: async () => ({ models: settings().ai?.providers?.[0]?.models ?? [] }),
+  };
   const context = {
     activeSection, setActiveSection, searchQuery, setSearchQuery, canAdmin, canInteract: () => true,
-    env: { settingsOrigin: () => null, returnFromSettingsOrigin: noop, aiReadinessController: readiness, env_id: () => 'env_design_workspace', env: () => ({ namespace_public_id: 'workspace' }), debugConsoleEnabled, setDebugConsoleEnabled, bumpSettingsSeq: noop },
+    env: { settingsOrigin: () => null, returnFromSettingsOrigin: noop, aiReadinessController: readiness, env_id: () => 'env_design_workspace', env: () => ({ namespace_public_id: 'workspace' }), debugConsoleEnabled, setDebugConsoleEnabled, bumpSettingsSeq: noop, createSettingsFlowerAdapter: async () => flowerAdapter, openSettings: setActiveSection },
     protocol: { status: () => 'connected' }, notify: { success: noop, error: noop, info: noop },
     runtimeUpdate: { version: { currentVersion: () => 'v1.2.3' } },
     settings: Object.assign(settings, { loading: false, error: null, state: 'ready' }),

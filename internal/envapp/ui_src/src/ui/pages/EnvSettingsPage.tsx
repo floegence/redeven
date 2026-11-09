@@ -64,7 +64,7 @@ function navLabel(section: EnvSettingsSection, fallback: string, t: ReturnType<t
     case 'containers': return t('settings.nav.containers');
     case 'services': return t('settings.nav.services');
     case 'extensions': return t('settings.nav.extensions');
-    case 'plugins': return t('uiCopy.plugin.centerTitle');
+    case 'plugins': return t('settings.plugins.target');
     case 'storage': return t('storage.title');
     case 'config':
       return t('settings.nav.config');
@@ -150,10 +150,12 @@ function EnvSettingsPageContent(props: EnvSettingsPageProps = {}) {
 
   // IMPORTANT: One controller owns navigation, refresh and the projected header.
   // Moving its DOM into the dialog slot must not create a second settings owner.
+  // IMPORTANT: A modal category root has one close action. Domain refresh stays
+  // beside its resource; this generic fetch does not refresh those owners.
   const header = (
       <div class="redeven-settings-header flex items-center justify-between gap-3 shrink-0">
         <div class="flex flex-1 items-center gap-3 min-w-0">
-          <Show when={returnToFlower()}>
+          <Show when={!props.onHeaderChange && returnToFlower()}>
             <button
               type="button"
               class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -176,10 +178,10 @@ function EnvSettingsPageContent(props: EnvSettingsPageProps = {}) {
           ariaLabel={i18n.t('settings.runtimeTitle')} class="w-full"
         /></div>
         </div>
-        <Button size="sm" variant="ghost" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} aria-label={i18n.t('common.actions.refresh')} class="gap-1.5 shrink-0">
+        <Show when={!props.onHeaderChange || !props.panels?.[ctx.activeSection()]}><Button size="sm" variant="ghost" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} aria-label={i18n.t('common.actions.refresh')} class="gap-1.5 shrink-0">
           <RefreshIcon class="w-3.5 h-3.5" />
           <span class="hidden sm:inline">{i18n.t('common.actions.refresh')}</span>
-        </Button>
+        </Button></Show>
       </div>
   );
   if (props.onHeaderChange) {
@@ -201,7 +203,10 @@ function EnvSettingsPageContent(props: EnvSettingsPageProps = {}) {
             label: groupTitle(group.id, group.title, i18n.t),
             items: group.sections.flatMap(id => filteredItems().filter(item => item.id === id)).map((item) => ({
               ...item,
-              attributes: { 'data-settings-nav-item': item.id, title: item.label, ref: createFlowerContextTarget(() => ({ id: item.id, label: item.label, state: { navigation: item.id } })) },
+              // IMPORTANT: Floe buttons keep one-line labels. The product sidebar
+              // bounds long localized labels through the public item slot; title
+              // and the accessible name retain the complete destination.
+              attributes: { 'data-settings-nav-item': item.id, class: 'min-w-0 [&>span]:truncate', title: item.label, ref: createFlowerContextTarget(() => ({ id: item.id, label: item.label, state: { navigation: item.id } })) },
             })),
           }))}
           search={<div class="relative">
@@ -234,11 +239,14 @@ function EnvSettingsPageContent(props: EnvSettingsPageProps = {}) {
                   render={() => (
                     <div ref={createFlowerContextTarget(() => ({ id: item.id, label: navLabel(item.id, item.id, i18n.t), state: { section: item.id } }))} class="floe-settings-page redeven-settings-page">
                       <Show when={ctx.settings.error}>
-                        <div class="flex items-start gap-2.5 p-4 rounded-lg bg-destructive/10 border border-destructive/20 mb-6">
-                          <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />
-                          <div class="text-[length:var(--floe-type-body)] text-destructive">
+                        <div role="alert" class="redeven-settings-read-error">
+                          <div class="min-w-0 flex-1 break-words text-[length:var(--floe-type-body)] text-destructive">
                             {ctx.settings.error instanceof Error ? ctx.settings.error.message : String(ctx.settings.error)}
                           </div>
+                          {/* IMPORTANT: A failed generic read has its own retry even when
+                              the active domain owns a different resource refresh. Retry
+                              only this read; never replay a mutation or change category. */}
+                          <Button size="sm" variant="outline" disabled={ctx.settings.loading} onClick={() => void ctx.refreshSettingsPage()}>{i18n.t('floeControls.retry')}</Button>
                         </div>
                       </Show>
                       {Section ? <Section /> : null}

@@ -42,7 +42,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async importOriginal => ({
       <input
         type="checkbox"
         checked={props.checked}
-        aria-label={props.label}
+        aria-label={props['aria-label'] ?? props.label}
         onChange={(event) => props.onChange((event.currentTarget as HTMLInputElement).checked)}
       />
       {props.label}
@@ -196,7 +196,8 @@ describe('TerminalSettingsDialog', () => {
     expect(host.querySelector('[data-theme-appearance-group="dark"]')?.textContent).toContain('Dark');
     expect(host.querySelector('[data-theme-appearance-group="light"]')?.textContent).toContain('Light');
     expect(host.querySelector('[data-theme-appearance-group="dark"]')?.getAttribute('role')).toBe('group');
-    expect(host.querySelector('[data-theme-appearance-group="dark"]')?.getAttribute('aria-labelledby')).toBe('terminal-theme-dark-group-label');
+    const darkGroupLabel = host.querySelector('[data-theme-appearance-group="dark"]')?.getAttribute('aria-labelledby');
+    expect(document.getElementById(darkGroupLabel!)?.textContent).toBe('Dark');
 
     const studioPaperInput = themeRadios.find((input) => input.value === 'studioPaper')!;
     const studioPaperPreview = studioPaperInput.closest('label')?.querySelector('[aria-hidden="true"]') as HTMLElement | null;
@@ -214,7 +215,7 @@ describe('TerminalSettingsDialog', () => {
     expect(Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Iosevka'))?.getAttribute('aria-pressed')).toBe('true');
     await vi.waitFor(() => expect(jetbrains.disabled).toBe(false));
     jetbrains.click();
-    const activityBorderInput = host.querySelector('input[aria-label="Shown"]') as HTMLInputElement | null;
+    const activityBorderInput = host.querySelector('input[aria-label="Show running and active status"]') as HTMLInputElement | null;
     activityBorderInput!.checked = false;
     activityBorderInput!.dispatchEvent(new Event('change', { bubbles: true }));
     const fontSizeInput = host.querySelector('[data-testid="font-size-input"]') as HTMLInputElement | null;
@@ -325,7 +326,8 @@ describe('TerminalSettingsDialog', () => {
     expect(dialog?.className).toContain('h-full');
     expect(dialog?.className).toContain('w-full');
     expect(host.textContent).toContain('Mobile input');
-    expect(host.textContent).toContain('Only one mode can be active at a time.');
+    expect(host.textContent).toContain('Keeps terminal taps focused on the terminal surface');
+    expect(host.textContent).toContain('Focuses the native terminal input');
     expect(host.textContent).toContain('Floe suggestions');
     expect(host.textContent).toContain('platform text features');
 

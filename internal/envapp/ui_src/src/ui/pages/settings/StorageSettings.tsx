@@ -2,7 +2,7 @@ import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useI18n } from '../../i18n';
 import { fetchLocalApiJSON } from '../../services/localApi';
-import { CopyButton } from './SettingsPrimitives';
+import { CopyButton, SettingsSection } from './SettingsPrimitives';
 
 type StorageEntry = Readonly<{ id: string; path: string; kind: string; backup: string; bytes: number; complete: boolean; present: boolean }>;
 export function StorageSettings(props: { canAdmin: boolean; scope: string; openFlower: () => void; openTooling: () => void }) {
@@ -28,12 +28,7 @@ export function StorageSettings(props: { canAdmin: boolean; scope: string; openF
   const label = (group: 'owners' | 'kinds' | 'backups', key: string) => i18n.t(`storage.${group}.${key}` as Parameters<typeof i18n.t>[0]);
   const size = (entry: StorageEntry) => `${entry.complete ? '' : '≥ '}${new Intl.NumberFormat(i18n.locale(), { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 }).format(entry.bytes / 1_000_000)}`;
   return (
-    <section class="min-w-0 space-y-3" aria-label={i18n.t('storage.title')}>
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <h3 class="text-sm font-semibold">{i18n.t('storage.title')}</h3>
-        <Button size="sm" variant="outline" disabled={!props.canAdmin || loading()} aria-busy={loading()} onClick={() => void load()}>{i18n.t(loading() ? 'storage.loading' : 'storage.inspect')}</Button>
-      </div>
-      <p class="text-xs leading-relaxed text-muted-foreground">{i18n.t('storage.scope')}</p>
+    <SettingsSection variant="page" title={i18n.t('storage.title')} description={i18n.t('storage.scope')} actions={<Button size="sm" variant="outline" disabled={!props.canAdmin || loading()} aria-busy={loading()} onClick={() => void load()}>{i18n.t(loading() ? 'storage.loading' : 'storage.inspect')}</Button>}>
       <Show when={!props.canAdmin}><p class="text-xs text-muted-foreground">{i18n.t('aiReadiness.storage.adminOnly')}</p></Show>
       <Show when={failed()}><p role="alert" class="text-xs text-destructive">{i18n.t('storage.failed')}</p></Show>
       <Show when={entries()}>{items => <ul class="divide-y divide-border rounded-lg border border-border">
@@ -49,6 +44,6 @@ export function StorageSettings(props: { canAdmin: boolean; scope: string; openF
         <Button size="sm" variant="outline" onClick={props.openTooling}>{i18n.t('storage.tooling')}</Button>
       </div>
       <p class="text-xs leading-relaxed text-muted-foreground">{i18n.t('storage.cleanup')}</p>
-    </section>
+    </SettingsSection>
   );
 }

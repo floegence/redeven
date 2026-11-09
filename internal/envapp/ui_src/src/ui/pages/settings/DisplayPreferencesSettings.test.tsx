@@ -10,7 +10,8 @@ import { readWorkbenchLocalPreferences, writeWorkbenchLocalPreferences, writeWor
 const state = vi.hoisted(() => ({ envID: (): string => 'env-first' }));
 vi.mock('../EnvContext', () => ({ useEnvContext: () => ({ env_id: () => state.envID() }) }));
 vi.mock('../../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async original => ({
+  ...await original<object>(),
   Select: (props: any) => <select aria-label={props.ariaLabel} value={props.value} onChange={event => props.onChange(event.currentTarget.value)}>{props.options.map((option: { value: string; label: string }) => <option value={option.value}>{option.label}</option>)}</select>,
 }));
 let host: HTMLDivElement, dispose: (() => void) | undefined;

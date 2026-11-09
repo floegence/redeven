@@ -23,6 +23,8 @@ let admin: () => boolean;
 let setAdmin: (value: boolean) => void;
 let loading: () => boolean;
 let setLoading: (value: boolean) => void;
+let settingsError: () => Error | null;
+let setSettingsError: (value: Error | null) => void;
 let fromFlower = false;
 const changes = vi.fn();
 const refresh = vi.fn(async () => undefined);
@@ -59,9 +61,9 @@ vi.mock('./EnvSettingsPageContext', async original => {
   const actual = await original<typeof import('./EnvSettingsPageContext')>();
   return { ...actual, EnvSettingsPageProvider: (props: { children: import('solid-js').JSX.Element }) => {
     const [searchQuery, setSearchQuery] = createSignal('');
-    const settings = Object.defineProperties(() => ({ runtime: { agent_home_dir: '/workspace', shell: '/bin/zsh' } }), { loading: { get: loading }, error: { value: null } });
+    const settings = Object.defineProperties(() => ({ runtime: { agent_home_dir: '/workspace', shell: '/bin/zsh' } }), { loading: { get: loading }, error: { get: settingsError } });
     const value = { env, protocol: { status: () => 'connected' }, activeSection: () => session.target()?.section ?? 'appearance', setActiveSection: () => {}, searchQuery, setSearchQuery,
-      settings, canAdmin: () => admin(), canInteract: () => !loading(), refreshSettingsPage: refresh, } as unknown as EnvSettingsPageContextValue;
+      settings, canAdmin: () => admin(), canInteract: () => !loading() && !settingsError(), refreshSettingsPage: refresh, } as unknown as EnvSettingsPageContextValue;
     return <actual.EnvSettingsPageCtx.Provider value={value}>{props.children}</actual.EnvSettingsPageCtx.Provider>;
   } };
 });
@@ -78,12 +80,59 @@ function mount(section: 'terminal' | 'ai' | 'runtime' | 'extensions' | 'browser'
   dispose = render(() => {
     session = createSettingsSession({ history: true });
     [loading, setLoading] = createSignal(false);
+    [settingsError, setSettingsError] = createSignal<Error | null>(null);
     [admin, setAdmin] = createSignal(true);
     if (!session.target()) session.open({ section });
-    return <I18nProvider><FloeProvider><TerminalSettingsAttachmentsProvider><LiveTerminalFixture /><SettingsPanelContext.Provider value={{ ...session, register: () => () => {} }}><EnvSettingsDialog session={session} panels={[]} renderPlugins={() => null} onThemeSourceChange={() => true} onShellThemeChange={() => true} /></SettingsPanelContext.Provider></TerminalSettingsAttachmentsProvider></FloeProvider></I18nProvider>;
+    return <I18nProvider><FloeProvider><TerminalSettingsAttachmentsProvider><LiveTerminalFixture /><SettingsPanelContext.Provider value={{ ...session, register: () => () => {} }}><EnvSettingsDialog session={session} panels={[]} onThemeSourceChange={() => true} onShellThemeChange={() => true} /></SettingsPanelContext.Provider></TerminalSettingsAttachmentsProvider></FloeProvider></I18nProvider>;
   }, host);
 }
-it.each([1440, 390])('places category navigation, refresh and close in one dialog header at %ipx', async width => {
+it('retries a failed generic settings read within the current domain category', async () => {
+  mount('appearance');
+  setSettingsError(new Error('Settings connection interrupted'));
+  await expect.element(page.getByRole('alert')).toHaveTextContent('Settings connection interrupted');
+  expect(document.querySelector('[data-floe-dialog-header] button[aria-label="Refresh"]')).toBeNull();
+  const retry = page.getByRole('button', { name: 'Retry', exact: true });
+  await expect.element(retry).toBeEnabled();
+  refresh.mockImplementationOnce(async () => { setLoading(true); });
+  await retry.click();
+  expect(refresh).toHaveBeenCalledOnce();
+  await expect.element(retry).toBeDisabled();
+  setLoading(false); setSettingsError(null);
+  await expect.element(page.getByRole('alert')).not.toBeInTheDocument();
+  expect(session.target()?.section).toBe('appearance');
+});
+it('dismisses from the backdrop without saving or losing a retained draft and restores focus', async () => {
+  const opener = document.createElement('button'); opener.textContent = 'Open settings';
+  const backgroundAction = vi.fn(); opener.addEventListener('click', backgroundAction);
+  opener.style.cssText = 'position: fixed; inset: 0;';
+  document.body.append(opener); opener.focus();
+  mount('terminal');
+  await expect.poll(() => document.querySelector('[data-terminal-history-settings] input')).not.toBeNull();
+  const field = document.querySelector<HTMLInputElement>('[data-terminal-history-settings] input')!;
+  await userEvent.fill(field, '2345');
+  expect(session.target()?.section).toBe('terminal');
+  await userEvent.click(document.querySelector<HTMLElement>('.floe-floating-backdrop')!, { position: { x: 5, y: 100 } });
+  await expect.poll(() => document.querySelectorAll('[role=dialog]').length).toBe(0);
+  await expect.poll(() => document.activeElement).toBe(opener);
+  expect(session.target()).toBeNull();
+  expect(new URL(location.href).searchParams.has('settings')).toBe(false);
+  expect(terminals.configure).not.toHaveBeenCalled();
+  expect(backgroundAction).not.toHaveBeenCalled();
+  session.open({ section: 'terminal' });
+  await expect.poll(() => field.checkVisibility()).toBe(true);
+  expect(document.querySelector('[data-terminal-history-settings] input')).toBe(field);
+  expect(field.value).toBe('2345');
+});
+it('dismisses only the top nested dialog when its backdrop is clicked', async () => {
+  mount('runtime');
+  await page.getByRole('button', { name: 'Add Root', exact: true }).click();
+  await expect.poll(() => document.querySelectorAll('[role=dialog]').length).toBe(2);
+  const backdrops = [...document.querySelectorAll<HTMLElement>('.floe-floating-backdrop')];
+  await userEvent.click(backdrops.at(-1)!, { position: { x: 5, y: 100 } });
+  await expect.poll(() => document.querySelectorAll('[role=dialog]').length).toBe(1);
+  expect(session.target()?.section).toBe('runtime');
+});
+it.each([1440, 390])('places category navigation and close in one dialog header at %ipx', async width => {
   await page.viewport(width, 1000);
   const opener = document.createElement('button'); opener.textContent = 'Open settings';
   document.body.append(opener); opener.focus();
@@ -96,11 +145,11 @@ it.each([1440, 390])('places category navigation, refresh and close in one dialo
   expect(dialog.querySelector('[data-floe-dialog-body] .redeven-settings-header')).toBeNull();
   const refreshButton = header.querySelector<HTMLButtonElement>('button[aria-label="Refresh"]')!;
   const closeButton = header.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!;
-  expect(refreshButton).not.toBeNull(); expect(closeButton).not.toBeNull();
+  expect(refreshButton).toBeNull(); expect(closeButton).not.toBeNull();
   expect(dialog.querySelectorAll(`#${CSS.escape(dialog.getAttribute('aria-labelledby')!)}`)).toHaveLength(1);
   expect(header.getBoundingClientRect().height).toBeLessThan(70);
   expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth);
-  expect(Math.abs(refreshButton.getBoundingClientRect().y - closeButton.getBoundingClientRect().y)).toBeLessThan(12);
+  expect(closeButton.getBoundingClientRect().bottom).toBeLessThanOrEqual(header.getBoundingClientRect().bottom);
   if (width < 768) {
     await choose('Settings', 'Terminal');
     await expect.poll(() => session.target()?.section).toBe('terminal');
@@ -108,8 +157,7 @@ it.each([1440, 390])('places category navigation, refresh and close in one dialo
   } else {
     expect(header.querySelector('.redeven-settings-breadcrumb')!.textContent).toContain('Appearance & Language');
   }
-  await userEvent.click(refreshButton); expect(refresh).toHaveBeenCalledTimes(1);
-  setLoading(true); await expect.poll(() => refreshButton.disabled).toBe(true);
+  expect(refresh).not.toHaveBeenCalled();
   await userEvent.click(closeButton);
   await expect.poll(() => document.querySelectorAll('[role="dialog"]').length).toBe(0);
   await expect.poll(() => document.activeElement).toBe(opener);
@@ -125,7 +173,7 @@ it.each([1440, 320])('fits a localized category and actions within the single he
   const header = document.querySelector<HTMLElement>('[data-floe-dialog-header]')!;
   const refreshButton = header.querySelector<HTMLElement>('button[aria-label="Aktualisieren"]')!;
   const closeButton = header.querySelector<HTMLElement>('button[aria-label="Schließen"]')!;
-  expect(refreshButton.checkVisibility()).toBe(true); expect(closeButton.checkVisibility()).toBe(true);
+  expect(refreshButton).toBeNull(); expect(closeButton.checkVisibility()).toBe(true);
   expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth);
   expect(header.getBoundingClientRect().height).toBeLessThan(70);
   expect(closeButton.getBoundingClientRect().right).toBeLessThanOrEqual(header.getBoundingClientRect().right);
@@ -140,13 +188,23 @@ it.each([1440, 320])('fits a localized category and actions within the single he
     expect(header.querySelector('.redeven-settings-breadcrumb')!.textContent).toContain('Darstellung & Sprache');
   }
 });
-it('keeps Back to Flower in the same dialog header', async () => {
+it('uses one close action without unrelated refresh or root back navigation', async () => {
   fromFlower = true; mount('appearance');
-  await expect.element(page.getByRole('button', { name: 'Back to Flower', exact: true })).toBeVisible();
-  const back = document.querySelector<HTMLButtonElement>('[aria-label="Back to Flower"]')!;
-  expect(back.closest('[data-floe-dialog-header]')).not.toBeNull();
-  await userEvent.click(back); expect(returnToFlower).toHaveBeenCalledTimes(1);
+  await expect.element(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+  const header = document.querySelector<HTMLElement>('[data-floe-dialog-header]')!;
+  expect(header.querySelector('[aria-label="Back to Flower"]')).toBeNull();
+  expect(header.querySelector('[aria-label="Refresh"]')).toBeNull();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect.poll(() => document.querySelectorAll('[role="dialog"]').length).toBe(0);
+  expect(returnToFlower).not.toHaveBeenCalled();
+});
+it('presents language, canvas and markdown as compact Floe setting rows', async () => {
+  mount('appearance');
+  await expect.element(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
+  const panel = document.querySelector('[data-testid="settings-section-appearance"]')!;
+  expect(panel.querySelector('[data-envapp-language-menu="inline"]')).toBeNull();
+  expect(panel.querySelectorAll('.floe-setting-row').length).toBeGreaterThanOrEqual(3);
+  expect(panel.querySelector('h1')).toBeNull();
 });
 it('retains actual terminal history drafts across categories, invalid resources and browser history', async () => {
   mount('terminal');

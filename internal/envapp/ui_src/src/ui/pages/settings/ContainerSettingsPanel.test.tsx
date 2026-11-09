@@ -3,6 +3,8 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ContainerSettingsPanel } from './ContainerSettingsPanel';
+import { SettingsPanelContext } from '../../../../../../settings_ui/src/SettingsPanelHost';
+import { createSettingsSession } from '../../../../../../settings_ui/src/settingsSession';
 import { ContainerOperationRejectedError, type ContainerOperation, type ContainerServiceConfiguration, type ContainerService } from '../../services/containerResourcesApi';
 import type { EnvResourceCacheAccess } from '../../services/envResourceCache';
 
@@ -15,6 +17,7 @@ vi.mock('../EnvContext', () => ({ useEnvContext: () => ({
   resourceCacheAccess: () => state.access(), env: () => ({ permissions: state.permissions() }), openSettings: state.open,
 }) }));
 vi.mock('./EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => state.access().phase === 'ready', canAdmin: () => state.permissions().can_admin }) }));
+vi.mock('./SettingsPrimitives', () => ({ SettingsResourceToolbar: (props: { label: string; children: import('solid-js').JSX.Element; actions?: import('solid-js').JSX.Element }) => <div aria-label={props.label}>{props.children}{props.actions}</div> }));
 vi.mock('../../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('../../services/containerResourcesApi', async original => ({
   ...await original<typeof import('../../services/containerResourcesApi')>(),
@@ -27,6 +30,9 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Select: (props: any) => <select aria-label={props.ariaLabel ?? props['aria-label']} value={props.value} disabled={props.disabled} onChange={event => props.onChange(event.currentTarget.value)}><option value="">{props.placeholder}</option>{props.options.map((option: any) => <option value={option.value}>{option.label}</option>)}</select>,
   Tabs: (props: any) => <div role="tablist">{props.items.map((item: any) => <button type="button" role="tab" aria-selected={props.activeId === item.id} onClick={() => props.onChange(item.id)}>{item.label}</button>)}</div>,
   Tag: (props: any) => <span>{props.children}</span>,
+  SettingsSection: (props: any) => <section class={props.class} aria-label={props['aria-label']}><header><h2>{props.title}</h2>{props.actions}</header>{props.children}</section>,
+  SettingsList: (props: any) => <div>{props.children}</div>,
+  SettingRow: (props: any) => <div><span>{props.title}</span>{props.control}{props.children}</div>,
 }));
 vi.mock('../../widgets/TextFilePreviewPane', () => ({
   TextFilePreviewPane: (props: any) => <textarea aria-label={props.path} data-source-editor value={props.draftText} onInput={event => props.onDraftChange(event.currentTarget.value)} />,
@@ -45,6 +51,7 @@ const configuration = (revision = 'a'): ContainerServiceConfiguration => ({
 });
 const preflight = { method: 'container.services.configuration.update', resource_kind: 'container_service', request_hash: 'request', plan_hash: 'plan', plan: { summary: ['Review configuration update'], risk_flags: [] } };
 const operation = (requestID: string, id: string, phase: string) => ({ request_id: requestID, operation_id: id, state: phase } as ContainerOperation);
+let panelSession: ReturnType<typeof createSettingsSession>;
 let host: HTMLDivElement, dispose: (() => void) | undefined;
 let setAccess!: (value: EnvResourceCacheAccess) => void, setPermissions!: (value: ReturnType<typeof state.permissions>) => void, setTarget!: (value: string | undefined) => void;
 const settle = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
@@ -66,14 +73,15 @@ async function mount(target: string | undefined = service.service_id) {
     const [access, updateAccess] = createSignal<EnvResourceCacheAccess>({ phase: 'ready', generation: 0 }); state.access = access; setAccess = updateAccess;
     const [permissions, updatePermissions] = createSignal({ can_read: true, can_write: true, can_execute: true, can_admin: true }); state.permissions = permissions; setPermissions = updatePermissions;
     const [resource, updateTarget] = createSignal(target); setTarget = updateTarget;
-    return <ContainerSettingsPanel resource={resource()} />;
+    panelSession = createSettingsSession(); panelSession.open({ section: 'containers', resource: target }); panelSession.setPresent(true);
+    return <SettingsPanelContext.Provider value={{ ...panelSession, register: () => () => {} }}><ContainerSettingsPanel resource={resource()} /></SettingsPanelContext.Provider>;
   }, host); await settle();
 }
 const visible = (element: Element) => !element.closest('[hidden]');
 const button = (label: string) => [...host.querySelectorAll<HTMLButtonElement>('button')].find(item => visible(item) && (item.textContent === label || item.getAttribute('aria-label') === label))!;
 const save = () => button('containers.services.save');
 const run = () => button('containers.actions.run');
-const sourceRefresh = () => host.querySelector<HTMLButtonElement>('.container-service-config-content button')!;
+const sourceRefresh = () => host.querySelector<HTMLButtonElement>('.container-settings-configuration > header button')!;
 const editor = () => [...host.querySelectorAll<HTMLTextAreaElement>('textarea[data-source-editor]')].find(visible)!;
 function edit(value: string) { editor().value = value; editor().dispatchEvent(new Event('input', { bubbles: true })); }
 async function selectSource(source: 'engine' | 'docker_cli') { button(source === 'engine' ? 'containers.services.engineConfiguration' : 'containers.services.dockerCLI').click(); await settle(); }
@@ -221,4 +229,45 @@ it('does not treat an exact request lookup failure as safe to retry', async () =
   await mount(); edit('{"engine":"draft"}'); await review(); run().click(); await settle();
   state.operations.mockRejectedValue(new Error('404 not found')); sourceRefresh().click(); await settle();
   expect(save().disabled).toBe(true); expect(editor().value).toBe('{"engine":"draft"}'); expect(state.create).toHaveBeenCalledOnce();
+});
+
+it('rejects a retained container Save after another target is selected', async () => {
+ await mount(); const stale=save(); setTarget('missing'); await settle(); stale.click(); await settle(); expect(state.preflight).not.toHaveBeenCalled();
+});
+it('invalidates a retained container review after another target is selected', async () => {
+ await mount(); await review(); const stale=run(); setTarget('missing'); await settle(); stale.click(); await settle(); expect(state.create).not.toHaveBeenCalled();
+});
+it('does not create review after delayed preflight loses current target', async () => {
+ await mount(); const pending=deferred<typeof preflight>(); state.preflight.mockReturnValueOnce(pending.promise); save().click(); setTarget('missing'); await settle(); pending.resolve(preflight); await settle();
+ expect(host.textContent).not.toContain('containers.actions.run');
+});
+
+it('retires delayed preflight intent after leaving and returning to the same target', async () => {
+  await mount(); const pending = deferred<typeof preflight>(); state.preflight.mockReturnValueOnce(pending.promise);
+  save().click(); setTarget('missing'); await settle(); setTarget(service.service_id); await settle();
+  pending.resolve(preflight); await settle();
+  expect(button('containers.actions.run')).toBeUndefined(); expect(state.create).not.toHaveBeenCalled();
+  expect(save().disabled).toBe(false);
+});
+
+for (const retirement of ['category', 'closed'] as const) it(`retires container preflight after ${retirement} ABA`, async () => {
+  await mount(); edit('{"engine":"unsaved"}');
+  const pending = deferred<typeof preflight>(); state.preflight.mockReturnValueOnce(pending.promise); save().click();
+  if (retirement === 'category') panelSession.open({ section: 'terminal' }); else panelSession.setPresent(false);
+  await settle();
+  if (retirement === 'category') panelSession.open({ section: 'containers', resource: service.service_id }); else panelSession.setPresent(true);
+  await settle(); pending.resolve(preflight); await settle();
+  expect(run()).toBeUndefined(); expect(state.create).not.toHaveBeenCalled();
+  expect(editor().value).toBe('{"engine":"unsaved"}'); expect(save().disabled).toBe(false);
+});
+for (const retirement of ['category', 'closed'] as const) it(`settles admitted container operation after ${retirement}`, async () => {
+  await mount(); edit('{"engine":"saved"}'); await review();
+  const pending = deferred<ContainerOperation>(); state.create.mockReturnValueOnce(pending.promise); run().click(); await settle();
+  expect(state.create).toHaveBeenCalledOnce(); const requestID = state.create.mock.lastCall![2];
+  if (retirement === 'category') panelSession.open({ section: 'terminal' }); else panelSession.setPresent(false);
+  await settle(); state.configuration.mockResolvedValue(configuration('b')); pending.resolve(operation(requestID, 'accepted', 'queued')); await settle();
+  expect(state.subscribe).toHaveBeenCalledOnce();
+  if (retirement === 'category') panelSession.open({ section: 'containers', resource: service.service_id }); else panelSession.setPresent(true);
+  await settle(); expect(editor().value).toBe('{"engine":"b"}'); expect(save().disabled).toBe(false);
+  expect(state.create).toHaveBeenCalledOnce();
 });

@@ -37,9 +37,9 @@
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
-    "@floegence/floe-webapp-boot": "0.101.1",
-    "@floegence/floe-webapp-core": "0.101.1",
-    "@floegence/floe-webapp-protocol": "0.101.1",
+    "@floegence/floe-webapp-boot": "0.101.3",
+    "@floegence/floe-webapp-core": "0.101.3",
+    "@floegence/floe-webapp-protocol": "0.101.3",
     "@floegence/floebrowser": "0.1.28",
     "@floegence/floeterm-terminal-web": "0.20.0",
     "@floegence/flowersec-core": "5.12.0",
@@ -61,13 +61,13 @@
     "marked": "^17.0.2",
     "marked-footnote": "^1.4.0",
     "monaco-editor": "^0.57.0",
+    "pele": "1.13.0",
     "quickjs-emscripten": "0.32.0",
     "semver": "^7.8.5",
     "shiki": "^3.22.0",
     "solid-js": "^1.9.17",
     "solid-motionone": "^1.0.4",
-    "thinking-orbs": "0.3.1",
-    "pele": "1.13.0"
+    "thinking-orbs": "0.3.1"
   },
   "overrides": {
     "@floegence/flowersec-core": "5.12.0",

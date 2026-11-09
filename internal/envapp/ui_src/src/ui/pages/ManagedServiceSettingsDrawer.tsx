@@ -1,4 +1,4 @@
-import { HostedSettingsPanel } from '../../../../../settings_ui/src/SettingsPanelHost';
+import { HostedSettingsPanel, useSettingsPanelHost } from '../../../../../settings_ui/src/SettingsPanelHost';
 import './managed-service-settings.css';
 import { redevenSegmentedItemClass } from '../utils/redevenSurfaceRoles';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
@@ -10,6 +10,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createUniqueId,
   lazy,
   on,
   onCleanup,
@@ -30,6 +31,7 @@ import {
   DirectoryPicker,
   Input,
   Textarea,
+  Tabs,
 } from "@floegence/floe-webapp-core/ui";
 
 import { useEnvFilesystemPicker } from '../services/filesystemPicker';
@@ -273,6 +275,9 @@ export function ManagedServiceSettingsDrawer(props: {
       `webServices.managed.settings.${key}` as EnvAppTranslationKey,
       values,
     );
+  const settingsHost = useSettingsPanelHost();
+  const embedded = () => props.embedded || !!settingsHost;
+  const sectionDOMID = createUniqueId();
   const sectionTitle = (id: SectionID) => settingText(`section.${id}`);
   const [loaded, setLoaded] = createSignal<SettingsView | null>(null);
   const [draft, setDraft] = createSignal<SettingsView | null>(null);
@@ -719,7 +724,9 @@ export function ManagedServiceSettingsDrawer(props: {
         bodyDescription={settingText("description")}
       >
 {body}</EnvAppDrawer>)}>
-        <div class="flex min-h-0 h-full flex-col"><div class="min-h-0 flex-1 overflow-auto">
+        {/* IMPORTANT: The global category owns scrolling. Retain this exact editor
+            and its draft, but never nest a full drawer layout inside Settings. */}
+        <div class={embedded() ? "managed-settings-embedded" : "flex min-h-0 h-full flex-col"}><div class={embedded() ? "min-w-0" : "min-h-0 flex-1 overflow-auto"}>
         <Show
           when={draft()}
           fallback={
@@ -736,7 +743,7 @@ export function ManagedServiceSettingsDrawer(props: {
               class="managed-settings-layout flex min-h-0 flex-1 overflow-hidden"
               data-testid="managed-service-settings" aria-busy={loading()}
             >
-              <nav
+              <Show when={embedded()} fallback={              <nav
                 class="managed-settings-navigation"
                 aria-label={settingText("sections")}
               >
@@ -758,7 +765,11 @@ export function ManagedServiceSettingsDrawer(props: {
                   )}
                 </For>
               </nav>
-              <div class="managed-settings-content">
+}><Tabs ariaLabel={settingText("sections")} class="managed-settings-tabs" activeId={section()}
+                items={sections.filter(sectionVisible).map(id => ({ id, label: sectionTitle(id), domId: `${sectionDOMID}-${id}`, panelId: `${sectionDOMID}-content` }))}
+                onChange={id => setSection(id as SectionID)} features={{ indicator: { mode: 'slider' }, containerBorder: true, scrollButtons: 'auto' }} />
+              </Show>
+              <div class="managed-settings-content" id={`${sectionDOMID}-content`} role={embedded() ? "tabpanel" : undefined} aria-labelledby={embedded() ? `${sectionDOMID}-${section()}` : undefined}>
                 <Show when={resolved().deployment === "compose"}>
                   <div
                     class="mb-4 flex items-center gap-1 border-b pb-2"
@@ -844,9 +855,6 @@ export function ManagedServiceSettingsDrawer(props: {
                             }, false)
                           }
                         />
-                        <span class="mt-1 block min-h-4 text-[11px] text-muted-foreground">
-                          {settingText("nameHelp")}
-                        </span>
                       </label>
                       <label>
                         <span class="mb-1 block text-xs font-medium">
@@ -869,9 +877,9 @@ export function ManagedServiceSettingsDrawer(props: {
                             {settingText("desktopLoopback")}
                           </option>
                         </select>
-                        <span class="mt-1 block min-h-4 text-[11px] text-muted-foreground">
+                        <Show when={resolved().access_mode === 'desktop_loopback'}><span class="mt-1 block min-h-4 text-[11px] text-muted-foreground">
                           {settingText("accessModeHelp")}
-                        </span>
+                        </span></Show>
                       </label>
                     </div>
                     <label class="managed-settings-field">
@@ -888,9 +896,6 @@ export function ManagedServiceSettingsDrawer(props: {
                           }, false)
                         }
                       />
-                      <span class="mt-1 block min-h-4 text-[11px] text-muted-foreground">
-                        {settingText("descriptionHelp")}
-                      </span>
                     </label>
                     <For
                       each={resolved().locked?.filter(

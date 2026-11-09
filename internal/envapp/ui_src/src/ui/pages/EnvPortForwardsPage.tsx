@@ -1,3 +1,5 @@
+import { SettingsSelect as Select } from './settings/SettingsSelect';
+import { SettingsResourceToolbar } from './settings/SettingsPrimitives';
 import {createServiceTemplateMarket} from './serviceTemplateMarket';
 import type { MarketTemplate } from '@floegence/redeven-service-templates';
 import { useSettingsPanelHost, useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
@@ -3726,7 +3728,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
   });
 
   return (
-    <div ref={pageRoot} {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('web-services flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
+    <div ref={pageRoot} {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={props.settingsOnly ? 'redeven-settings-stack' : cn('web-services flex h-full min-h-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'))}>
       <Show when={props.settingsOnly} fallback={<>
       <WebServicesHeader actions={<>
 
@@ -4008,11 +4010,15 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
         </div>
       </main>
 
-      </>}><div class="space-y-3 p-4" hidden={Boolean(managedSettingsService())}><h1 class="text-lg font-semibold">{i18n.t('settings.nav.services')}</h1>
-        <Button variant="outline" onClick={() => void loadManaged(false)}>{i18n.t('common.actions.refresh')}</Button>
-        <For each={managedState()}>{service => <Button class="w-full justify-start" variant="outline" onClick={() => { setManagedSettingsService(service); ctx.openSettings('services', { resource: service.service_id }); }}>{service.name}</Button>}</For>
+      </>}><SettingsResourceToolbar label={i18n.t('webServices.collection.title')} actions={<Button variant="ghost" size="sm" disabled={managedLoading()} onClick={() => { void loadManaged(false); setManagedSettingsRevision(value => value + 1); }}><RefreshIcon class="size-3.5" />{i18n.t('common.actions.refresh')}</Button>}>
+        <Select section="services" ariaLabel={i18n.t('webServices.collection.title')} value={settingsHost?.target()?.resource ?? ''}
+          options={[{ value: '', label: i18n.t('webServices.collection.title') }, ...managedState().map(service => ({ value: service.service_id, label: service.name })), ...(settingsHost?.target()?.resource && !managedSettingsService() ? [{ value: settingsHost.target()!.resource!, label: i18n.t('settings.targetUnavailable'), disabled: true }] : [])]}
+          onChange={id => ctx.openSettings('services', { resource: id || undefined })} />
+      </SettingsResourceToolbar><Show when={!managedSettingsService()}>
+        <Show when={!managedLoading() && !managedState().length}><p role="status" class="text-xs text-muted-foreground">{i18n.t('webServices.empty.title')}</p></Show>
+        <For each={managedState()}>{service => <Button class="w-full justify-between" variant="outline" onClick={() => { setManagedSettingsService(service); ctx.openSettings('services', { resource: service.service_id }); }}><span class="truncate">{service.name}</span><ChevronRight class="size-4 shrink-0" /></Button>}</For>
         <Show when={settingsHost?.target()?.resource && !managedSettingsService()}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show>
-      </div></Show>
+      </Show></Show>
       {/* Create dialog */}
       <CreateForwardDialog open={createOpen()} loading={createLoading()} onOpenChange={setCreateOpen} onCreate={doCreate} />
       <ForwardMetadataDialog
@@ -4078,7 +4084,7 @@ export function EnvPortForwardsPage(props: { registerPageContext?: FlowerPageCon
       <Show when={props.settingsOnly || !settingsHost}><For each={props.settingsOnly ? visitedSettingsServices() : managedSettingsService() ? [managedSettingsService()!] : []}>{captured => {
         const current = () => props.settingsOnly ? managedState().find(service => service.service_id === captured.service_id) : managedSettingsService();
         const active = () => current()?.service_id === captured.service_id && managedSettingsService()?.service_id === captured.service_id && (!props.settingsOnly || (!!settingsHost?.present() && settingsHost.target()?.section === 'services' && settingsHost.target()?.resource === captured.service_id));
-        return <div hidden={!active()} inert={!active()} class="h-full min-h-0"><ManagedServiceSettingsDrawer
+        return <div hidden={!active()} inert={!active()} class={props.settingsOnly ? "min-w-0" : "h-full min-h-0"}><ManagedServiceSettingsDrawer
         refreshRevision={managedSettingsRevision()}
         embedded={props.settingsOnly}
         open={active()}

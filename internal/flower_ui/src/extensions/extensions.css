@@ -8,14 +8,15 @@
 .flower-extensions-header { display: flex; align-items: center; gap: 10px; padding: 9px 20px; flex-shrink: 0; }
 .flower-extensions-header h1 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -.02em; line-height: 1.4; white-space: nowrap; }
 .flower-extensions-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: 0 0 auto; }
-.flower-extensions-tabs { display: flex; gap: 24px; padding-inline: 24px; border-bottom: 1px solid var(--extensions-divider); flex-shrink: 0; }
-.flower-extensions-tabs > button { position: relative; display: flex; justify-content: center; align-items: center; gap: 8px; min-width: 88px; min-height: 44px; padding: 10px 8px 12px; cursor: pointer; color: var(--muted-foreground); font-size: 13px; font-weight: 550; white-space: nowrap; }
-.flower-extensions-tabs > button[aria-selected='true'] { color: var(--foreground); font-weight: 650; }
-.flower-extensions-tabs > button[aria-selected='true']::after { content: ''; position: absolute; height: 2px; bottom: -1px; inset-inline: 0; border-radius: 2px; background: var(--foreground); }
-.flower-extensions-tabs > button:hover { color: var(--foreground); background: color-mix(in srgb, var(--muted) 40%, transparent); }
-.flower-extensions-tabs > button:focus-visible { outline: 2px solid var(--ring); outline-offset: -4px; border-radius: 6px; }
+.flower-extensions-navigation { display: flex; align-items: center; min-width: 0; padding-inline: var(--floe-pad-panel); gap: var(--floe-gap-control); flex-shrink: 0; }
+.flower-extensions-tabs { min-width: 0; flex: 1; }
+.flower-extensions-tabs [role='tab'] { min-height: 44px; }
 .flower-extensions-content { overflow: auto; min-height: 0; flex: 1; scrollbar-gutter: stable; }
 .flower-extensions-content > [role='tabpanel'] { width: 100%; max-width: 1440px; margin-inline: auto; padding: 18px 24px 24px; }
+.flower-extensions[data-presentation='embedded'] { height: auto; background: transparent; }
+.flower-extensions[data-presentation='embedded'] .flower-extensions-navigation { padding-inline: 0; }
+.flower-extensions[data-presentation='embedded'] .flower-extensions-content { flex: none; overflow: visible; scrollbar-gutter: auto; }
+.flower-extensions[data-presentation='embedded'] .flower-extensions-content > [role='tabpanel'] { max-width: none; margin: 0; padding: var(--floe-gap-section) 0 0; }
 .flower-extension-section { min-width: 0; font-size: var(--floe-type-body); }
 .flower-extension-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-shrink: 1; max-width: 100%; margin-left: auto; }
 .flower-extension-empty-actions { display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -85,8 +86,7 @@
 .flower-extension-inset { background: var(--muted); border-color: var(--border); }
 @container flower-extensions (width < 740px) {
  .flower-extensions-header { padding: 8px 12px; gap: 5px; flex-wrap: wrap; }
- .flower-extensions-tabs { gap: 12px; padding-inline: 12px; }
- .flower-extensions-tabs > button { flex: 1; min-width: 0; padding-inline: 8px; }
+ .flower-extensions-navigation { padding-inline: var(--floe-pad-group); }
  .flower-extensions-content > [role='tabpanel'] { padding: 14px 12px 20px; }
  .flower-extension-row-main { grid-template-columns: var(--extension-disclosure-width) minmax(0, 1fr) auto; gap: 4px 7px; padding: 9px 8px; }
  .flower-extension-disclosure { grid-column: 1; grid-row: 1 / 3; }

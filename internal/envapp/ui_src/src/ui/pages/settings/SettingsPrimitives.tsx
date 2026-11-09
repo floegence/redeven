@@ -12,11 +12,12 @@ import {
   type TagProps,
 } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../../utils/clipboard';
-import { For, Show, createMemo, createSignal, onMount, type JSX } from 'solid-js';
+import { For, Show, children, createMemo, createSignal, createUniqueId, onMount, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, Check } from '@floegence/floe-webapp-core/icons';
 import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
 import { useI18n } from '../../i18n';
+import { useSettingsPanelHost } from '../../../../../../settings_ui/src/SettingsPanelHost';
 
 export type ViewMode = 'ui' | 'json';
 
@@ -99,7 +100,7 @@ export function AutoSaveIndicator(props: { dirty: boolean; saving: boolean; erro
 
 export interface SettingsSectionProps {
   variant?: 'page' | 'section';
-  icon: (props: { class?: string }) => JSX.Element;
+  icon?: (props: { class?: string }) => JSX.Element;
   title: string;
   description?: string;
   badge?: string;
@@ -112,6 +113,13 @@ export interface SettingsSectionProps {
 
 export function SettingsSection(props: SettingsSectionProps) {
   const i18n = useI18n();
+  const host = useSettingsPanelHost();
+  // IMPORTANT: Feedback actions may contain JSX. Evaluate them under this
+  // owner before the published indicator reads entries from a click handler.
+  const feedback = createMemo(() => props.feedback);
+  // IMPORTANT: Resolve JSX slots once; presence checks cannot construct a
+  // second action tree with independent effects or portalled controls.
+  const actions = children(() => props.actions);
   let actionsRef: HTMLDivElement | undefined;
   return (
     <FloeSettingsSection
@@ -119,14 +127,20 @@ export function SettingsSection(props: SettingsSectionProps) {
         state: { description: props.description, ...(props.error ? { error: props.error } : {}) } }))}
       class="redeven-settings-section"
       data-settings-card={props.title}
-      variant={props.variant}
+      // IMPORTANT: The dialog header exclusively owns category identity. Use
+      // Floe's public heading contract, not CSS that hides subgroup headings
+      // or removes descriptions, feedback, badges, actions or accessible names.
+      showHeading={!(host && props.variant === 'page')}
+      variant={host && props.variant === 'page' ? 'section' : props.variant}
       title={props.title}
       description={props.description}
-      actions={<Show when={props.actions || props.feedback !== undefined}><div ref={actionsRef} tabIndex={-1} class="flex flex-wrap items-center gap-2">
-        <Show when={props.feedback !== undefined}>
-          <FeedbackIndicator label={props.title} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => actionsRef} entries={props.feedback ?? []} />
+      actions={<Show when={actions() || feedback()?.length}><div ref={actionsRef} tabIndex={-1} class="flex flex-wrap items-center gap-2">
+        {/* IMPORTANT: Reserve Floe's feedback slot within an existing action row
+            so errors cannot move the editor. The outer guard still omits empty headers. */}
+        <Show when={feedback()}>
+          <FeedbackIndicator label={props.title} closeLabel={i18n.t('common.actions.close')} restoreFocus={() => actionsRef} entries={feedback() ?? []} />
         </Show>
-        {props.actions}
+        {actions()}
       </div></Show>}
       badge={<Show when={props.badge}><Tag variant={settingsTagVariant(props.badgeVariant ?? 'default')} tone="soft" size="sm">{props.badge}</Tag></Show>}
     >
@@ -147,6 +161,20 @@ export function FieldLabel(props: { children: string; hint?: string }) {
       </Show>
     </div>
   );
+}
+
+/** Product resource identity; published Floe controls own selection and focus. */
+export function SettingsResourceToolbar(props: { label: string; children: JSX.Element; actions?: JSX.Element }) {
+  const labelID = createUniqueId();
+  const actions = children(() => props.actions);
+  // IMPORTANT: This is presentation only. Resource selection and refresh stay
+  // with their exact domain owner; never substitute the global settings fetch.
+  return <div class="redeven-settings-resource-toolbar" role="group" aria-labelledby={labelID}>
+    <div class="redeven-settings-resource-field"><span id={labelID} class="redeven-settings-resource-label">{props.label}</span>
+      <div class="redeven-settings-resource-control">{props.children}</div>
+    </div>
+    <Show when={actions()}><div class="redeven-settings-resource-actions">{actions()}</div></Show>
+  </div>;
 }
 
 export function CodeBadge(props: { children: string }) {

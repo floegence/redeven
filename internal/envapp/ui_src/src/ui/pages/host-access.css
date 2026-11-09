@@ -40,17 +40,26 @@
 @media(max-width:380px){.host-access-permission{grid-template-columns:44px minmax(0,1fr);column-gap:10px;row-gap:2px;}.host-access-permission-visual{grid-row:span 2;width:44px;}.host-access-permission-scene{width:44px;}.host-access-permission>span:last-child{grid-column:2;margin-left:0;}}
 @media(prefers-reduced-motion:reduce),(forced-colors:active){.host-access-choice:is(:hover,:focus-within) .host-access-transfer{animation:none;}}
 @media(forced-colors:active){.host-access-art-muted{stroke:GrayText;opacity:1;}.host-access-art-selected,.host-access-art-state[data-state]{stroke:CanvasText;}.host-access-art-paper{fill:Canvas;}.host-access-art-tint{fill:Canvas;}}
-/* Settings groups are actionable feature summaries, not navigation cards. */
-.host-access-settings{display:grid;gap:20px;}
-.host-access-feature-settings{min-width:0;padding:18px;border:1px solid var(--border);border-radius:var(--floe-radius-group);}
-.host-access-feature-heading{display:flex;align-items:center;gap:16px;}
-.host-access-feature-heading>.host-access-feature-mark{width:60px;height:48px;flex-shrink:0;}
-.host-access-feature-copy{flex:1;min-width:0;}
-.host-access-feature-title{display:flex;align-items:center;justify-content:space-between;gap:6px 12px;flex-wrap:wrap;}
-.host-access-feature-title>.host-access-state{font-size:12px;line-height:1.5;max-width:100%;overflow-wrap:anywhere;}
-.host-access-feature-heading h3{font-size:15px;font-weight:600;line-height:1.5;}
-.host-access-feature-heading p,.host-access-local-note,.host-access-ready{font-size:13px;line-height:1.6;color:var(--muted-foreground);}
-.host-access-feature-settings .host-access-management{border:0;padding:0;margin:12px 0 0 76px;gap:12px;}
+/* IMPORTANT: Feature controls use the same published SettingsList/SettingRow
+   surface, typography and spacing as scalar preferences. Only action layout is
+   product-specific; never restore a second card/row design for these switches. */
+.host-access-settings{display:grid;gap:24px;}
+.host-access-feature-settings{min-width:0;}
+.host-access-feature-group>.host-access-feature-settings>.floe-setting-row{border:0;border-radius:0;background:transparent;}
+.host-access-feature-group>.host-access-feature-settings+.host-access-feature-settings{border-top:1px solid var(--border);}
+.host-access-feature-control{display:flex;align-items:center;gap:12px;}
+.host-access-feature-more{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:var(--floe-radius-md);color:var(--muted-foreground);}
+.host-access-feature-more:hover{background:var(--muted);color:var(--foreground);}
+.host-access-confirm-target{font-size:var(--floe-type-control);font-weight:500;margin-bottom:8px;}
+.host-access-feature-row .floe-setting-row__main{flex-direction:row;align-items:center;}
+.host-access-feature-row .floe-setting-row__control{width:auto;flex-shrink:0;}
+@media(max-width:480px){
+ .host-access-feature-control{gap:8px;}
+ .host-access-feature-more{width:40px;height:40px;}
+ .host-access-feature-row:has(.host-access-feature-control>button) .floe-setting-row__main{flex-direction:column;align-items:stretch;}
+ .host-access-feature-control>button{flex:1;}
+}
+@media(pointer:coarse){.host-access-feature-more{width:44px;height:44px;}}
 .host-access-state-summary:has(>.host-access-state){gap:8px;}
 .host-access-state::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;margin-inline-end:7px;background:var(--muted-foreground);}
 .host-access-state[data-state=enabled]::before{background:var(--redeven-status-success-foreground);}
@@ -60,7 +69,7 @@
 .host-access-system-row>div{display:grid;gap:3px;}
 .host-access-system-row strong{font-weight:500;color:var(--foreground);}
 .host-access-back{margin-bottom:16px;}
-@media(max-width:380px){.host-access-feature-settings{padding:14px;}.host-access-feature-heading{gap:12px;align-items:flex-start;}.host-access-feature-heading>.host-access-feature-mark{width:48px;height:40px;}.host-access-feature-settings .host-access-management{margin-inline-start:0;}.host-access-system-row{flex-wrap:wrap;}}
+@media(max-width:380px){.host-access-system-row{flex-wrap:wrap;}}
 
 .host-access-state[data-state=enabled][data-ready=false]::before{background:var(--redeven-status-warning-foreground);}
 

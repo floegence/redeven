@@ -1,7 +1,7 @@
-import { HostedSettingsPanel } from '../../settings_ui/src/SettingsPanelHost';
+import { HostedSettingsPanel, useSettingsPanelHost } from '../../settings_ui/src/SettingsPanelHost';
 import { createEffect, createMemo, createSignal, createUniqueId, For, on, onCleanup, Show } from 'solid-js';
 import { Button, Dialog, StableText } from '@floegence/floe-webapp-core/ui';
-import { ChevronRight, Globe, Info, MonitorPointer, Plus, Refresh, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
+import { ChevronLeft, ChevronRight, Globe, Info, MonitorPointer, Plus, Refresh, Settings, Shield, Sparkles } from '@floegence/floe-webapp-core/icons';
 import type { FlowerManagedProfile, FlowerComputerAccess, FlowerComputerCapability, FlowerComputerEnvironment, FlowerComputerInventory, FlowerSurfaceAdapter } from './contracts/flowerSurfaceContracts';
 import type { FlowerComputerCopy } from './computerUseCopy';
 import { FlowerManagedBrowser } from './FlowerManagedBrowser';
@@ -22,6 +22,8 @@ export function FlowerComputerConnections(props: {
   onInstallDesktopWithFlower?: (environment: FlowerComputerEnvironment) => Promise<void>;
   desktopRepairPending?: boolean;
 }) {
+  const settingsHost = useSettingsPanelHost();
+  const embeddedPresentation = () => props.embedded || !!settingsHost;
   const capabilityID = createUniqueId();
   const [page, setPage] = createSignal<Page>('overview');
   const [inventory, setInventory] = createSignal<FlowerComputerInventory>();
@@ -161,6 +163,11 @@ export function FlowerComputerConnections(props: {
     return kind === 'google_chrome' ? 'chrome' : kind === 'chromium' || kind === 'chromium_snap' ? 'chromium' : undefined;
   };
   const capabilityTone = (state?: string) => state === 'ready' ? 'positive' : state === 'permission_required' || state === 'setup_required' ? 'attention' : 'neutral';
+  // IMPORTANT: Embedded category roots have no parent page. Back navigates an
+  // actual browser subpage; it must never close Settings or invent a root exit.
+  const rootPage = () => props.installationOnly ? 'managed' : props.desktopSetup ? 'diagnostics' : 'overview';
+  const embeddedBack = () => embeddedPresentation() && !props.connectionOnly && page() !== rootPage();
+  const back = () => go(page() === 'setup' ? 'chrome' : rootPage());
   return <HostedSettingsPanel embedded={props.embedded} target={{ section: 'browser', resource: props.threadID || undefined }} open={props.open} onClose={() => props.onOpenChange(false)}
     fallback={body => (<Dialog open={props.open} onOpenChange={props.onOpenChange}
     title={<span class="flower-computer-title"><Show when={page() === 'chrome' || page() === 'setup' || props.connectionOnly} fallback={<Show when={page() === 'managed' || (page() === 'diagnostics' && diagnostic() === 'managed')} fallback={<MonitorPointer aria-hidden="true" />}><FlowerComputerBrandIcon kind="chromium" /></Show>}><FlowerComputerBrandIcon kind="chrome" /></Show>{title()}</span>}
@@ -168,7 +175,10 @@ export function FlowerComputerConnections(props: {
     contentClass={`flower-computer-dialog-body${page() === 'managed' ? ' flower-computer-managed-content' : ''}`}
     >
 {body}</Dialog>)}>
-    <div class="flower-computer-content">
+    <div class="flower-computer-content" data-presentation={embeddedPresentation() ? 'embedded' : 'standalone'}>
+    <Show when={embeddedBack()}><div class="flower-computer-subpage-navigation" data-computer-subpage-navigation>
+      <Button size="sm" variant="ghost" icon={ChevronLeft} onClick={back}>{props.copy.back}</Button><h3>{title()}</h3>
+    </div></Show>
     <Show when={!props.connectionOnly} fallback={<Show when={management()?.loadExtensionStatus && management()?.setupExtension && management()?.openExtension && props.adapter.canMutate !== false} fallback={<p role="alert">{props.copy.setupRequired}</p>}>
       <Show when={guideKey()} keyed>{_key => <FlowerChromeConnection onRemoteBrowserPrepared={() => props.onOpenChange(false)} environmentName={environment()?.hostname || props.adapter.runtime.display_name} reuseConnected management={management()!} copy={props.copy} onConnected={async () => { await props.onContinue?.(); }} />}</Show>
     </Show>}>
@@ -270,7 +280,7 @@ export function FlowerComputerConnections(props: {
       </div>
     </Show>
     <Show when={!props.connectionOnly}>
-    <Show when={page() !== 'overview'}><Button variant="outline" onClick={() => go('overview')}>{props.copy.back}</Button></Show>
+    <Show when={!embeddedPresentation() && page() !== 'overview'}><Button variant="outline" onClick={() => go('overview')}>{props.copy.back}</Button></Show>
     <Show when={props.threadID && page() === 'overview'}><Button variant="outline" disabled={!readable()} onClick={openAccess}>{props.copy.permissions}</Button></Show>
     <Show when={page() === 'access' && !props.fullAccess}><Button disabled={!mutable() || !access()} onClick={() => { const value = access(); if (value) void saveAccess(value); }}>{props.copy.save}</Button></Show>
     </Show>

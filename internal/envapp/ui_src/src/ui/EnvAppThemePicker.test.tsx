@@ -51,6 +51,7 @@ describe('EnvAppThemePicker', () => {
       expect(host.querySelector('[data-envapp-theme-trigger]')).toBeNull();
       const content = host.querySelector('[data-envapp-theme-menu="inline"]')!;
       expect(content.getAttribute('role')).toBe('region');
+      expect(content.hasAttribute('data-floe-surface')).toBe(false);
       const dark = Array.from(content.querySelectorAll<HTMLButtonElement>('[role="radio"]')).find(button => button.textContent === 'Dark')!;
       dark.click();
       await vi.waitFor(() => expect(change).toHaveBeenCalledWith('dark'));

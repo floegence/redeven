@@ -137,7 +137,7 @@ it.each([false, true])('adopts the confirmed service revision after apply with c
   dispose = render(() => <FloeProvider><div hidden={!open()}><ManagedServiceSettingsDrawer embedded open={open()} serviceID="one" serviceName="Service" canManage onOpenChange={setOpen} onChanged={() => {}} onRequestStop={() => {}} onDuplicateTemplate={() => {}} onApply={apply} /></div></FloeProvider>, host);
   await expect.element(page.getByTestId('managed-service-settings')).toBeVisible();
   await userEvent.fill(host.querySelector<HTMLInputElement>('.managed-settings-fields input')!, 'Unsaved metadata');
-  await page.getByRole('button', { name: 'Parameters', exact: true }).click();
+  await page.getByRole('tab', { name: 'Parameters', exact: true }).click();
   await page.getByPlaceholder('/usr/local/bin/start').fill('/saved');
   await page.getByRole('button', { name: 'Review changes', exact: true }).click();
   await page.getByRole('button', { name: 'Apply configuration', exact: true }).click();
@@ -152,8 +152,8 @@ it.each([false, true])('adopts the confirmed service revision after apply with c
     const call = api.request.mock.calls.filter(([url]) => url.endsWith('/preflight')).at(-1);
     return call && JSON.parse(String(call[1].body)).configuration_revision;
   }).toBe(4);
-  await page.getByRole('button', { name: 'General', exact: true }).click();
-  expect(host.querySelector<HTMLInputElement>('.managed-settings-fields input')?.value).toBe('Unsaved metadata');
+  await page.getByRole('tab', { name: 'General', exact: true }).click();
+  await expect.poll(() => host.querySelector<HTMLInputElement>('.managed-settings-fields input')?.value).toBe('Unsaved metadata');
 });
 
 it('settles a hidden preflight without accepting its stale plan', async () => {
@@ -163,7 +163,7 @@ it('settles a hidden preflight without accepting its stale plan', async () => {
   const [open, setOpen] = createSignal(true);
   const host = document.createElement('div'); document.body.append(host);
   dispose = render(() => <FloeProvider><div hidden={!open()}><ManagedServiceSettingsDrawer embedded open={open()} serviceID="one" serviceName="Service" canManage onOpenChange={setOpen} onChanged={() => {}} onRequestStop={() => {}} onDuplicateTemplate={() => {}} onApply={async () => {}} /></div></FloeProvider>, host);
-  await page.getByRole('button', { name: 'Parameters', exact: true }).click();
+  await page.getByRole('tab', { name: 'Parameters', exact: true }).click();
   await page.getByPlaceholder('/usr/local/bin/start').fill('/pending');
   await page.getByRole('button', { name: 'Review changes', exact: true }).click();
   await expect.poll(() => finish).toBeTypeOf('function');
@@ -194,13 +194,13 @@ it.each([false, true])('settles a retained metadata save and preserves later edi
   await expect.poll(() => host.querySelector('[data-testid="managed-service-settings"]')?.getAttribute('aria-busy')).toBe('false');
   await expect.element(page.getByRole('button', { name: 'Save details', exact: true })).toBeDisabled();
   if (editWhileSaving) await userEvent.fill(name(), 'Newer draft');
-  await page.getByRole('button', { name: 'Parameters', exact: true }).click();
+  await page.getByRole('tab', { name: 'Parameters', exact: true }).click();
   await page.getByPlaceholder('/usr/local/bin/start').fill('/keep-runtime-edit');
   setOpen(false); finish();
   await expect.poll(() => changed.mock.calls.length).toBe(1);
   setOpen(true);
   await expect.element(page.getByPlaceholder('/usr/local/bin/start')).toHaveValue('/keep-runtime-edit');
-  await page.getByRole('button', { name: 'General', exact: true }).click();
+  await page.getByRole('tab', { name: 'General', exact: true }).click();
   await expect.poll(() => name()?.value).toBe(editWhileSaving ? 'Newer draft' : 'Submitted');
   if (editWhileSaving) await expect.element(page.getByRole('button', { name: 'Save details', exact: true })).toBeEnabled();
   else expect([...host.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Save details')).toBe(false);
@@ -238,7 +238,22 @@ it.each(['refresh', 'source'] as const)('keeps confirmed metadata when an older 
   expect(name().value).toBe('Saved');
   expect([...host.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Save details')).toBe(false);
   if (kind === 'source') {
-    await page.getByRole('button', { name: 'Parameters', exact: true }).click();
+    await page.getByRole('tab', { name: 'Parameters', exact: true }).click();
     await expect.element(page.getByPlaceholder('/usr/local/bin/start')).toHaveValue('/source');
   }
+});
+
+it.each([1280, 390])('uses one natural-flow service settings surface inside a category at %ipx', async width => {
+  await page.viewport(width, 900);
+  api.request.mockResolvedValue({ service_id: 'embedded-design', name: 'Development API', access_mode: 'unified_proxy', deployment: 'host', template_source: 'custom', observed_state: 'stopped', configuration_revision: 1, runtime: { host: {} } });
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <FloeProvider><div style={{ width: 'min(100%, 740px)' }}><ManagedServiceSettingsDrawer embedded open serviceID="embedded-design" serviceName="Development API" canManage onOpenChange={() => {}} onChanged={() => {}} onRequestStop={() => {}} onDuplicateTemplate={() => {}} onApply={async () => {}} /></div></FloeProvider>, host);
+  await expect.element(page.getByTestId('managed-service-settings')).toBeVisible();
+  const layout = host.querySelector<HTMLElement>('.managed-settings-layout')!;
+  expect(getComputedStyle(layout).flexDirection).toBe('column');
+  const content = host.querySelector<HTMLElement>('.managed-settings-content')!;
+  expect(getComputedStyle(content).overflowY).toBe('visible');
+  expect(getComputedStyle(content).paddingLeft).toBe('0px');
+  expect(content.scrollWidth).toBeLessThanOrEqual(content.clientWidth + 1);
+  expect(host.querySelectorAll('[role="tablist"]')).toHaveLength(1);
 });

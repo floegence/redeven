@@ -570,6 +570,13 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         });
         return;
       }
+      if (accessReady && requestURL.pathname === '/_redeven_proxy/api/ai/conversation_preferences') {
+        // IMPORTANT: The real adapter consumes a complete preference record;
+        // a generic empty success is not a valid personal-settings response.
+        assert.equal(request.method, 'GET');
+        jsonResponse(response, { revision: 1, model_id: 'fixture/fixture-model', working_dir: '/workspace', reasoning_by_model: {} });
+        return;
+      }
       if (accessReady && [
         '/_redeven_proxy/api/ai/flower/stream',
         '/_redeven_proxy/api/workbench/layout/events',
@@ -969,34 +976,24 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
 
     await page.getByRole('button', { name: 'Monitoring', exact: true }).click();
     await page.locator('.runtime-monitor-panel').waitFor({ state: 'visible' });
+    await page.locator('.runtime-monitor-panel').getByRole('button', { name: 'Memory', exact: true }).click();
     await composer.fill('Explain this origin page');
     const pageReference = page.locator('[data-reference-kind="page_context"]');
     await pageReference.waitFor({ state: 'visible' });
     await pageReference.locator('.flower-composer-reference-chip-preview').click();
     const preview = page.locator('.flower-context-preview-window');
     const readPreviewSnapshot = async () => {
-      const editor = preview.locator('.monaco-editor textarea');
-      await editor.waitFor({ state: 'attached' });
-      await preview.locator('.view-line').filter({ hasText: /page/ }).first().waitFor();
-      await page.evaluate(() => {
-        globalThis.__redevenBuiltPreviewCopy = '';
-        navigator.clipboard.writeText = async text => { globalThis.__redevenBuiltPreviewCopy = text; };
-        globalThis.document.addEventListener('copy', event => {
-          const text = event.clipboardData?.getData('text/plain');
-          if (text) globalThis.__redevenBuiltPreviewCopy = text;
-        }, { once: true });
-      });
-      await preview.locator('.view-lines').click({ position: { x: 20, y: 10 } });
-      await page.keyboard.press('ControlOrMeta+A');
-      await page.keyboard.press('ControlOrMeta+C');
-      const copied = await page.waitForFunction(() => globalThis.__redevenBuiltPreviewCopy, undefined, { timeout: 5_000 });
-      return copied.jsonValue();
+      const snapshot = preview.locator('[data-flower-context-preview-text]');
+      await snapshot.waitFor({ state: 'visible' });
+      await snapshot.focus();
+      assert.equal(await snapshot.evaluate(element => element === globalThis.document.activeElement), true);
+      return snapshot.textContent();
     };
     await preview.waitFor({ state: 'visible' });
     const frozenPageText = await readPreviewSnapshot();
-    const frozenPage = JSON.parse(frozenPageText);
-    if (frozenPage.page.id !== 'monitor' || !frozenPage.environment.id || !frozenPage.captured_at
-      || !frozenPage.state.sort) throw new Error('built companion must capture the visible Monitor page');
+    assert.match(frozenPageText, /^Monitoring \(monitor\)\n/u);
+    assert.match(frozenPageText, /env_[a-z_]+/u);
+    assert.match(frozenPageText, /\nsort: /u);
     if (await pageReference.locator('[data-flower-context-icon="page_context"]').count() !== 1) {
       throw new Error('page context must use its shared purpose-designed icon');
     }
@@ -1026,6 +1023,9 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     if (await companion.getAttribute('data-companion-phase') !== 'expanded') {
       throw new Error('page reference preview interaction must remain owned by Flower');
     }
+    // FloatingWindow only dismisses Escape from its own interaction surface.
+    // Resizing can leave keyboard focus on the retained composer beneath it.
+    await preview.locator('[data-flower-context-preview-text]').focus();
     await page.keyboard.press('Escape');
     await preview.waitFor({ state: 'hidden' });
     if (await companion.getAttribute('data-companion-phase') !== 'expanded') {
@@ -1039,7 +1039,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     await pageReference.locator('.flower-composer-reference-chip-preview').click();
     await preview.waitFor({ state: 'visible' });
     const refreshedPageText = await readPreviewSnapshot();
-    if (JSON.parse(refreshedPageText).page.id !== 'files' || refreshedPageText === frozenPageText) {
+    if (!refreshedPageText.startsWith('File Browser (files)\n') || refreshedPageText === frozenPageText) {
       throw new Error('reopening a new conversation must capture the current Files page');
     }
     if (await composer.inputValue() !== 'Explain this origin page') throw new Error('reopening must retain the pending text');
@@ -1058,7 +1058,10 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     await pageReference.locator('.flower-composer-reference-chip-preview').click();
     await preview.waitFor({ state: 'visible' });
     const reopenedPageText = await readPreviewSnapshot();
-    if (JSON.parse(reopenedPageText).page.id !== 'files' || reopenedPageText === refreshedPageText) {
+    // The readable snapshot intentionally omits capture timestamps. Re-capturing
+    // unchanged page facts can produce identical text; the removed chip must
+    // still return with the current page identity and preserved pending draft.
+    if (!reopenedPageText.startsWith('File Browser (files)\n')) {
       throw new Error('reopening must replace a removed page reference with a fresh capture');
     }
     await page.keyboard.press('Escape');
@@ -1067,7 +1070,7 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     await pageReference.locator('.flower-composer-reference-chip-preview').click();
     await preview.waitFor({ state: 'visible' });
     const newPageText = await readPreviewSnapshot();
-    if (JSON.parse(newPageText).page.id !== 'files' || newPageText === reopenedPageText) {
+    if (!newPageText.startsWith('File Browser (files)\n')) {
       throw new Error('each explicit New must refresh the current page reference');
     }
     await page.keyboard.press('Escape');
@@ -1106,7 +1109,13 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     await composer.fill('Retained settings transition draft');
     await composer.evaluate(element => element.setSelectionRange(2, 8));
     await page.getByRole('button', { name: 'Flower settings', exact: true }).click();
-    const settingsPanel = page.locator('[data-flower-panel="settings"]');
+    // IMPORTANT: Env configuration belongs to the one global Settings dialog.
+    // A retained Flower side panel must not substitute for the product owner.
+    const settingsDialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+    const settingsPanel = settingsDialog.locator('[data-testid="settings-section-ai"]');
+    await settingsDialog.waitFor({ state: 'visible' });
+    assert.equal(new URL(page.url()).searchParams.get('settings'), 'ai');
+    assert.equal(await page.locator('.redeven-unified-settings-dialog').count(), 1);
     await settingsPanel.locator('.flower-settings-surface').waitFor({ state: 'visible' });
     await page.evaluate(() => {
       globalThis.__redevenBuiltFlowerSettings = globalThis.document.querySelector('.flower-settings-surface');
@@ -1128,9 +1137,8 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     if (await settingsDisclosure.getAttribute('aria-expanded') !== 'true') {
       throw new Error('built Flower provider disclosure must expand before retention checks');
     }
-    await page.getByRole('dialog', { name: 'Flower Settings', exact: true })
-      .getByRole('button', { name: 'Close', exact: true }).click();
-    await settingsPanel.waitFor({ state: 'hidden' });
+    await settingsDialog.locator('.redeven-env-settings-dialog-close').click();
+    await settingsDialog.waitFor({ state: 'hidden' });
     await page.locator('[data-floe-shell-slot="activity-bar"]').getByRole('button', { name: 'File Browser', exact: true }).click();
     await page.waitForFunction(() => (
       globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
@@ -1154,7 +1162,10 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     if (!settingsRetained.same || !settingsRetained.disclosureOpen) {
       throw new Error(`built Flower must retain settings form state: ${JSON.stringify(settingsRetained)}`);
     }
-    await settingsPanel.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
+    await settingsDialog.locator('.redeven-env-settings-dialog-close').click();
+    await settingsDialog.waitFor({ state: 'hidden' });
+    assert.equal(await composer.inputValue(), 'Retained settings transition draft');
+    await companion.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
     await page.waitForFunction(() => (
       globalThis.document.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-phase') === 'collapsed'
     ));
@@ -1705,6 +1716,12 @@ async function main() {
 
     await page.getByRole('heading', { name: 'Unlock local runtime', exact: true })
       .waitFor({ state: 'visible', timeout: 10_000 });
+    // IMPORTANT: Rendered copy alone is insufficient: the initial access gate
+    // must remain interactive outside the inert protected workspace.
+    const accessPassword = page.getByLabel('Access password', { exact: true });
+    await accessPassword.fill('built-dist-access-probe');
+    assert.equal(await accessPassword.inputValue(), 'built-dist-access-probe');
+    assert.equal(await page.getByRole('button', { name: 'Unlock', exact: true }).isEnabled(), true);
     const pluginPanelTileCount = await page.locator('[data-plugin-panel-tile]').count();
     if (pluginPanelTileCount !== 0) {
       throw new Error(`locked built Plugin panel tile count = ${pluginPanelTileCount}, expected 0`);

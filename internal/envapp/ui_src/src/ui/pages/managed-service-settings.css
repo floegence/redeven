@@ -16,6 +16,7 @@
 .managed-settings-field > input, .managed-settings-field > textarea, .managed-settings-fields > label > input, .managed-settings-fields > label > select { grid-column: 2; grid-row: 1; align-self: center; font-size: var(--floe-type-control); width: 100%; min-width: 0; }
 .managed-settings-field > input[type=number] { width: 88px; justify-self: end; }
 .managed-settings-fields > label > span:last-child:not(:first-child) { grid-column: 1; grid-row: 2; font-size: 12px; line-height: 1.65; }
+.managed-settings-field > span:last-child:not(:first-child) { grid-column: 1; grid-row: 2; font-size: var(--floe-type-supporting); line-height: 18px; }
 @container managed-settings (max-width: 600px) {
   .managed-settings-navigation { width: 128px; padding: 12px 8px; }
   .managed-settings-content { padding: 24px 16px; }
@@ -29,3 +30,17 @@
 @media (pointer: coarse) {
   .managed-settings-content input, .managed-settings-content select, .managed-settings-content textarea { font-size: 16px; min-height: 44px; }
 }
+
+/* IMPORTANT: Embedded settings are content, never a second scrolling drawer. */
+.managed-settings-embedded { display: flex; min-width: 0; flex-direction: column; gap: 16px; }
+.managed-settings-embedded .managed-settings-layout { flex-direction: column; overflow: visible; gap: 20px; }
+.managed-settings-embedded .managed-settings-content { padding: 0; overflow: visible; scrollbar-gutter: auto; }
+.managed-settings-embedded .managed-settings-tabs { min-width: 0; }
+.managed-settings-embedded [data-managed-settings-footer] { padding: 16px 0 0; }
+.managed-settings-embedded .managed-settings-fields { border-radius: var(--floe-radius-group); padding-inline: 12px; }
+.managed-settings-embedded .managed-settings-content h2 { font-size: var(--floe-type-body); font-weight: 500; }
+.managed-settings-embedded .managed-settings-field > textarea { align-self: start; }
+
+.managed-settings-embedded .managed-settings-content > section > header { margin-bottom: 16px; }
+.managed-settings-embedded .managed-settings-content > section > header h3 { font-size: var(--floe-type-body); line-height: var(--floe-line-control); font-weight: 500; letter-spacing: 0; }
+.managed-settings-embedded .managed-settings-content > section > header p { font-size: var(--floe-type-supporting); line-height: 18px; margin-top: 4px; }

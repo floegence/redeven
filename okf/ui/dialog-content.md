@@ -3,7 +3,7 @@ type: UI Contract
 title: Dialog content placement
 tags: [ui, dialogs, accessibility, desktop]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -12,6 +12,10 @@ Published Floe owns Dialog structure; Redeven supplies localized content/actions
 # Contract
 
 Custom headers and title JSX must not recreate the removed explanatory subtitle.
+
+The Env Settings header contains category navigation and close in one row, using the same background as navigation and content. Env Settings permits backdrop dismissal through Floe's topmost-modal behavior and its existing retained close path. Generic read refresh belongs there only for categories using that owner; domain resource refresh belongs beside its selector. A category root never uses Back as a disguised close action. Embedded settings supply section content and one category scroll owner; standalone page wrappers and nested navigation rails must not be copied into the modal. See [runtime settings](runtime-settings.md) for the exact feature boundary.
+
+The category title appears in the header only; body headings distinguish actual subgroups. Embedded page sections use Floe's public heading visibility API while retaining accessible identity and meaningful metadata/actions. Do not hide headings through broad CSS rules or replace them with empty toolbar spacing.
 
 This contract changes no application connection, process, or window lifecycle.
 

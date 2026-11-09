@@ -3081,7 +3081,8 @@ describe('EnvPortForwardsPage', () => {
     await waitForAssertion(() => expect(host.querySelector('[data-managed-service-id="mws-settings"]')).toBeTruthy());
     Array.from(host.querySelectorAll<HTMLButtonElement>('[data-managed-service-id="mws-settings"] button')).find((button) => controlText(button)?.trim() === 'Settings')?.click();
     await waitForAssertion(() => expect(host.querySelector('[data-testid="managed-service-settings"]')).toBeTruthy());
-    Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => controlText(button)?.trim() === 'Parameters')?.click();
+    Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find((tab) => controlText(tab)?.trim() === 'Parameters')?.click();
+    await waitForAssertion(() => expect(host.querySelector('input[placeholder="/usr/local/bin/start"]')).not.toBeNull());
     const entrypoint = host.querySelector<HTMLInputElement>('input[placeholder="/usr/local/bin/start"]')!;
     entrypoint.value = '/usr/local/bin/dashboard';
     entrypoint.dispatchEvent(new InputEvent('input', { bubbles: true }));

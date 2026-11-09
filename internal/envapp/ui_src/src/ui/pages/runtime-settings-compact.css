@@ -1,9 +1,22 @@
 .redeven-settings-shell { container: redeven-settings / inline-size; }
 .redeven-settings-shell > .redeven-settings-header { padding: 10px 16px; border-bottom: 1px solid var(--floe-line); }
-.redeven-env-settings-dialog-header { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 16px; border-bottom: 1px solid var(--floe-line); }
+.redeven-env-settings-dialog-header { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 16px; border-bottom: 1px solid var(--floe-line); background: var(--redeven-settings-content-bg); }
 .redeven-env-settings-dialog-header-main { flex: 1; min-width: 0; }
 .redeven-env-settings-dialog-close { width: 32px; height: 32px; }
-.redeven-unified-settings-dialog { container: redeven-settings / inline-size; }
+/* IMPORTANT: Env Settings is one continuous surface. Keep the header, category
+ * navigation and body on the same semantic color; controls retain their contrast.
+ * This Env-only adapter does not restyle Welcome's separate settings host. */
+.redeven-unified-settings-dialog {
+  container: redeven-settings / inline-size;
+  --redeven-settings-header-bg: var(--redeven-settings-content-bg);
+  --redeven-settings-sidebar-bg: var(--redeven-settings-content-bg);
+  background: var(--redeven-settings-content-bg);
+}
+.dark .redeven-unified-settings-dialog { --redeven-settings-content-bg: color-mix(in srgb, var(--foreground) 5%, var(--background)); }
+@media (max-width: 640px) {
+  /* Use the published gap variables; Floe still owns safe-area/keyboard bounds. */
+  [data-floe-dialog-overlay-root]:has(> div > .redeven-unified-settings-dialog) { --floe-dialog-gap-x: 0px; --floe-dialog-gap-y: 0px; }
+}
 .redeven-settings-mobile-nav { display: none; }
 @container redeven-settings (width < 768px) {
   .redeven-settings-shell > .redeven-settings-header { padding: 5px 12px; }
@@ -29,6 +42,29 @@
   margin-inline: auto;
   padding: 24px 24px 48px;
 }
+
+/* IMPORTANT: The category owns outer spacing and scrolling. Embedded domain
+ * forms supply content only; do not reintroduce full-page shells inside it. */
+.redeven-settings-stack { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.redeven-settings-stack > .redeven-settings-section + .redeven-settings-section { margin-top: 0; }
+.redeven-settings-resource-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; min-width: 0; }
+.redeven-settings-resource-field { display: grid; gap: 6px; flex: 1; min-width: 0; }
+.redeven-settings-resource-label { font-size: var(--floe-type-control); line-height: var(--floe-line-control); font-weight: 500; }
+.redeven-settings-resource-control { display: flex; min-width: 0; }
+.redeven-settings-resource-control > * { width: 100%; min-width: 0; }
+.redeven-settings-resource-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.redeven-settings-number-unit { display: flex; align-items: center; gap: 8px; width: 112px; max-width: 100%; font-size: var(--floe-type-control); }
+.redeven-settings-number-unit input { min-width: 0; }
+.redeven-settings-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.redeven-settings-read-error { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px; margin-bottom: 24px; border: 1px solid color-mix(in srgb, var(--destructive) 20%, transparent); border-radius: var(--floe-radius-md); background: color-mix(in srgb, var(--destructive) 10%, transparent); }
+.redeven-settings-shell [data-envapp-theme-menu='inline'] { padding: 0; }
+.redeven-settings-shell .host-access-settings { padding: 0; gap: 24px; }
+.redeven-settings-shell .host-access-feature-settings { padding: 0; border: 0; border-radius: 0; }
+.redeven-settings-shell .host-access-system { padding-top: 0; border-top: 0; }
+/* Published Select has a wrapper: size the public class, not just the button. */
+.application-picture-fields .floe-setting-row__control > * { width: 200px; max-width: 100%; }
+.application-picture-feedback { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; font-size: var(--floe-type-supporting); }
+
 
 .redeven-settings-shell .redeven-settings-page .floe-settings-section__body {
   gap: 1rem;
@@ -95,12 +131,27 @@
 
 @container redeven-settings (max-width: 600px) {
   .redeven-settings-shell .redeven-settings-page {
-    padding: 1.75rem 1.25rem 3rem;
+    padding: 16px 16px 32px;
   }
 
   .redeven-settings-shell .redeven-settings-page .floe-setting-row__control {
     max-width: 100%;
   }
+}
+
+/* Resolve responsiveness from the actual dialog content, not browser width. */
+@container floe-settings (max-width: 600px) {
+  .redeven-settings-shell .redeven-settings-page { padding: 16px 16px 32px; }
+  .redeven-settings-shell .redeven-settings-page .floe-setting-row__control { max-width: 100%; width: 100%; }
+  .redeven-settings-shell .redeven-settings-page .floe-setting-row__control > :has(> button[role='combobox']),
+  .redeven-settings-shell .redeven-settings-page .floe-setting-row__control > :is(button[role='combobox'], select) { width: 100%; }
+  .redeven-settings-resource-toolbar { gap: 8px; }
+}
+
+.redeven-settings-shell .runtime-status-details > summary::before { transition: transform var(--floe-duration-fast) var(--floe-ease-out); }
+.redeven-settings-shell .redeven-settings-page .host-access-feature-row .floe-setting-row__control { width: auto; max-width: none; }
+@media (prefers-reduced-motion: reduce) {
+  .redeven-settings-shell .runtime-status-details > summary::before { transition: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -135,15 +186,12 @@
 .redeven-settings-shell .floe-setting-row__control > input:not([type='checkbox']):not([type='radio']) { width: 258px; height: var(--floe-control-height-md); font-size: 12px; }
 @container redeven-settings (max-width: 767px) {
   .redeven-settings-shell .floe-settings-layout__sidebar { display: none; }
-  .redeven-settings-shell .redeven-settings-page { padding: 28px 20px 48px; }
 }
 @media (pointer: coarse) {
   .redeven-settings-shell .floe-setting-row__control input, .redeven-settings-shell .floe-setting-row__control select { font-size: 16px; min-height: 44px; }
 }
 
 .dark .redeven-settings-shell {
-  --redeven-settings-content-bg: color-mix(in srgb, var(--foreground) 5%, var(--background));
-  --redeven-settings-sidebar-bg: color-mix(in srgb, var(--foreground) 8%, var(--background));
   --redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--foreground) 4%, var(--redeven-settings-sidebar-bg));
   --redeven-settings-sidebar-selection-bg: color-mix(in srgb, var(--foreground) 10%, var(--redeven-settings-sidebar-bg));
   --redeven-settings-inset-bg: color-mix(in srgb, var(--foreground) 9%, var(--background));

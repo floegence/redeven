@@ -100,7 +100,6 @@ export function RuntimeConfigSection() {
       variant="page"
         icon={Terminal}
         title={i18n.t('runtimeConfig.title')}
-        description={i18n.t('runtimeConfig.description')}
         badge={i18n.t('runtimeConfig.manualRestartRequired')}
         badgeVariant="warning"
         feedback={error() ? [{ id: 'save', severity: 'error', summary: error()!, actions: <Button size="sm" variant="outline" disabled={!canEdit() || saving()} onClick={() => setError(null)}>{i18n.t('common.actions.retry')}</Button> }] : []}
@@ -120,7 +119,6 @@ export function RuntimeConfigSection() {
           />
           <SettingRow
             title={i18n.t('settingsDesign.defaultShell')}
-            description={i18n.t('uiCopy.runtime.shellDescription')}
             control={
               <Input value={shell()} onInput={(e) => { setShell(e.currentTarget.value); setError(null); setDirty(true); }}
                 placeholder="/bin/bash" size="sm" class="w-full min-w-0 font-mono text-xs sm:w-64" disabled={!canEdit()} />

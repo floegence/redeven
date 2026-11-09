@@ -16,7 +16,6 @@ export function DebugConsoleSection() {
       variant="page"
       icon={BugIcon}
       title={i18n.t('debugConsoleSettings.title')}
-      description={i18n.t('debugConsoleSettings.description')}
     >
       <EnvDebugConsoleSettingsPanel
         enabled={debugConsoleEnabled()}

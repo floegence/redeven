@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Local UI surface
 tags: [architecture, local-ui, runtime, security]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -25,6 +25,7 @@ All built-in Env App event subscriptions use the current authenticated Flowersec
 # Boundaries
 
 Public Env App shell GET/HEAD requests may pass before unlock so the login page can load.
+The initial Activity and Workbench unlock forms remain outside the inert protected workspace. A visible heading alone does not establish readiness: password input and Unlock must be operable before a privileged connection starts. Recovery of a previously mounted workspace preserves its inert boundary while exposing the recovery overlay.
 
 The private listener accepts only its canonical numeric-loopback Host or a validated per-forward `.localhost` virtual Host.
 
@@ -33,3 +34,4 @@ Saved next-start settings never replace the running URL list.
 # Evidence
 
 - `redeven:internal/localui/localui.go:50` - Source.
+- `internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx` verifies both initial gate placements and authorization ordering; `scripts/checkPackagedRenderer.mjs` in the same UI package verifies real password input in the production build.

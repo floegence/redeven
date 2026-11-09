@@ -1,33 +1,34 @@
-[data-floe-dialog-panel].redeven-terminal-settings-dialog { max-width: min(800px, 92vw); border-radius: 14px; height: min(710px, 90dvh); background: var(--background); }
-.redeven-terminal-settings-dialog [data-floe-dialog-header] { padding: 24px 24px 12px; }
-.redeven-terminal-settings-dialog [data-floe-dialog-header] h2 { font-size: 16px; font-weight: 600; }
-.redeven-terminal-settings-dialog [data-floe-dialog-body] > p { padding: 0 28px 12px; font-size: 13px; line-height: 1.7; }
-.terminal-settings-body { padding: 12px 28px 28px; }
-.terminal-settings-body > section + section { margin-top: 28px; }
-.terminal-settings-preview { margin: 0 0 20px; overflow-x: auto; padding: 20px; border: 1px solid var(--border); border-radius: 14px; }
-.terminal-settings-group { padding: 0 17px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--foreground) 4%, var(--background)); }
+[data-floe-dialog-panel].redeven-terminal-settings-dialog { max-width: min(800px, 92vw); height: min(710px, 90dvh); }
+.redeven-terminal-settings-dialog [data-floe-dialog-body] > p { padding: 12px var(--floe-pad-group) 0; }
+/* IMPORTANT: The unified settings page owns padding and scrolling. Only the
+   standalone fallback dialog creates a local padded scroll viewport. */
+.terminal-settings-body { display: flex; flex-direction: column; gap: var(--floe-gap-section); padding: 0; overflow: visible; }
+.terminal-settings-body > * { flex-shrink: 0; }
+.terminal-settings-body > .floe-settings-section + .floe-settings-section { margin-top: 0; }
+.redeven-terminal-settings-dialog .terminal-settings-body { flex: 1; padding: var(--floe-pad-group); overflow-y: auto; overscroll-behavior: contain; }
+.terminal-settings-preview { margin: 0; overflow-x: auto; padding: var(--floe-pad-group); border: 1px solid var(--floe-line); border-radius: var(--floe-radius-group); }
+.terminal-settings-group { min-width: 0; }
 .terminal-settings-choice-details ~ .terminal-settings-choice-details,
-.terminal-settings-size-row { border-top: 1px solid var(--border); }
-.terminal-settings-choice-details > summary { display: flex; align-items: center; gap: 24px; padding: 17px 0; font-size: 13px; cursor: pointer; list-style: none; }
+.terminal-settings-size-row { border-top: 1px solid var(--floe-line); }
+.terminal-settings-choice-details { padding-inline: var(--floe-pad-group); }
+.terminal-settings-choice-details > summary { display: flex; align-items: center; gap: var(--floe-gap-group); min-height: var(--floe-control-height-lg); padding-block: var(--floe-pad-control); font-size: var(--floe-type-control); cursor: pointer; list-style: none; }
 .terminal-settings-choice-details > summary::-webkit-details-marker { display: none; }
 .terminal-settings-choice-label { min-width: 0; flex: 1; font-weight: 500; }
-.terminal-settings-choice-label > small { display: block; margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--muted-foreground); font-weight: 400; }
-.terminal-settings-choice-value { display: flex; align-items: center; gap: 12px; max-width: 45%; color: var(--muted-foreground); }
-.terminal-settings-choice-value::after { content: '›'; display: inline-block; transform: rotate(90deg); }
-.terminal-settings-choice-details[open] > summary { border-bottom: 1px solid var(--border); }
+.terminal-settings-choice-label > small { display: block; margin-top: 4px; font-size: var(--floe-type-supporting); line-height: var(--floe-line-body); color: var(--floe-ink-soft); font-weight: 400; }
+.terminal-settings-choice-value { display: flex; align-items: center; gap: var(--floe-gap-control); max-width: 45%; color: var(--floe-ink-soft); }
+.terminal-settings-choice-value::after { content: '›'; display: inline-block; transform: rotate(90deg); transition: transform var(--floe-duration-fast) var(--floe-ease-out); }
+.terminal-settings-choice-details[open] > summary { border-bottom: 1px solid var(--floe-line); }
 .terminal-settings-choice-details[open] .terminal-settings-choice-value::after { transform: rotate(-90deg); }
-.terminal-settings-choice-details > :not(summary) { margin-block: 14px; }
-.terminal-settings-size-row,
-.terminal-settings-activity { padding-block: 17px; }
+.terminal-settings-choice-details > :not(summary) { margin-block: var(--floe-pad-group); }
 @media (max-width: 600px) {
-  .terminal-settings-body { padding-inline: 12px; }
-  .terminal-settings-group { padding-inline: 8px; }
+  .terminal-settings-choice-details { padding-inline: var(--floe-pad-control); }
   .terminal-settings-choice-details > summary { flex-wrap: wrap; gap: 8px; }
   .terminal-settings-choice-label { flex-basis: 100%; }
   .terminal-settings-choice-value { max-width: 100%; margin-left: auto; }
 }
 
-.terminal-input-choice { position: relative; min-width: 0; border: 1px solid var(--border); border-radius: .375rem; padding: .75rem; }
-.terminal-input-choice[data-selected=true] { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+.terminal-input-choice { position: relative; min-width: 0; border: 1px solid var(--floe-line); border-radius: var(--floe-radius-group); padding: var(--floe-pad-group); transition: background-color var(--floe-duration-fast) var(--floe-ease-out), border-color var(--floe-duration-fast) var(--floe-ease-out); }
+.terminal-input-choice[data-selected=true] { background: var(--floe-state-selected); border-color: var(--primary); }
 .terminal-input-choice > button { color: inherit; }
 .terminal-input-choice > button::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
+@media (prefers-reduced-motion: reduce) { .terminal-input-choice, .terminal-settings-choice-value::after { transition: none; } }

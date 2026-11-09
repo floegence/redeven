@@ -90,7 +90,6 @@ export function RuntimeStatusSection() {
       variant="page"
       icon={Activity}
       title={i18n.t('runtimeStatus.title')}
-      description={i18n.t('runtimeStatus.description')}
       error={ctx.maintenanceError()}
     >
       <SettingsList class="runtime-status-summary">

@@ -1,5 +1,5 @@
 import { HostedSettingsPanel } from '../../../../../settings_ui/src/SettingsPanelHost';
-import { StableText, Button, Checkbox, Input, NumberInput } from '@floegence/floe-webapp-core/ui';
+import { StableText, Button, Checkbox, Input, NumberInput, SettingsSection, SettingsList, SettingRow } from '@floegence/floe-webapp-core/ui';
 import './terminal-settings.css';
 import { TerminalHistorySettings } from './TerminalHistorySettings';
 import type { RedevenTerminalTransport } from '../services/terminalTransport';
@@ -85,15 +85,6 @@ type TerminalSettingsDialogProps = {
   onMobileInputModeChange: (value: TerminalMobileInputMode) => void;
   onWorkIndicatorEnabledChange: (value: boolean) => void;
 };
-
-function SectionTitle(props: { title: string; description: string }) {
-  return (
-    <div class="space-y-1">
-      <div class="text-[13px] font-medium text-foreground">{props.title}</div>
-      <p class="text-xs text-muted-foreground">{props.description}</p>
-    </div>
-  );
-}
 
 type MobileInputOptionCardProps = {
   selected: boolean;
@@ -299,7 +290,6 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={i18n.t('terminal.settings.title')}
-      bodyDescription={i18n.t('terminal.settings.description')}
       contentClass="flex min-h-0 flex-1 flex-col overflow-hidden p-0 [&>p]:px-3 [&>p]:pt-3 [&>p]:break-words"
       class={cn(
         'redeven-terminal-settings-dialog flex flex-col overflow-hidden p-0',
@@ -316,19 +306,12 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
 {body}</Dialog>)}>
       <div
         {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
-        class="terminal-settings-body min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        class="terminal-settings-body min-h-0 min-w-0"
       >
         <Show when={isMobile()}>
-          <section class="space-y-3">
-          <SectionTitle
+          <SettingsSection
             title={i18n.t('terminal.settings.mobileInputTitle')}
-            description={i18n.t('terminal.settings.mobileInputDescription')}
-          />
-          <div class="rounded-md border border-border/70 bg-muted/[0.14] p-3">
-            <p class="text-xs leading-5 text-muted-foreground">
-              {i18n.t('terminal.settings.mobileInputNote')}
-            </p>
-          </div>
+          >
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <MobileInputOptionCard
               selected={props.mobileInputMode === 'floe'}
@@ -347,7 +330,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
               onClick={() => props.onMobileInputModeChange('system')}
             />
           </div>
-          </section>
+          </SettingsSection>
         </Show>
 
         <pre class="terminal-settings-preview"
@@ -357,10 +340,10 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         </pre>
 
         <TerminalFontStatus font={resolvedFont()} />
-        <section class="terminal-settings-group">
+        <SettingsList class="terminal-settings-group">
         <details class="terminal-settings-choice-details" data-terminal-preview="theme">
           <summary data-floe-autofocus>
-            <span class="terminal-settings-choice-label"><span>{i18n.t('terminal.settings.themeTitle')}</span><small>{i18n.t('terminal.settings.themeDescription')}</small></span>
+            <span class="terminal-settings-choice-label">{i18n.t('terminal.settings.themeTitle')}</span>
             <span class="terminal-settings-choice-value">{itemLabel(TERMINAL_THEME_ITEMS.find(item => isThemeSelected(item.id)) ?? SYSTEM_THEME_ITEM)}</span>
           </summary>
         <div
@@ -415,7 +398,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         <div class="sr-only" aria-live="polite">{themeAnnouncement()}</div>
         <details class="terminal-settings-choice-details" data-terminal-preview="font">
           <summary>
-            <span class="terminal-settings-choice-label"><span>{i18n.t('terminal.settings.fontTitle')}</span><small>{props.fontScope === 'shared-workbench' ? i18n.t('terminal.settings.sharedWorkbenchFontDescription') : i18n.t('terminal.settings.localFontDescription')}</small></span>
+            <span class="terminal-settings-choice-label"><span>{i18n.t('terminal.settings.fontTitle')}</span><Show when={props.fontScope === 'shared-workbench'}><small>{i18n.t('terminal.settings.sharedWorkbenchFontDescription')}</small></Show></span>
             <span class="terminal-settings-choice-value">{TERMINAL_FONT_OPTIONS.find(option => option.id === props.fontFamilyId)?.label ?? props.fontFamilyId}</span>
           </summary>
         <Show when={fontSearchVisible()}>
@@ -472,53 +455,35 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         </Show>
         </details>
 
-        <div class="terminal-settings-size-row">
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div class="space-y-1">
-              <div class="text-xs font-medium text-foreground">{i18n.t('terminal.settings.fontSize')}</div>
-              <p class="text-xs text-muted-foreground">
-                {i18n.t('terminal.settings.fontSizeDescription')}
-              </p>
-            </div>
+        <SettingRow class="terminal-settings-size-row" title={i18n.t('terminal.settings.fontSize')} control={
             <NumberInput
+              ariaLabel={i18n.t('terminal.settings.fontSize')}
               value={props.fontSize}
               onChange={props.onFontSizeChange}
               min={props.minFontSize}
               max={props.maxFontSize}
               step={1}
-              size="sm"
+              size="md"
               class="w-full sm:w-36"
             />
-          </div>
-        </div>
-        </section>
-        <section class="space-y-3">
-          <Checkbox checked={props.followInput ?? true} onChange={value => props.onFollowInputChange?.(value)}
-            label={i18n.t('terminal.settings.followInput')} size="sm" />
-          <Show when={props.embedded || props.retentionTransport}><TerminalHistorySettings authority={props.retentionAuthority} open={props.open} canManage={props.retentionCanManage} transport={props.retentionTransport} sessionId={props.retentionSessionId} /></Show>
-        </section>
-        <section class="space-y-3">
-        <SectionTitle
+        } />
+        <SettingRow title={i18n.t('terminal.settings.followInput')} control={
+          <Checkbox checked={props.followInput ?? true} onChange={value => props.onFollowInputChange?.(value)} aria-label={i18n.t('terminal.settings.followInput')} size="sm" />
+        } />
+        </SettingsList>
+        <Show when={props.embedded || props.retentionTransport}><TerminalHistorySettings authority={props.retentionAuthority} open={props.open} canManage={props.retentionCanManage} transport={props.retentionTransport} sessionId={props.retentionSessionId} /></Show>
+        <SettingsSection
           title={i18n.t('terminal.settings.activityBorderTitle')}
-          description={i18n.t('terminal.settings.activityBorderDescription')}
-        />
-        <div class="terminal-settings-group terminal-settings-activity">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="space-y-1">
-              <div class="text-xs font-medium text-foreground">{i18n.t('terminal.settings.showRunningBorder')}</div>
-              <p class="text-xs text-muted-foreground">
-                {i18n.t('terminal.settings.statusTrackingUnchanged')}
-              </p>
-            </div>
+        >
+        <SettingsList><SettingRow title={i18n.t('terminal.settings.showRunningBorder')} control={
             <Checkbox
               checked={props.workIndicatorEnabled}
               onChange={props.onWorkIndicatorEnabledChange}
-              label={props.workIndicatorEnabled ? i18n.t('terminal.settings.shown') : i18n.t('terminal.settings.hidden')}
+              aria-label={i18n.t('terminal.settings.showRunningBorder')}
               size="sm"
             />
-          </div>
-        </div>
-        </section>
+        } /></SettingsList>
+        </SettingsSection>
 
       </div>
     </HostedSettingsPanel>

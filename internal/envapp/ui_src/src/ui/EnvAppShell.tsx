@@ -111,6 +111,8 @@ import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import { startPluginAutomaticUpdates } from './plugins/pluginAutomaticUpdates';
 import { PluginCenterView } from './plugins/PluginCenterView';
+import { PluginCenterDrawer } from './plugins/PluginCenterDrawer';
+import { pluginInstalledSettingsResource } from './plugins/pluginSettingsTarget';
 import { PluginPanel } from './plugins/PluginPanel';
 import {
   hasPluginPlacementPin,
@@ -1407,6 +1409,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   });
   const [pluginCenterSelectedInventoryKey, setPluginCenterSelectedInventoryKey] = createSignal<string | undefined>();
   const [pluginCenterFocusRequest, setPluginCenterFocusRequest] = createSignal(0);
+  const [pluginCenterOpen, setPluginCenterOpen] = createSignal(false);
+  const [pluginCenterPresent, setPluginCenterPresent] = createSignal(false);
+  const [pluginCenterVisited, setPluginCenterVisited] = createSignal(false);
   const [activityPluginWindows, setActivityPluginWindows] = createSignal<readonly ActivityPluginWindow[]>([]);
   const [activityPluginFocusRequests, setActivityPluginFocusRequests] = createSignal<Readonly<Record<string, number>>>({});
   const activityPluginCloseRequests = new Map<string, () => Promise<void>>();
@@ -1946,7 +1951,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     })
   ));
 
-  const workbenchPluginCenterBlocking = () => settingsSession.present();
+  const workbenchPluginCenterBlocking = () => settingsSession.present() || pluginCenterPresent();
   const initialPluginDraft = new URL(window.location.href).searchParams.get('plugin_draft');
   const [pluginCreationOpen, setPluginCreationOpen] = createSignal(Boolean(initialPluginDraft));
   const [pluginCreationProjectID, setPluginCreationProjectID] = createSignal(initialPluginDraft || 'new');
@@ -1990,7 +1995,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   window.addEventListener('popstate', syncPluginCreationNavigation);
   onCleanup(() => window.removeEventListener('popstate', syncPluginCreationNavigation));
   const openPluginDraft = (id: string) => {
-    const commit = () => { navigatePluginCreation(id); settingsSession.close(); updatePluginPanel({ open: false }); };
+    const commit = () => { navigatePluginCreation(id); setPluginCenterOpen(false); settingsSession.close(); updatePluginPanel({ open: false }); };
     if (pluginCreationOpen() && pluginCreationNavigate && id !== pluginCreationOwner()) {
       void pluginCreationNavigate(commit).catch(reportPluginNavigationFailure);
     } else commit();
@@ -2047,9 +2052,14 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     setPluginCenterSelectedInventoryKey(selectedInventoryKey);
     setPluginCenterFocusRequest((request) => request + 1);
     void refreshPluginWidgetCounts().catch(reportPluginNavigationFailure);
-    openSettings('plugins');
+    // IMPORTANT: Plugin Center owns catalog and lifecycle workflows. It remains
+    // an independent destination reached from the plugin switcher; only exact
+    // connection configuration belongs to the unified Settings dialog.
+    updatePluginPanel({ open: false });
+    setPluginCenterVisited(true);
+    setPluginCenterOpen(true);
   };
-  const closePluginCenter = () => settingsSession.close();
+  const closePluginCenter = () => setPluginCenterOpen(false);
 
   const pluginSurfaceTargetKey = (target: PluginSurfaceLaunchTarget) => (
     `${target.pluginInstanceID}\u0000${target.surfaceID}`
@@ -2145,12 +2155,12 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   } | null>(null);
   createEffect(() => {
     const request = pendingWorkbenchPluginFocus();
-    if (!request || settingsSession.present()) return;
+    if (!request || workbenchPluginCenterBlocking()) return;
     setPendingWorkbenchPluginFocus(null);
     // IMPORTANT: Floe releases modal isolation at presence exit, not at close.
     // Focus only that admitted widget after the same owner regains input.
     queueMicrotask(() => {
-      if (viewMode() === 'workbench' && !settingsSession.present()
+      if (viewMode() === 'workbench' && !workbenchPluginCenterBlocking()
         && pluginInventorySource() === request.owner && canOpenPluginSurfaces()
         && workbenchPluginSurfaceController === request.controller
         && resolveCurrentPluginSurfaceTarget(request.target)?.expectedManagementRevision === request.target.expectedManagementRevision) {
@@ -2187,12 +2197,13 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         await controller.open(currentTarget);
       }
       updatePluginPanel({ open: false });
+      closePluginCenter();
       settingsSession.close();
       if (viewMode() === mode) setPendingWorkbenchPluginFocus({ controller, target: currentTarget, owner });
       return;
     }
     const targetKey = pluginSurfaceTargetKey(currentTarget);
-    // A retained page keeps its own slot; successful placement leaves Settings.
+    // A retained page keeps its own slot; successful placement leaves management.
     const existingPage = !options.activityPlacement && [...activityPluginPageRuntimes.entries()].find(([, runtime]) => {
       const target = runtime.target();
       return target && pluginSurfaceTargetKey(target) === targetKey;
@@ -2201,6 +2212,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       existingPage[1].setTarget(currentTarget);
       if (viewMode() === mode) setEnvSidebarActiveTab(pluginActivityComponentID(existingPage[0]), { openSidebar: false });
       updatePluginPanel({ open: false });
+      closePluginCenter();
       settingsSession.close();
       return;
     }
@@ -2220,6 +2232,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     }
     // IMPORTANT: Product modals sit above ordinary plugin windows. Close only
     // after successful placement; visibility/focus waits for the modal exit.
+    closePluginCenter();
     settingsSession.close();
     requestPluginWindowFocus(instanceID);
     updatePluginPanel({ open: false });
@@ -4121,7 +4134,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const renderPluginCenter = () => (
         <PluginCenterView
-          visible={settingsSession.present() && settingsSession.target()?.section === 'plugins' && !settingsSession.target()?.resource}
+          visible={pluginCenterPresent() && !settingsSession.present()}
           pluginWidgetCounts={pluginWidgetCounts()}
           projection={pluginInventoryProjection() ?? { items: [] }}
           activityPinnedInventoryKeys={pluginPlacementPins().activityInventoryKeys}
@@ -4137,6 +4150,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           retainedDataAPI={pluginLifecycle}
           connectionsAPI={pluginLifecycle}
           canManageConnections={Boolean(pluginInventorySource() && canAdmin() && env()?.permissions?.can_read && env()?.permissions?.can_write && env()?.permissions?.can_execute)}
+          onOpenConnections={item => { if (item.pluginInstanceID) openSettings('plugins', { resource: pluginInstalledSettingsResource(item.pluginInstanceID) }); }}
           canOpenPluginSurfaces={canOpenPluginSurfaces()}
           runtimeRecovery={undefined}
           runtimeRecoveryByInstanceID={pluginRuntimeRecoveryByInstanceID()}
@@ -5407,10 +5421,12 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                 renderError={() => <PageLoadError ready={assetRecoveryReady()} />}
               />
             </Show>
-            <Show when={viewMode() === 'activity' && !activityContentAvailable()}>
-              <Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>{renderActivityPageLoading(layout.sidebarActiveTab())}</Show>
-            </Show>
           </div>
+          {/* IMPORTANT: Initial unlock is the interactive recovery surface.
+              Keep it outside the inert workspace that the lock protects. */}
+          <Show when={viewMode() === 'activity' && !activityContentAvailable()}>
+            <div class="absolute inset-0"><Show when={accessGatePhase() === 'checking'} fallback={accessGatePanel()}>{renderActivityPageLoading(layout.sidebarActiveTab())}</Show></div>
+          </Show>
           <Show when={viewMode() === 'activity' && recoveryVisible()}>
             <Show
               when={accessGatePhase() === 'unlock_required'}
@@ -5471,10 +5487,12 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
           />
           </FlowerContextSource>
         </Show>
-        <Show when={viewMode() === 'workbench' && !activityContentAvailable()}>
-          {accessGatePanel()}
-        </Show>
       </div>
+      {/* IMPORTANT: The initial unlock form must remain operable while the
+          workspace is inert; never include it in the protected content owner. */}
+      <Show when={viewMode() === 'workbench' && !activityContentAvailable()}>
+        {accessGatePanel()}
+      </Show>
       <Show when={viewMode() === 'workbench' && recoveryVisible()}>
         <Show
           when={accessGatePhase() === 'unlock_required'}
@@ -5495,7 +5513,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   );
 
   // IMPORTANT: Retain window owners while Settings owns focus and isolation.
-  const visiblePluginWindows = createMemo(() => settingsSession.present() ? [] : activityPluginWindows().filter(window => pluginCreationOpen()
+  const visiblePluginWindows = createMemo(() => workbenchPluginCenterBlocking() ? [] : activityPluginWindows().filter(window => pluginCreationOpen()
     ? window.creationID === pluginCreationOwner() : !window.creationID && viewMode() === 'activity'));
   const mobilePluginModalOpen = () => layout.isMobile() && visiblePluginWindows().length > 0;
 
@@ -5737,7 +5755,12 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
                 refetchMaintenanceContext: refetchRuntimeMaintenanceContext,
               }}
             >
-              <Show when={settingsVisited()}><Suspense><EnvSettingsDialog session={settingsSession} panels={settingsPanels()} renderPlugins={() => renderPluginCenter()} onThemeSourceChange={setThemeSourceWithRenderBoundary} onShellThemeChange={setShellThemeWithRenderBoundary} /></Suspense></Show>
+              <Show when={pluginCenterVisited()}><PluginCenterDrawer open={pluginCenterOpen()} onOpenChange={setPluginCenterOpen} onPresenceChange={setPluginCenterPresent} title={i18n.t('uiCopy.plugin.centerTitle')}>{renderPluginCenter()}</PluginCenterDrawer></Show>
+              <Show when={settingsVisited()}><Suspense><EnvSettingsDialog session={settingsSession} panels={settingsPanels()} pluginSettings={{
+                get items() { return pluginInventoryProjection()?.items ?? []; }, get ownerScope() { return pluginInventorySource(); },
+                get loading() { return pluginInventoryInitialPending(); }, get canManage() { return Boolean(pluginInventorySource() && canAdmin() && env()?.permissions?.can_read && env()?.permissions?.can_write && env()?.permissions?.can_execute); },
+                api: pluginLifecycle, refresh: refetchPluginInventory,
+              }} onThemeSourceChange={setThemeSourceWithRenderBoundary} onShellThemeChange={setShellThemeWithRenderBoundary} /></Suspense></Show>
               <FloeRegistryRuntime components={components()}>
                 <FloeRegistryContributions
                   components={activityPluginContributions()}

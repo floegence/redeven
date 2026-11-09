@@ -1,7 +1,11 @@
 import type { RuntimeWorkbenchLayoutSnapshot } from '../../workbench/runtimeWorkbenchLayout';
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, on, untrack } from 'solid-js';
 import { useResolvedFloeConfig, useTheme } from '@floegence/floe-webapp-core';
-import { Button, Select } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
+import { SettingsSelect as Select } from './SettingsSelect';
+import { useSettingsPanelHost } from '../../../../../../settings_ui/src/SettingsPanelHost';
+import { RefreshIcon } from '@floegence/floe-webapp-core/icons';
+import { SettingsResourceToolbar } from './SettingsPrimitives';
 import { useI18n } from '../../i18n';
 import { useEnvContext } from '../EnvContext';
 import { useEnvSettingsPage } from './EnvSettingsPageContext';
@@ -33,6 +37,7 @@ function reconcileTerminalSettingsSnapshot(previous: RuntimeWorkbenchLayoutSnaps
 
 export function TerminalSettingsPanel(props: { resource?: string }) {
   const i18n = useI18n(), env = useEnvContext(), ctx = useEnvSettingsPage();
+  const host = useSettingsPanelHost();
   const catalog = useTerminalSessionCatalog();
   const attachments = useTerminalSettingsAttachments();
   const resources = createEnvResourceCollection(env);
@@ -41,6 +46,12 @@ export function TerminalSettingsPanel(props: { resource?: string }) {
   let disposed = false;
   onCleanup(() => { disposed = true; });
   const capture = () => { const generation = resources.access().generation; return () => !disposed && resources.ready() && resources.access().generation === generation; };
+  // IMPORTANT: Retained editors own drafts and reads, not mutation admission.
+  // A new presentation identity also retires an unfinished preflight when the
+  // user leaves and returns to the same resource before its read completes.
+  const presentation = createMemo(() => ({ resource: props.resource ?? '', present: host?.present() ?? true, target: host?.target() }));
+  const presented = (resource: string) => { const state = presentation(); return state.resource === resource && (!host || state.present && state.target?.section === 'terminal' && (state.target.resource ?? '') === resource); };
+  const capturePresentation = (resource: string) => { const admitted = presentation(); return () => presentation() === admitted && presented(resource); };
   const [streamError, setStreamError] = createSignal('');
   const [streamRestart, setStreamRestart] = createSignal(0);
   const [snapshot, { refetch, mutate }] = createResource(() => resources.ready() && ctx.canInteract() ? resources.access().generation + 1 : false, async (): Promise<RuntimeWorkbenchLayoutSnapshot> => {
@@ -83,17 +94,19 @@ export function TerminalSettingsPanel(props: { resource?: string }) {
   const [visited, setVisited] = createSignal<string[]>(['']);
   createEffect(() => { const key = props.resource ?? ''; if (valid()) setVisited(old => old.includes(key) ? old : [...old, key]); });
   const [busy, setBusy] = createSignal(false), [error, setError] = createSignal('');
-  const updateFont = async (id: string, patch: { font_size?: number; font_family_id?: string }) => {
-    if (busy() || !ctx.canInteract() || !env.env()?.permissions?.can_write || !resources.ready()) return;
-    const current = capture(); setBusy(true); setError('');
+  const updateFont = async (resource: string, id: string, patch: { font_size?: number; font_family_id?: string }) => {
+    if (busy() || disposed || !presented(resource) || !available(parseTerminalSettingsResource(resource)) || !ctx.canInteract() || !env.env()?.permissions?.can_write || !resources.ready()) return;
+    const current = capture(), admitted = capturePresentation(resource); setBusy(true); setError('');
     try {
       // IMPORTANT: Refresh and CAS only the exact widget's font fields. Never
       // attach a terminal, recreate a missing widget, or overwrite session IDs.
       const latest = await getWorkbenchLayoutSnapshot();
-      if (!current() || !ctx.canInteract() || !env.env()?.permissions?.can_write) return;
+      if (!current() || !admitted() || !ctx.canInteract() || !env.env()?.permissions?.can_write) return;
       const saved = latest.widget_states.find(state => state.widget_id === id && state.state.kind === 'terminal');
       if (!latest.widgets.some(widget => widget.widget_id === id && widget.widget_type === 'redeven.terminal') || saved && saved.state.kind !== 'terminal') throw new Error(i18n.t('settings.targetUnavailable'));
       const next = await putWorkbenchWidgetState(id, { base_revision: saved?.revision ?? 0, widget_type: 'redeven.terminal', state: { ...(saved?.state ?? { kind: 'terminal', session_ids: [] }), ...patch } });
+      // IMPORTANT: Once accepted, settle against the environment lifetime even
+      // after navigation. Presentation loss must not replay or forget a PUT.
       if (current()) mutate(previous => {
         const base = reconcileTerminalSettingsSnapshot(previous, latest);
         const existing = base.widget_states.find(state => state.widget_id === id);
@@ -105,6 +118,7 @@ export function TerminalSettingsPanel(props: { resource?: string }) {
   };
   const Editor = (entry: { resource: string }) => {
     const selected = parseTerminalSettingsResource(entry.resource);
+    const canEdit = () => !disposed && presented(entry.resource) && resources.ready() && ctx.canInteract() && available(selected);
     const sessionID = () => selected?.kind === 'session' ? selected.id : selected?.sessionId;
     const controller = createMemo(() => {
       const owners = attachments?.entries().filter(owner => owner.ready() && owner.controllers().has(sessionID() ?? '') && (selected?.kind !== 'widget' || owner.widgetID === selected.id)) ?? [];
@@ -115,41 +129,45 @@ export function TerminalSettingsPanel(props: { resource?: string }) {
       if (!owner || !id) return undefined;
       const authority = owner.controllers().get(id); const current = capture();
       return { historyRetention: owner.transport.historyRetention, configureHistoryRetention: async (session: string, limits: Parameters<NonNullable<typeof owner.transport.configureHistoryRetention>>[1]) => {
-        if (!current() || !available(selected) || session !== id || !owner.ready() || owner.controllers().get(id) !== authority) throw new Error(i18n.t('settings.targetUnavailable'));
+        const admitted = capturePresentation(entry.resource);
+        const canConfigure = () => current() && admitted() && canEdit() && controller() === owner && session === id && owner.ready() && owner.controllers().get(id) === authority;
+        if (!canConfigure()) throw new Error(i18n.t('settings.targetUnavailable'));
         if (selected?.kind === 'widget') {
           const latest = await getWorkbenchLayoutSnapshot();
           const state = latest.widget_states.find(item => item.widget_id === selected.id)?.state;
-          if (!current() || !owner.ready() || owner.controllers().get(id) !== authority || !latest.widgets.some(widget => widget.widget_id === selected.id) || state?.kind !== 'terminal' || !state.session_ids.includes(id)) throw new Error(i18n.t('settings.targetUnavailable'));
+          if (!canConfigure() || !latest.widgets.some(widget => widget.widget_id === selected.id && widget.widget_type === 'redeven.terminal') || state?.kind !== 'terminal' || !state.session_ids.includes(id)) throw new Error(i18n.t('settings.targetUnavailable'));
         }
         return owner.transport.configureHistoryRetention!(session, limits);
       } };
     });
     const geometry = () => selected?.kind === 'widget' ? widgetState(selected.id)?.state : null;
     const shared = () => geometry()?.kind === 'terminal' ? geometry() as Extract<NonNullable<ReturnType<typeof geometry>>, { kind: 'terminal' }> : null;
-    return <fieldset disabled={busy() || !available(selected)} class="min-w-0">
-      <TerminalSettingsDialog embedded open retentionCanManage={ctx.canInteract() && ctx.canAdmin()} retentionTransport={transport()} retentionAuthority={controller()?.controllers().get(sessionID() ?? '')} retentionSessionId={sessionID()}
+    return <fieldset disabled={busy() || !canEdit()} class="min-w-0">
+      <TerminalSettingsDialog embedded open retentionCanManage={canEdit() && ctx.canAdmin()} retentionTransport={transport()} retentionAuthority={controller()?.controllers().get(sessionID() ?? '')} retentionSessionId={sessionID()}
         userTheme={preferences.userTheme()} fontSize={selected?.kind === 'widget' ? normalizeTerminalFontSize(shared()?.font_size) : preferences.fontSize()}
         fontFamilyId={selected?.kind === 'widget' ? normalizeTerminalFontFamilyId(shared()?.font_family_id) : preferences.fontFamilyId()} fontScope={selected?.kind === 'widget' ? 'shared-workbench' : 'local'}
-        mobileInputMode={preferences.mobileInputMode()} systemAppearance={theme.resolvedTheme()} followInput={preferences.followInput()} onFollowInputChange={preferences.setFollowInput}
+        mobileInputMode={preferences.mobileInputMode()} systemAppearance={theme.resolvedTheme()} followInput={preferences.followInput()} onFollowInputChange={value => { if (canEdit()) preferences.setFollowInput(value); }}
         workIndicatorEnabled={preferences.workIndicatorEnabled()} minFontSize={TERMINAL_MIN_FONT_SIZE} maxFontSize={TERMINAL_MAX_FONT_SIZE} onOpenChange={() => {}}
-        onThemeChange={value => { preferences.setUserTheme(value); return true; }}
-        onFontSizeChange={value => { if (selected?.kind === 'widget') void updateFont(selected.id, { font_size: normalizeTerminalFontSize(value) }); else preferences.setFontSize(value); }}
-        onFontFamilyChange={value => { if (selected?.kind === 'widget') void updateFont(selected.id, { font_family_id: normalizeTerminalFontFamilyId(value) }); else preferences.setFontFamily(value); }}
-        onMobileInputModeChange={preferences.setMobileInputMode} onWorkIndicatorEnabledChange={preferences.setWorkIndicatorEnabled} />
+        onThemeChange={value => { if (!canEdit()) return false; preferences.setUserTheme(value); return true; }}
+        onFontSizeChange={value => { if (!canEdit()) return; if (selected?.kind === 'widget') void updateFont(entry.resource, selected.id, { font_size: normalizeTerminalFontSize(value) }); else preferences.setFontSize(value); }}
+        onFontFamilyChange={value => { if (!canEdit()) return; if (selected?.kind === 'widget') void updateFont(entry.resource, selected.id, { font_family_id: normalizeTerminalFontFamilyId(value) }); else preferences.setFontFamily(value); }}
+        onMobileInputModeChange={value => { if (canEdit()) preferences.setMobileInputMode(value); }} onWorkIndicatorEnabledChange={value => { if (canEdit()) preferences.setWorkIndicatorEnabled(value); }} />
     </fieldset>;
   };
   const selection = () => target()?.kind === 'widget' ? terminalSettingsResource({ kind: 'widget', id: target()!.id }) : props.resource ?? '';
   return <div class="space-y-4" data-testid="terminal-settings-panel">
-    <div class="flex gap-2"><Select ariaLabel={i18n.t('terminal.settings.target')} value={selection()} options={[
+    <SettingsResourceToolbar label={i18n.t('terminal.settings.target')} actions={
+      <Button size="sm" variant="ghost" icon={RefreshIcon} onClick={() => { void catalog?.refresh(); void Promise.resolve(refetch()).then(() => setStreamRestart(value => value + 1)); }} disabled={snapshot.loading}>{i18n.t('common.actions.refresh')}</Button>
+    }><Select section="terminal" class="w-full" ariaLabel={i18n.t('terminal.settings.target')} value={selection()} options={[
       { value: '', label: i18n.t('terminal.settings.defaultsTarget') },
       ...sessions().map(session => ({ value: terminalSettingsResource({ kind: 'session', id: session.id }), label: session.name || session.id })),
       ...widgets().map((widget, index) => ({ value: terminalSettingsResource({ kind: 'widget', id: widget.widget_id }), label: i18n.t('terminal.settings.widgetTarget', { number: index + 1 }) })),
     ]} onChange={resource => env.openSettings('terminal', { resource: resource || undefined })} />
-    <Button variant="ghost" onClick={() => { void catalog?.refresh(); void Promise.resolve(refetch()).then(() => setStreamRestart(value => value + 1)); }} disabled={snapshot.loading}>{i18n.t('common.actions.refresh')}</Button></div>
-    <Show when={target()?.kind === 'widget'}><Select ariaLabel={i18n.t('terminal.settings.sessionTarget')} value={target()?.sessionId ?? ''} options={[
+    </SettingsResourceToolbar>
+    <Show when={target()?.kind === 'widget'}><SettingsResourceToolbar label={i18n.t('terminal.settings.sessionTarget')}><Select section="terminal" class="w-full" ariaLabel={i18n.t('terminal.settings.sessionTarget')} value={target()?.sessionId ?? ''} options={[
       { value: '', label: i18n.t('terminal.settings.defaultsTarget') },
       ...sessions().filter(session => { const state = widgetState(target()!.id)?.state; return state?.kind === 'terminal' && state.session_ids.includes(session.id); }).map(session => ({ value: session.id, label: session.name || session.id })),
-    ]} onChange={sessionId => env.openSettings('terminal', { resource: terminalSettingsResource({ kind: 'widget', id: target()!.id, ...(sessionId ? { sessionId } : {}) }) })} /></Show>
+    ]} onChange={sessionId => env.openSettings('terminal', { resource: terminalSettingsResource({ kind: 'widget', id: target()!.id, ...(sessionId ? { sessionId } : {}) }) })} /></SettingsResourceToolbar></Show>
     <Show when={streamError()}><p role="alert">{streamError()}</p></Show>
     <Show when={snapshot.error || error()}><p role="alert">{error() || String(snapshot.error)}</p></Show>
     <Show when={!valid()}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show>

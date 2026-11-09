@@ -8,7 +8,8 @@ import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../../../flower_ui/src/cop
 import { settingsSnapshot } from '../../FlowerSurface.navigation.testHarness';
 const state = vi.hoisted(() => ({ directory: undefined as any, reasoning: undefined as any }));
 vi.mock('../../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async original => ({
+  ...await original<object>(),
  Button: (props: any) => <button disabled={props.disabled} onClick={props.onClick}>{props.children}</button>,
  Select: (props: any) => <select aria-label={props.ariaLabel ?? props['aria-label']} value={props.value} onChange={event => props.onChange(event.currentTarget.value)}>{props.options.map((value: any) => <option value={value.value} disabled={value.disabled}>{value.label}</option>)}</select>,
 }));

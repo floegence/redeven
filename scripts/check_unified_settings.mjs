@@ -10,7 +10,8 @@ for (const forbidden of ['navigation.commit', 'setViewMode(', 'activateActivityS
 const transcripts = [...shell.matchAll(/transcriptVisible=\{([^}]+)\}/g)];
 assert.ok(transcripts.length > 0);
 for (const [, expression] of transcripts) assert.ok(expression.includes('!settingsSession.present()'));
-assert.match(shell, /visiblePluginWindows = createMemo\(\(\) => settingsSession.present\(\) \? \[\]/);
+assert.match(shell, /workbenchPluginCenterBlocking = \(\) => settingsSession.present\(\) \|\| pluginCenterPresent\(\)/);
+assert.match(shell, /visiblePluginWindows = createMemo\(\(\) => workbenchPluginCenterBlocking\(\) \? \[\]/);
 const mobile = read('internal/envapp/ui_src/src/ui/MobileShellTools.tsx');
 assert.doesNotMatch(mobile, /<EnvAppThemePicker|<LanguagePreferenceMenu/);
 assert.match(mobile, /onClick: props.onSettings/);
@@ -34,7 +35,40 @@ assert.match(read('internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx'),
 // IMPORTANT: This inventory enumerates product-owned durable configuration.
 // Session actions and direct view shortcuts keep their established owner.
 const settings = read('internal/envapp/ui_src/src/ui/pages/settings/EnvSettingsDialog.tsx');
-for (const panel of ['TerminalSettingsPanel', 'ContainerSettingsPanel', 'ConversationDefaultsSettings', 'BrowserDisplaySettings', 'WorkbenchAppearanceSettings', 'PluginSettingsPanel']) assert.match(settings, new RegExp('<' + panel + '[ >]'));
+assert.match(settings, /<SettingsDialog closeOnBackdropClick /);
+assert.match(host, /closeOnBackdropClick=\{props.closeOnBackdropClick \?\? false\}/);
+for (const panel of ['TerminalSettingsPanel', 'ContainerSettingsPanel', 'ConversationDefaultsSettings', 'BrowserDisplaySettings', 'AppearanceSettings', 'PluginSettingsPanel']) assert.match(settings, new RegExp('<' + panel + '[ >]'));
+assert.match(read('internal/envapp/ui_src/src/ui/pages/settings/AppearanceSettings.tsx'), /<WorkbenchAppearanceSettings/);
+const hostAccess = read('internal/envapp/ui_src/src/ui/pages/HostAccessControls.tsx');
+assert.match(hostAccess, /<HostAccessManagement \{\.\.\.props\} compact/);
+assert.match(hostAccess, /<SettingRow class="host-access-feature-row"/);
+const picture = read('internal/envapp/ui_src/src/ui/pages/settings/ApplicationPictureSettings.tsx');
+assert.doesNotMatch(picture, /common.actions.save|application-picture-save/);
+assert.match(picture, /useSettingsPresentation\('applications'\)/);
+assert.match(hostAccess, /open=\{presented\(\) && Boolean\(confirm\(\)\)\}/);
+assert.match(hostAccess, /if \(!canManage\(\)\) return/);
+const hostApplications = read('internal/envapp/ui_src/src/ui/pages/EnvHostApplicationsPage.tsx');
+assert.match(hostApplications, /const canLaunch = \(\) => Boolean\(\(!props.settingsOnly \|\| presented\(\)\)/);
+const authorization = read('internal/envapp/ui_src/src/ui/pages/settings/DesktopAuthorizationSettings.tsx');
+assert.match(authorization, /useSettingsPresentation\('applications'\)/);
+assert.match(authorization, /if \(!canChange\(\)\) return/);
+// IMPORTANT: Category roots delegate closing to the host; domain refresh is scoped.
+assert.match(settings, /<FlowerExtensionsSurface embedded/);
+assert.doesNotMatch(settings, /onBack=\{\(\) => props\.session\.close/);
+// IMPORTANT: Plugin management is an independent feature, not configuration.
+// Only exact installed/author connection editors belong in Settings.
+assert.match(shell, /<PluginCenterDrawer/);
+const pluginCenterOpen = shell.slice(shell.indexOf('const openPluginCenter ='), shell.indexOf('const openPluginCenter =') + 1000);
+assert.doesNotMatch(pluginCenterOpen, /openSettings\(['"]plugins/);
+assert.doesNotMatch(settings, /PluginCenterView|renderPlugins|renderInstalled/);
+assert.doesNotMatch(read('internal/envapp/ui_src/src/ui/plugins/PluginSettingsPanel.tsx'), /PluginCenterView|renderInstalled/);
+const page = read('internal/envapp/ui_src/src/ui/pages/EnvSettingsPage.tsx');
+assert.match(page, /role="alert" class="redeven-settings-read-error"/);
+assert.match(page, /variant="outline" disabled=\{ctx.settings.loading\} onClick=\{\(\) => void ctx.refreshSettingsPage\(\)\}/);
+assert.match(read('internal/envapp/ui_src/src/ui/pages/settings/SettingsPrimitives.tsx'), /host && props.variant === 'page' \? 'section' : props.variant/);
+assert.match(read('internal/envapp/ui_src/src/ui/pages/settings/SettingsPrimitives.tsx'), /showHeading=\{!\(host && props.variant === 'page'\)\}/);
+assert.match(read('internal/envapp/ui_src/src/ui/pages/settings/StorageSettings.tsx'), /<SettingsSection variant="page"/);
+assert.doesNotMatch(read('internal/envapp/ui_src/src/ui/pages/settings/AppearanceSettings.tsx'), /settings.nav.appearance/);
 for (const [file, fragment] of [
  ['internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx', "openSettings('terminal'"],
  ['internal/envapp/ui_src/src/ui/pages/EnvContainersPage.tsx', "openSettings('containers'"],
@@ -50,4 +84,13 @@ assert.match(read('internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx'
 const recovery = read('internal/envapp/ui_src/src/ui/pages/settings/ContainerSettingsPanel.tsx');
 assert.match(recovery, /getContainerOperationByRequestID/); assert.doesNotMatch(recovery, /listContainerOperations/);
 assert.match(read('internal/envapp/ui_src/src/ui/services/hostApplicationSettingsTarget.ts'), /event\.origin === owner\.origin/);
+
+// IMPORTANT: A retained category cannot retain an actionable popup.
+for (const file of ['AppearanceSettings', 'WorkbenchAppearanceSettings', 'BrowserDisplaySettings', 'ConversationDefaultsSettings', 'ContainerSettingsPanel', 'TerminalSettingsPanel']) {
+  assert.match(read(`internal/envapp/ui_src/src/ui/pages/settings/${file}.tsx`), /SettingsSelect as Select/);
+}
+const selector = read('internal/envapp/ui_src/src/ui/pages/settings/SettingsSelect.tsx');
+assert.match(selector, /open=\{presentedOpen\(\)\}/);
+assert.match(selector, /onChange=\{value => \{ if \(admitted\(\)\)/);
+for (const file of ['internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx', 'internal/envapp/ui_src/src/ui/plugins/PluginSettingsPanel.tsx', 'internal/envapp/ui_src/src/ui/pages/settings/sections/LoggingSection.tsx']) assert.match(read(file), /SettingsSelect as Select/);
 console.log('Unified settings ownership contract passed.');

@@ -8,7 +8,11 @@ import type { PluginAuthorAccess } from './PluginAuthorAccess';
 type Editor = Parameters<typeof PluginAuthorAccess>[0];
 const state = vi.hoisted(() => ({ list: vi.fn(), identity: vi.fn(), open: vi.fn(), changed: vi.fn(), error: vi.fn(),
   ready: () => true, interact: (): boolean => true, generation: () => 0, manage: () => true, present: () => true, resource: () => undefined as string | undefined, editors: [] as Editor[] }));
-vi.mock('@floegence/floe-webapp-core/ui', () => ({ Button: (props: any) => <button disabled={props.disabled} onClick={props.onClick}>{props.children}</button> }));
+vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  Button: (props: any) => <button disabled={props.disabled} onClick={props.onClick}>{props.children}</button>,
+  Select: (props: any) => <select aria-label={props.ariaLabel} value={props.value} onChange={event => props.onOptionSelect(props.options.find((option: any) => option.value === event.currentTarget.value))}>{props.options.map((option: any) => <option value={option.value} disabled={option.disabled}>{option.label}</option>)}</select>,
+}));
+vi.mock('../pages/settings/SettingsPrimitives', () => ({ SettingsResourceToolbar: (props: any) => <div data-settings-resource-toolbar><span>{props.label}</span>{props.children}{props.actions}</div> }));
 vi.mock('../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 vi.mock('../pages/EnvContext', () => ({ useEnvContext: () => ({ resourceCacheAccess: () => ({ phase: state.ready() ? 'ready' : 'denied', generation: state.generation() }), openSettings: state.open, bumpSettingsSeq: state.changed }) }));
 vi.mock('../pages/settings/EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => state.interact(), canAdmin: () => state.manage(), notify: { error: state.error } }) }));
@@ -32,15 +36,22 @@ afterEach(() => { dispose?.(); dispose = undefined; document.body.replaceChildre
 async function mount(resource?: string) {
   [state.resource, setResource] = createSignal(resource); [state.ready, setReady] = createSignal(true); [state.generation, setGeneration] = createSignal(0); [state.present, setPresent] = createSignal(true);
   host = document.createElement('div'); document.body.append(host);
-  dispose = render(() => <PluginSettingsPanel resource={state.resource()} renderInstalled={() => <div data-installed>Installed</div>} />, host);
+  dispose = render(() => <PluginSettingsPanel resource={state.resource()} />, host);
   await settle();
 }
 function shown() { return [...host.querySelectorAll<HTMLElement>('[data-editor]')].filter(node => !node.parentElement!.hidden); }
 function refresh() { [...host.querySelectorAll('button')].find(button => button.textContent === 'common.actions.refresh')!.click(); }
+it('groups its labelled resource picker and scoped refresh in the shared settings toolbar', async () => {
+  await mount();
+  const toolbar = host.querySelector('[data-settings-resource-toolbar]');
+  expect(toolbar).not.toBeNull();
+  expect(toolbar!.querySelector('select')?.getAttribute('aria-label')).toBe('settings.plugins.target');
+  expect(toolbar!.querySelector('button')?.textContent).toBe('common.actions.refresh');
+});
 it('discovers author previews from the catalog without opening a workspace', async () => {
   await mount();
   const select = host.querySelector('select')!;
-  expect([...select.options].map(option => option.text)).toEqual(['settings.plugins.installed', 'Draft A', 'Draft B']);
+  expect([...select.options].map(option => option.text)).toEqual(['settings.plugins.target', 'Draft A', 'Draft B']);
   expect(state.identity).not.toHaveBeenCalled(); expect(state.editors).toHaveLength(0);
   select.value = pluginAuthorSettingsResource({ draftID: draft.id, workspaceID: draft.workspace_id }); select.dispatchEvent(new Event('change', { bubbles: true }));
   expect(state.open).toHaveBeenCalledWith('plugins', { resource: select.value });
@@ -58,9 +69,9 @@ it('rejects a draft/workspace mismatch without reading its platform', async () =
 });
 it('rejects deleted and malformed targets without falling back to installed settings', async () => {
   state.list.mockResolvedValue([{ ...draft, lifecycle: 'deleted' }]); await mount(exact()); expect(state.identity).not.toHaveBeenCalled(); expect(shown()).toHaveLength(0);
-  setResource('instance:preview-a'); await settle(); expect(host.querySelector('[data-installed]')!.parentElement!.hidden).toBe(true); expect(shown()).toHaveLength(0);
+  setResource('instance:preview-a'); await settle(); expect(host.querySelector('[data-plugin-center-view]')).toBeNull(); expect(shown()).toHaveLength(0);
 });
-it('retains separate connection drafts while switching author targets and installed plugins', async () => {
+it('retains separate connection drafts while switching author targets and the configuration index', async () => {
   await mount(exact()); const first = shown()[0].querySelector('input')!; first.value = 'https://draft-a.example';
   setResource(exact('b')); await settle(); expect(shown()).toHaveLength(1); expect(state.editors[0].visible).toBe(false); shown()[0].querySelector('input')!.value = 'https://draft-b.example';
   setResource(undefined); await settle(); expect(shown()).toHaveLength(0);
@@ -90,6 +101,10 @@ it('pins a globally selected workspace to its confirmed preview until explicit r
   await mount(resource); expect(shown()).toHaveLength(1);
   state.identity.mockResolvedValue({ preview: { plugin_instance_id: 'replacement' } }); refresh(); await settle();
   expect(shown()).toHaveLength(0); expect(state.editors).toHaveLength(1); expect(host.textContent).toContain('settings.targetUnavailable');
+  const select = host.querySelector('select')!;
+  select.value = resource; select.dispatchEvent(new Event('change', { bubbles: true })); await settle();
+  expect(state.open).toHaveBeenLastCalledWith('plugins', { resource });
+  expect(shown()).toHaveLength(1); expect(state.editors.at(-1)?.pluginInstanceID).toBe('replacement');
 });
 
 it('does not replace author authority while unrelated agent settings reload', async () => {

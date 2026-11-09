@@ -594,7 +594,7 @@ describe('EnvSettingsPage', () => {
 
     const navLabels = SETTINGS_NAV_ITEMS.map((item) => item.label);
     expect(navLabels).toEqual([
-      'Appearance & Language', 'Terminal', 'Browser', 'Host Applications & Desktop', 'Containers', 'Services', 'Extensions', 'Plugin Center', 'Storage & Recovery',
+      'Appearance & Language', 'Terminal', 'Browser', 'Host Applications & Desktop', 'Containers', 'Services', 'Extensions', 'Plugin configuration', 'Storage & Recovery',
       'Config File', 'Connection', 'Runtime Status', 'Shell & Workspace', 'Codespaces & Tooling', 'Logging', 'Permission Policy', 'Flower', 'Debug Console',
     ]);
     const renderedIDs = Array.from(host.querySelectorAll('[data-settings-nav-item]')).map(node => node.getAttribute('data-settings-nav-item'));
@@ -680,7 +680,7 @@ describe('EnvSettingsPage', () => {
 
     const connectionCard = host.querySelector('[data-settings-card="Connection"]');
     expect(connectionCard).toBeTruthy();
-    expect(connectionCard?.textContent).toContain('Read-only');
+    expect(connectionCard?.querySelectorAll('input, textarea, select, [contenteditable="true"]')).toHaveLength(0);
     expect(connectionCard?.textContent).toContain('Connected');
     expect(connectionCard?.textContent).toContain('Provisioned');
     expect(connectionCard?.textContent).toContain('Environment ID');

@@ -1,3 +1,4 @@
+import { SettingsList } from './settings/SettingsPrimitives';
 import { ApplicationPictureSettings } from './settings/ApplicationPictureSettings';
 import { DesktopAuthorizationSettings } from './settings/DesktopAuthorizationSettings';
 import { useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
@@ -53,7 +54,9 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
   const [runningOnly, setRunningOnly] = createSignal(false);
   const activation = (() => { try { return useViewActivation(); } catch { return null; } })();
   const canRead = () => Boolean(ctx.env()?.permissions?.can_read);
-  const canLaunch = () => Boolean(applicationResource.ready() && canRead() && ctx.env()?.permissions?.can_write && ctx.env()?.permissions?.can_execute);
+  // IMPORTANT: Retained settings keep drafts, never mutation authority. Fence
+  // every owner action, including system permissions and setup callbacks.
+  const canLaunch = () => Boolean((!props.settingsOnly || presented()) && applicationResource.ready() && canRead() && ctx.env()?.permissions?.can_write && ctx.env()?.permissions?.can_execute);
   const applicationResource = createEnvCachedResource(ctx, () => `host-applications:${i18n.locale()}`, hostApplicationSnapshot);
   const catalog = () => applicationResource.data() ?? null;
   const isMac = createMemo(() => catalog()?.availability.backend === 'macos');
@@ -70,7 +73,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
   const [setupManaging, setSetupManaging] = createSignal(false);
   const [accessBusy, setAccessBusy] = createSignal(false);
   const welcome = () => !nativeLaunch() && catalog()?.availability.supported && accessState() === 'unconfigured' && desktopState() === 'unconfigured' && !browse() && !preparationActive();
-  const beginSetup = () => {setSetupManaging(false);setSelectedApplication(null);setSetupDialog(true);};
+  const beginSetup = () => {if (!canLaunch()) return;setSetupManaging(false);setSelectedApplication(null);setSetupDialog(true);};
   const changeAccess = async (value: HostAccessState) => {
     if (!canLaunch() || accessBusy()) return;
     const owner=applicationResource.identity(),current=applicationResource.captureAuthority();
@@ -80,6 +83,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     finally {if(!disposed&&current())setAccessBusy(false);}
   };
   const finishSetup = async () => {
+    if (!canLaunch() || accessBusy()) return;
     const current=applicationResource.captureAuthority();
     try {
       const selected = selectedApplication();
@@ -740,8 +744,8 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     ...(catalog() && displayError() ? [{ id: 'inventory', severity: 'error' as const, summary: displayError(), actions: <Button size="sm" variant="outline" disabled={loading()} onClick={() => void refresh()}>{i18n.t('common.actions.retry')}</Button> }] : []),
     ...(ready() && !isMac() && setup()?.installed?.ready && ((hasApplications() && setup()?.update_available) || preparationActive() || preparationNeedsAttention()) ? [{ id: 'component-update', severity: setup()?.state === 'failed' ? 'error' as const : 'info' as const, summary: i18n.t(preparationActive() || preparationNeedsAttention() ? hostApplicationSetupHeading(setup(), acquisitionProgress()) : 'hostApplications.update.available'), detail: i18n.t(setup()?.state === 'failed' ? 'hostApplications.update.failedRetained' : 'hostApplications.update.description'), actions: <Button size="sm" variant="outline" onClick={() => void viewUpdate()}>{i18n.t('hostApplications.update.view')}</Button> }] : []),
   ];
-  return <div ref={pageRoot} class="host-apps h-full min-h-0 flex flex-col" data-testid="host-applications" data-env-reload-state={catalog() ? 'content' : displayError() ? 'error' : 'pending'}>
-    <Show when={props.settingsOnly}><RemoteDesktopLauncher active={!props.settingsOnly || presented()} request={desktopRequest()} onStatus={setDesktopStatus} onManage={openSettings} /></Show>
+  return <div ref={pageRoot} class={props.settingsOnly ? "host-apps min-w-0" : "host-apps h-full min-h-0 flex flex-col"} data-testid="host-applications" data-env-reload-state={catalog() ? 'content' : displayError() ? 'error' : 'pending'}>
+    <Show when={props.settingsOnly}><RemoteDesktopLauncher hideTrigger active={!props.settingsOnly || presented()} request={desktopRequest()} onStatus={setDesktopStatus} onManage={openSettings} /></Show>
     <Show when={!props.settingsOnly}>
     <HostApplicationsHeader feedback={feedback()} actions={<>
 <RemoteDesktopLauncher active={!props.settingsOnly || presented()} request={desktopRequest()} onStatus={value => { if (!props.settingsOnly) setDesktopStatus(value); }} onManage={openSettings} />
@@ -855,21 +859,24 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     </div>
     </Show>
     <Show when={props.settingsOnly}>
-      <div class="host-access-settings p-4">
+      <div class="host-access-settings">
         <ApplicationPictureSettings allowed={canLaunch()} macOS={isMac()} />
         <DesktopAuthorizationSettings status={desktopStatus() ?? undefined} allowed={canLaunch() && !desktopBusy() && !desktopRefreshing()} refresh={refreshDesktop} />
         <Show when={displayError()}><p role="alert" class="host-app-error">{displayError()}</p></Show>
         <Show when={nativeLaunch()}><p class="host-access-local-note">{i18n.t('hostAccess.nativeReady')}</p></Show>
-        <HostAccessFeatureSettings feature="applications" state={accessState()} ready={Boolean(catalog()?.availability.ready)} allowed={canLaunch()} busy={accessBusy()} onChange={changeAccess} onReconfigure={() => {
+        <SettingsList class="host-access-feature-group">
+        <HostAccessFeatureSettings feature="applications" state={accessState()} error={displayError()} ready={Boolean(catalog()?.availability.ready)} allowed={canLaunch()} busy={accessBusy()} onChange={changeAccess} onReconfigure={() => {
           if (accessState() === 'paused' && catalog()?.availability.ready) void changeAccess('enabled').catch(() => {});
           else beginSetup();
         }} />
         <Show when={desktopStatus() && !desktopError()} fallback={<div class="host-access-notice"><p>{i18n.t(desktopError() ? 'remoteDesktop.statusFailed' : 'remoteDesktop.checking')}</p><Button variant="outline" disabled={desktopRefreshing()} onClick={() => void refreshDesktop()}>{i18n.t('remoteDesktop.refresh')}</Button></div>}>
-          <HostAccessFeatureSettings feature="desktop" state={desktopState()!} ready={Boolean(desktopStatus()?.capabilities.screen)} allowed={canLaunch()} busy={desktopBusy() || desktopRefreshing()} onChange={changeDesktopAccess} onReconfigure={() => {
+          <HostAccessFeatureSettings feature="desktop" state={desktopState()!} error={displayError()} ready={Boolean(desktopStatus()?.capabilities.screen)} allowed={canLaunch()} busy={desktopBusy() || desktopRefreshing()} onChange={changeDesktopAccess} onReconfigure={() => {
+            if (!canLaunch()) return;
             if (desktopState() === 'paused' && desktopStatus()?.capabilities.screen) void changeDesktopAccess('enabled').catch(() => {});
             else {  setDesktopRequest(value => value + 1); }
           }} />
         </Show>
+        </SettingsList>
         <Show when={isMac()}><HostAccessSystemPermissions onRecovery={action => void requestPermission(action)} permissionAppName={catalog()?.availability.permission_app_name} screen={Boolean(catalog()?.availability.permissions?.screen_recording)} input={Boolean(catalog()?.availability.permissions?.accessibility)} allowed={canLaunch()} busy={permissionBusy()} onPermission={(permission, manage) => void requestPermission(permission, manage)} /></Show>
       </div>
     </Show>

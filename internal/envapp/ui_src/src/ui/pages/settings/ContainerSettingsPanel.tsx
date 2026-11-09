@@ -1,7 +1,10 @@
+import { useSettingsPanelHost } from '../../../../../../settings_ui/src/SettingsPanelHost';
+import { SettingsSelect as Select } from './SettingsSelect';
 import { secureRandomUUID } from '@floegence/floe-webapp-core';
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, on, untrack } from 'solid-js';
-import { Button, Input, Select, Tabs, Tag } from '@floegence/floe-webapp-core/ui';
-import { AlertTriangle, ChevronRight, Eye, EyeOff, FileText, Info, Layers, Terminal, Lock, Plus, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
+import { Button, Input, Tabs, Tag, SettingsSection, SettingsList, SettingRow } from '@floegence/floe-webapp-core/ui';
+import { AlertTriangle, Eye, EyeOff, Info, Lock, Plus, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
+import { SettingsResourceToolbar } from './SettingsPrimitives';
 import { useEnvContext } from '../EnvContext';
 import { useI18n } from '../../i18n';
 import { useEnvSettingsPage } from './EnvSettingsPageContext';
@@ -63,6 +66,7 @@ const objectWithString = (value: unknown, key: string, next: string): Record<str
 // IMPORTANT: Configuration is owned here, never by the container work surface.
 // Opening a target performs reads only. An unknown ID must not select another service.
 export function ContainerSettingsPanel(props: { resource?: string }) {
+  const host = useSettingsPanelHost();
   const env = useEnvContext();
   const i18n = useI18n();
   const ctx = useEnvSettingsPage();
@@ -76,21 +80,22 @@ export function ContainerSettingsPanel(props: { resource?: string }) {
   const target = () => props.resource ?? selected();
   const [visited, setVisited] = createSignal<string[]>([]);
   createEffect(() => { const id = target(); if (id && ids().includes(id)) setVisited(old => old.includes(id) ? old : [...old, id]); });
-  return <div class="space-y-4" data-testid="container-settings-panel">
-    <h2 class="text-lg font-semibold">{i18n.t('containers.services.title')}</h2>
-    <div class="flex gap-2"><Select value={target()} onChange={id => { setSelected(id); env.openSettings('containers', { resource: id }); }}
+  return <div class="space-y-5 min-w-0" data-testid="container-settings-panel">
+    <SettingsResourceToolbar label={i18n.t('containers.services.title')} actions={
+      <Button size="sm" variant="ghost" icon={Refresh} disabled={services.loading || !ctx.canInteract()} onClick={() => void refetch()} aria-label={i18n.t('common.actions.refresh')}>{i18n.t('common.actions.refresh')}</Button>
+    }><Select section="containers" class="w-full" value={target()} onChange={id => { setSelected(id); env.openSettings('containers', { resource: id }); }}
       options={ (serviceData() ?? []).map(service => ({ value: service.service_id, label: service.name })) } placeholder={i18n.t('containers.services.title')} ariaLabel={i18n.t('containers.services.title')} />
-      <Button variant="ghost" disabled={services.loading || !ctx.canInteract()} onClick={() => void refetch()} aria-label={i18n.t('common.actions.refresh')}><Refresh class="h-4 w-4" /></Button></div>
+    </SettingsResourceToolbar>
     <Show when={services.error}><p role="alert">{String(services.error)}</p></Show>
     <Show when={services.loading}><p role="status">{i18n.t('containers.loading')}</p></Show>
     <Show when={target() && !services.loading && !ids().includes(target())}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show>
     <For each={visited()}>{id => <div hidden={target() !== id} inert={target() !== id}>
-      <ContainerServiceSettings service={(serviceData() ?? []).find(service => service.service_id === id) ?? stableServices.get(id)!} available={() => ids().includes(id)} captureAuthority={cache.captureAuthority} />
+      <ContainerServiceSettings service={(serviceData() ?? []).find(service => service.service_id === id) ?? stableServices.get(id)!} available={() => ids().includes(id)} active={() => target() === id && (!host || host.present() && host.target()?.section === 'containers' && host.target()?.resource === id)} captureAuthority={cache.captureAuthority} />
     </div>}</For>
   </div>;
 }
 
-function ContainerServiceSettings(props: { service: ContainerService; available: () => boolean; captureAuthority: () => () => boolean }) {
+function ContainerServiceSettings(props: { service: ContainerService; available: () => boolean; active: () => boolean; captureAuthority: () => () => boolean }) {
   const env = useEnvContext();
   const i18n = useI18n();
   const ctx = useEnvSettingsPage();
@@ -106,7 +111,7 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
   const [pendingSource, setPendingSource] = createSignal<string>();
   let sourceSequence = 0;
   onCleanup(() => lifetime.abort());
-  const canSave = () => !uncertain() && current() && ctx.canInteract() && ctx.canAdmin() && !!env.env()?.permissions?.can_read && !!env.env()?.permissions?.can_write && !!env.env()?.permissions?.can_execute;
+  const canSave = () => props.active() && !uncertain() && current() && ctx.canInteract() && ctx.canAdmin() && !!env.env()?.permissions?.can_read && !!env.env()?.permissions?.can_write && !!env.env()?.permissions?.can_execute;
   const [busy, setBusy] = createSignal(false);
   const [review, setReview] = createSignal<{ request: Record<string, unknown>; preflight: ContainerPreflight } | null>(null);
   const [operation, setOperation] = createSignal<ContainerOperation>();
@@ -238,6 +243,10 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
     }
   };
 
+  // IMPORTANT: Resource navigation retires preflight/confirmation admission,
+  // while accepted operations keep their original environment lifetime.
+  let presentationRevision = 0;
+  createEffect(on(props.active, () => { presentationRevision++; setReview(null); }));
   const submitServiceConfiguration = async (applyMode: 'save' | 'save_and_restart') => {
     const service = serviceConfigurationTarget();
     const source = serviceConfigurationSource();
@@ -258,12 +267,12 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
         ? { http_proxy: draft.httpProxy, https_proxy: draft.httpsProxy, no_proxy: draft.noProxy }
         : { content: draft.content }),
     };
-    const admitted = capture();
+    const admitted = capture(), presentation = presentationRevision;
     setBusy(true);
     setServiceConfigurationError('');
     try {
       const preflight = await preflightContainerOperation('container.services.configuration.update', request);
-      if (admitted() && canSave()) { setReviewCurrent(() => admitted); setReview({ preflight, request }); }
+      if (admitted() && canSave() && presentation === presentationRevision) { setReviewCurrent(() => admitted); setReview({ preflight, request }); }
     } catch (error) { if (admitted()) setServiceConfigurationError(String(error)); }
     finally { if (admitted()) setBusy(false); }
   };
@@ -313,78 +322,102 @@ function ContainerServiceSettings(props: { service: ContainerService; available:
     } catch (error) { if (admitted()) { await openServiceConfiguration(props.service); setServiceConfigurationError(String(error)); } }
     finally { if (admitted()) setBusy(false); }
   };
-  return <div class="container-service-config-content space-y-4">
-    <div class="flex justify-end"><Button variant="ghost" disabled={!current() || busy()} onClick={() => void reconcile()}>{i18n.t('common.actions.refresh')}</Button></div>
+  // IMPORTANT: The global settings page owns scrolling; configuration fields
+  // stay in natural flow and do not recreate the work surface's dialog viewport.
+  return <section class="container-settings-configuration space-y-4" aria-label={i18n.t('containers.services.configurationTitle', { name: props.service.name })}>
+    <header class="flex flex-wrap items-center justify-end gap-2">
+      <Button size="sm" variant="ghost" icon={Refresh} disabled={!current() || busy()} onClick={() => void reconcile()}>{i18n.t('common.actions.refresh')}</Button>
+      <Show when={dirty()}><Button size="sm" variant="ghost" disabled={busy() || uncertain() || !current()} onClick={() => void openServiceConfiguration(props.service, serviceConfigurationSourceID())}>{i18n.t('filePreview.discardChanges')}</Button></Show>
+    </header>
     <Show when={uncertain()}><p role="alert">{i18n.t('settings.operationUnknown')}</p></Show>
-    <Show when={dirty()}><Button variant="ghost" disabled={busy() || uncertain() || !current()} onClick={() => void openServiceConfiguration(props.service, serviceConfigurationSourceID())}>{i18n.t('filePreview.discardChanges')}</Button></Show>
-    <fieldset disabled={!canSave() || busy() || !!review()}>
-        <Show when={serviceConfigurationTarget()?.configuration.mode === 'local'} fallback={<div class="container-service-config-unavailable"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.services.configurationUnavailable')}</strong></div>}>
-          <Show when={!serviceConfigurationLoading()} fallback={<div class="container-service-config-loading"><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" />{i18n.t('containers.loading')}</div>}>
-            <Show when={serviceConfiguration()} fallback={<div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div>}>
-              <Show when={serviceConfigurationError()}><div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div></Show>
-              <Tabs class="container-service-config-source-tabs" items={(serviceConfiguration()?.sources ?? []).map((source) => ({ id: source.source_id, label: i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLI' : 'containers.services.engineConfiguration') }))} activeId={serviceConfigurationSourceID()} onChange={(id) => selectServiceConfigurationSource(id as ContainerServiceConfigurationSourceID)} size="md" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} />
-              <Show when={serviceConfigurationSource()} keyed>{(source) => <>
-                <div class="container-service-config-source-meta">
-                  <div><span>{i18n.t('containers.services.configurationPath')}</span><code>{source.display_path}</code></div>
-                  <Tag variant={source.status === 'ready' ? 'success' : source.status === 'missing' ? 'neutral' : 'error'} tone="soft" size="sm">{i18n.t(`containers.services.sourceStates.${source.status}` as Parameters<typeof i18n.t>[0])}</Tag>
-                </div>
-                <Show when={source.status === 'missing'}><div class="container-service-config-note"><Info class="h-4 w-4" />{i18n.t('containers.services.fileWillBeCreated')}</div></Show>
-                <Show when={source.status === 'invalid'}><div class="container-service-config-note container-service-config-note--warning"><AlertTriangle class="h-4 w-4" />{i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLIInvalid' : 'containers.services.configurationInvalid')}</div></Show>
-                <Show when={source.status !== 'permission' && source.status !== 'unsupported'} fallback={<div class="container-service-config-unavailable"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t(`containers.services.sourceStates.${source.status}` as Parameters<typeof i18n.t>[0])}</strong></div>}>
-                  <Show when={serviceConfigurationSections().length > 1}><Tabs class="container-service-config-tabs" items={serviceConfigurationSections().map((section) => ({ id: section, label: i18n.t(section === 'general' ? 'containers.services.general' : section === 'proxy' ? 'containers.services.proxies' : section === 'credentials' ? 'containers.services.credentials' : 'containers.services.advanced') }))} activeId={serviceConfigurationMode()} onChange={(id) => setServiceConfigurationMode(id as ContainerServiceConfigurationSection)} size="sm" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} /></Show>
-                  <Show when={source.source_id === 'docker_cli'} fallback={<Show when={serviceConfigurationMode() === 'proxy'} fallback={<div class="container-service-config-editor"><TextFilePreviewPane path={source.display_path} descriptor={{ mode: 'text', textPresentation: 'code', language: source.format, wrapText: false }} text={source.content ?? ''} draftText={serviceConfigurationDraft()?.content ?? ''} editing onDraftChange={(content) => updateServiceConfigurationDraft({ content })} /></div>}><div class="container-service-proxy-form"><label><span>{i18n.t('containers.services.httpProxy')}</span><Input value={serviceConfigurationDraft()?.httpProxy ?? ''} onInput={(event) => updateServiceConfigurationDraft({ httpProxy: event.currentTarget.value })} placeholder="http://proxy.example.com:3128" autocomplete="off" /></label><label><span>{i18n.t('containers.services.httpsProxy')}</span><Input value={serviceConfigurationDraft()?.httpsProxy ?? ''} onInput={(event) => updateServiceConfigurationDraft({ httpsProxy: event.currentTarget.value })} placeholder="https://proxy.example.com:3129" autocomplete="off" /></label><label><span>{i18n.t('containers.services.noProxy')}</span><Input value={serviceConfigurationDraft()?.noProxy ?? ''} onInput={(event) => updateServiceConfigurationDraft({ noProxy: event.currentTarget.value })} placeholder="localhost,127.0.0.1,.example.com" autocomplete="off" /></label></div></Show>}>
-                    <Show when={dockerCLIConfigurationDocument()} keyed>{(document) => <>
-                      <Show when={serviceConfigurationMode() === 'general'}>
-                        <div class="container-service-cli-form">
-                          <div class="container-service-cli-intro"><Info class="h-4 w-4" aria-hidden="true" /><p>{i18n.t('containers.services.dockerCLIScope')}</p></div>
-                          <div class="container-service-cli-common-grid">
-                            <label class="container-service-cli-setting-card"><span class="container-service-cli-setting-card__heading"><Layers class="h-4 w-4" aria-hidden="true" /><span><strong>{i18n.t('containers.services.currentContext')}</strong><code>currentContext</code></span></span><Select value={dockerCLIString(document, 'currentContext') || 'default'} onChange={(value) => setDockerCLIString('currentContext', value)} options={Array.from(new Set(['default', ...(source.context_options ?? []), dockerCLIString(document, 'currentContext')].filter(Boolean))).map((value) => ({ value, label: value }))} /></label>
-                            <label class="container-service-cli-setting-card"><span class="container-service-cli-setting-card__heading"><Terminal class="h-4 w-4" aria-hidden="true" /><span><strong>{i18n.t('containers.services.detachKeys')}</strong><code>detachKeys</code></span></span><Input value={dockerCLIString(document, 'detachKeys')} onInput={(event) => setDockerCLIString('detachKeys', event.currentTarget.value)} placeholder={i18n.t('containers.services.detachKeysPlaceholder')} autocomplete="off" /></label>
-                          </div>
-                          <Show when={source.context_overridden_by}><div class="container-service-config-note container-service-config-note--warning"><AlertTriangle class="h-4 w-4" />{i18n.t('containers.services.contextOverridden', { variable: source.context_overridden_by ?? '' })}</div></Show>
-                          <details class="container-service-cli-disclosure">
-                            <summary><span class="container-service-cli-disclosure__mark"><FileText class="h-4 w-4" aria-hidden="true" /></span><span class="container-service-cli-disclosure__copy"><strong>{i18n.t('containers.services.outputFormats')}</strong><small>{i18n.t('containers.services.outputFormatsDescription')}</small></span><Tag tone="soft" size="sm">{customizedDockerCLIOutputFormatCount()}/{dockerCLIOutputFormats.length}</Tag><ChevronRight class="container-service-cli-disclosure__chevron h-4 w-4" aria-hidden="true" /></summary>
-                            <div class="container-service-cli-output-grid"><For each={dockerCLIOutputFormats}>{(format) => <label><span><strong>{format.command}</strong><code>{format.key}</code></span><Input value={dockerCLIString(document, format.key)} onInput={(event) => setDockerCLIString(format.key, event.currentTarget.value)} placeholder={i18n.t('containers.services.outputFormatPlaceholder')} autocomplete="off" /></label>}</For></div>
-                          </details>
-                        </div>
-                      </Show>
-                      <Show when={serviceConfigurationMode() === 'proxy'}>
-                        <div class="container-service-cli-section">
-                          <div class="container-service-cli-section__heading"><div><strong>{i18n.t('containers.services.proxyProfiles')}</strong><p>{i18n.t('containers.services.dockerCLIProxyScope')}</p></div><div class="container-service-cli-heading-actions"><Button size="sm" variant="ghost" class="container-icon-action" aria-label={i18n.t(serviceConfigurationSecretsVisible() ? 'containers.run.hideValue' : 'containers.run.showValue')} onClick={() => setServiceConfigurationSecretsVisible((visible) => !visible)}>{serviceConfigurationSecretsVisible() ? <EyeOff class="h-3.5 w-3.5" /> : <Eye class="h-3.5 w-3.5" />}</Button><Button size="sm" variant="outline" onClick={() => addDockerCLIMapEntry('proxies', Object.keys(jsonObject(document.proxies) ?? {}).length === 0 ? 'default' : 'https://docker.example.com:2376', {})}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.services.addProfile')}</Button></div></div>
-                          <For each={Object.entries(jsonObject(document.proxies) ?? {})}>{(entry) => { const target = () => entry[0]; const profile = () => jsonObject(entry[1]) ?? {}; return <section class="container-service-cli-profile"><header><Input value={target()} onChange={(event) => setDockerCLIMapEntry('proxies', target(), event.currentTarget.value, profile())} aria-label={i18n.t('containers.services.proxyTarget')} /><Button size="sm" variant="ghost" class="container-icon-action container-destructive-action" aria-label={i18n.t('containers.services.removeProfile')} onClick={() => removeDockerCLIMapEntry('proxies', target())}><Trash class="h-3.5 w-3.5" /></Button></header><div class="container-service-cli-grid"><For each={['httpProxy', 'httpsProxy', 'ftpProxy', 'allProxy', 'noProxy'] as const}>{(key) => <label><span>{i18n.t(`containers.services.proxyFields.${key}` as Parameters<typeof i18n.t>[0])}</span><Input type={key === 'noProxy' || serviceConfigurationSecretsVisible() ? 'text' : 'password'} value={typeof profile()[key] === 'string' ? profile()[key] as string : ''} onInput={(event) => setDockerCLIMapEntry('proxies', target(), target(), objectWithString(profile(), key, event.currentTarget.value))} placeholder={i18n.t(key === 'noProxy' ? 'containers.services.proxyBypassPlaceholder' : 'containers.services.proxyURLPlaceholder')} autocomplete="new-password" /></label>}</For></div></section>; }}</For>
-                          <Show when={Object.keys(jsonObject(document.proxies) ?? {}).length === 0}><div class="container-service-cli-empty">{i18n.t('containers.services.noProxyProfiles')}</div></Show>
-                        </div>
-                      </Show>
-                      <Show when={serviceConfigurationMode() === 'credentials'}>
-                        <div class="container-service-cli-section">
-                          <p class="container-service-config-lead">{i18n.t('containers.services.credentialsScope')}</p>
-                          <label class="container-service-cli-field"><span>{i18n.t('containers.services.credentialStore')}</span><Input value={dockerCLIString(document, 'credsStore')} onInput={(event) => setDockerCLIString('credsStore', event.currentTarget.value)} placeholder={i18n.t('containers.services.credentialStorePlaceholder')} autocomplete="off" /></label>
-                          <div class="container-service-cli-section__heading"><strong>{i18n.t('containers.services.credentialHelpers')}</strong><Button size="sm" variant="outline" onClick={() => addDockerCLIMapEntry('credHelpers', 'registry.example.com', '')}><Plus class="mr-1.5 h-3.5 w-3.5" />{i18n.t('containers.services.addHelper')}</Button></div>
-                          <div class="container-service-cli-pairs"><For each={Object.entries(jsonObject(document.credHelpers) ?? {})}>{(entry) => <div><Input value={entry[0]} onChange={(event) => setDockerCLIMapEntry('credHelpers', entry[0], event.currentTarget.value, entry[1])} aria-label={i18n.t('containers.services.registry')} /><Input value={typeof entry[1] === 'string' ? entry[1] as string : ''} onInput={(event) => setDockerCLIMapEntry('credHelpers', entry[0], entry[0], event.currentTarget.value)} placeholder={i18n.t('containers.services.credentialStorePlaceholder')} aria-label={i18n.t('containers.services.credentialHelper')} /><Button size="sm" variant="ghost" class="container-icon-action container-destructive-action" aria-label={i18n.t('containers.services.removeHelper')} onClick={() => removeDockerCLIMapEntry('credHelpers', entry[0])}><Trash class="h-3.5 w-3.5" /></Button></div>}</For></div>
-                          <div class="container-service-protected-registries"><strong>{i18n.t('containers.services.signedInRegistries')}</strong><Show when={(source.protected_registries?.length ?? 0) > 0} fallback={<p>{i18n.t('containers.services.noSignedInRegistries')}</p>}><div><For each={source.protected_registries}>{(registry) => <Tag tone="soft" size="sm">{registry}</Tag>}</For></div></Show><p>{i18n.t('containers.services.registryCredentialsProtected')}</p></div>
-                        </div>
-                      </Show>
-                      <Show when={serviceConfigurationMode() === 'advanced'}><div class="container-service-cli-section"><div class="container-service-config-note"><Lock class="h-4 w-4" />{i18n.t('containers.services.advancedProtected')}</div><div class="container-service-config-editor"><TextFilePreviewPane path={source.display_path} descriptor={{ mode: 'text', textPresentation: 'code', language: 'json', wrapText: false }} text={source.content ?? ''} draftText={serviceConfigurationDraft()?.content ?? ''} editing onDraftChange={(content) => updateServiceConfigurationDraft({ content })} /></div></div></Show>
-                    </>}</Show>
+    <fieldset class="min-w-0 space-y-4" disabled={!canSave() || busy() || !!review()}>
+      <Show when={serviceConfigurationTarget()?.configuration.mode === 'local'} fallback={<div class="container-service-config-unavailable"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t('containers.services.configurationUnavailable')}</strong></div>}>
+        <Show when={!serviceConfigurationLoading()} fallback={<div class="container-service-config-loading"><Refresh class="h-4 w-4 animate-spin motion-reduce:animate-none" />{i18n.t('containers.loading')}</div>}>
+          <Show when={serviceConfiguration()} fallback={<div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div>}>
+            <Show when={serviceConfigurationError()}><div class="container-service-config-error" role="alert"><AlertTriangle class="h-4 w-4" />{serviceConfigurationError()}</div></Show>
+            <Tabs items={(serviceConfiguration()?.sources ?? []).map((source) => ({ id: source.source_id, label: i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLI' : 'containers.services.engineConfiguration') }))} activeId={serviceConfigurationSourceID()} onChange={(id) => selectServiceConfigurationSource(id as ContainerServiceConfigurationSourceID)} size="md" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} />
+            <Show when={serviceConfigurationSource()} keyed>{source => <>
+              <SettingsList><SettingRow title={i18n.t('containers.services.configurationPath')} control={<Tag variant={source.status === 'ready' ? 'success' : source.status === 'missing' ? 'neutral' : 'error'} tone="soft" size="sm">{i18n.t(`containers.services.sourceStates.${source.status}` as Parameters<typeof i18n.t>[0])}</Tag>}>
+                <code class="break-all text-xs text-muted-foreground">{source.display_path}</code>
+              </SettingRow></SettingsList>
+              <Show when={source.status === 'missing'}><div class="container-service-config-note"><Info class="h-4 w-4" />{i18n.t('containers.services.fileWillBeCreated')}</div></Show>
+              <Show when={source.status === 'invalid'}><div class="container-service-config-note container-service-config-note--warning"><AlertTriangle class="h-4 w-4" />{i18n.t(source.source_id === 'docker_cli' ? 'containers.services.dockerCLIInvalid' : 'containers.services.configurationInvalid')}</div></Show>
+              <Show when={source.status !== 'permission' && source.status !== 'unsupported'} fallback={<div class="container-service-config-unavailable"><AlertTriangle class="h-5 w-5" /><strong>{i18n.t(`containers.services.sourceStates.${source.status}` as Parameters<typeof i18n.t>[0])}</strong></div>}>
+                <Show when={serviceConfigurationSections().length > 1}><Tabs items={serviceConfigurationSections().map((section) => ({ id: section, label: i18n.t(section === 'general' ? 'containers.services.general' : section === 'proxy' ? 'containers.services.proxies' : section === 'credentials' ? 'containers.services.credentials' : 'containers.services.advanced') }))} activeId={serviceConfigurationMode()} onChange={(id) => setServiceConfigurationMode(id as ContainerServiceConfigurationSection)} size="sm" ariaLabel={i18n.t('containers.services.configurationTitle', { name: serviceConfigurationTarget()?.name ?? '' })} features={{ indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true }, containerBorder: false }} /></Show>
+                <Show when={source.source_id === 'docker_cli'} fallback={
+                  <Show when={serviceConfigurationMode() === 'proxy'} fallback={<div class="container-service-config-editor"><TextFilePreviewPane path={source.display_path} descriptor={{ mode: 'text', textPresentation: 'code', language: source.format, wrapText: false }} text={source.content ?? ''} draftText={serviceConfigurationDraft()?.content ?? ''} editing onDraftChange={(content) => updateServiceConfigurationDraft({ content })} /></div>}>
+                    <SettingsList>
+                      <For each={[
+                        { key: 'httpProxy', label: 'containers.services.httpProxy', placeholder: 'http://proxy.example.com:3128' },
+                        { key: 'httpsProxy', label: 'containers.services.httpsProxy', placeholder: 'https://proxy.example.com:3129' },
+                        { key: 'noProxy', label: 'containers.services.noProxy', placeholder: 'localhost,127.0.0.1,.example.com' },
+                      ] as const}>{field => <SettingRow title={i18n.t(field.label)} control={<Input class="w-full sm:w-64" aria-label={i18n.t(field.label)} value={serviceConfigurationDraft()?.[field.key] ?? ''} onInput={event => updateServiceConfigurationDraft({ [field.key]: event.currentTarget.value })} placeholder={field.placeholder} autocomplete="off" />} />}</For>
+                    </SettingsList>
+                  </Show>
+                }>
+                  {/* IMPORTANT: Raw JSON drafts can be temporarily invalid while
+                      typing. Keep the editor outside the parsed-document guard. */}
+                  <Show when={serviceConfigurationMode() === 'advanced'}><div class="space-y-3"><div class="container-service-config-note"><Lock class="h-4 w-4" />{i18n.t('containers.services.advancedProtected')}</div><div class="container-service-config-editor"><TextFilePreviewPane path={source.display_path} descriptor={{ mode: 'text', textPresentation: 'code', language: 'json', wrapText: false }} text={source.content ?? ''} draftText={serviceConfigurationDraft()?.content ?? ''} editing onDraftChange={content => updateServiceConfigurationDraft({ content })} /></div></div></Show>
+                  <Show when={serviceConfigurationMode() !== 'advanced'}>
+                  {/* IMPORTANT: Parsing creates a new document for every keystroke.
+                      Keep the form and map rows mounted by stable field keys so
+                      editing never loses focus, selection, or an unfinished draft. */}
+                  <Show when={dockerCLIConfigurationDocument()} fallback={<div class="container-service-config-note container-service-config-note--warning" role="alert"><AlertTriangle class="h-4 w-4" />{i18n.t('containers.services.dockerCLIInvalid')}</div>}>{document => <>
+                    <Show when={serviceConfigurationMode() === 'general'}>
+                      <p class="text-xs text-muted-foreground">{i18n.t('containers.services.dockerCLIScope')}</p>
+                      <SettingsList>
+                        <SettingRow title={i18n.t('containers.services.currentContext')} control={<Select section="containers" resource={props.service.service_id} active={props.active() && canSave() && !busy()} class="w-full sm:w-64" ariaLabel={i18n.t('containers.services.currentContext')} value={dockerCLIString(document(), 'currentContext') || 'default'} onChange={value => setDockerCLIString('currentContext', value)} options={Array.from(new Set(['default', ...(source.context_options ?? []), dockerCLIString(document(), 'currentContext')].filter(Boolean))).map(value => ({ value, label: value }))} />} />
+                        <SettingRow title={i18n.t('containers.services.detachKeys')} control={<Input class="w-full sm:w-64" aria-label={i18n.t('containers.services.detachKeys')} value={dockerCLIString(document(), 'detachKeys')} onInput={event => setDockerCLIString('detachKeys', event.currentTarget.value)} placeholder={i18n.t('containers.services.detachKeysPlaceholder')} autocomplete="off" />} />
+                      </SettingsList>
+                      <Show when={source.context_overridden_by}><div class="container-service-config-note container-service-config-note--warning"><AlertTriangle class="h-4 w-4" />{i18n.t('containers.services.contextOverridden', { variable: source.context_overridden_by ?? '' })}</div></Show>
+                      <details class="space-y-3">
+                        <summary class="flex min-h-10 cursor-pointer items-center justify-between gap-3 text-sm"><span>{i18n.t('containers.services.outputFormats')}</span><Tag tone="soft" size="sm">{customizedDockerCLIOutputFormatCount()}/{dockerCLIOutputFormats.length}</Tag></summary>
+                        <p class="text-xs text-muted-foreground">{i18n.t('containers.services.outputFormatsDescription')}</p>
+                        <SettingsList><For each={dockerCLIOutputFormats}>{format => <SettingRow title={format.command} control={<Input class="w-full sm:w-64" aria-label={format.command} value={dockerCLIString(document(), format.key)} onInput={event => setDockerCLIString(format.key, event.currentTarget.value)} placeholder={i18n.t('containers.services.outputFormatPlaceholder')} autocomplete="off" />} />}</For></SettingsList>
+                      </details>
+                    </Show>
+                    <Show when={serviceConfigurationMode() === 'proxy'}>
+                      <SettingsSection title={i18n.t('containers.services.proxyProfiles')} description={i18n.t('containers.services.dockerCLIProxyScope')} actions={<div class="flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant="ghost" aria-label={i18n.t(serviceConfigurationSecretsVisible() ? 'containers.run.hideValue' : 'containers.run.showValue')} onClick={() => setServiceConfigurationSecretsVisible(visible => !visible)}>{serviceConfigurationSecretsVisible() ? <EyeOff class="h-3.5 w-3.5" /> : <Eye class="h-3.5 w-3.5" />}</Button>
+                        <Button size="sm" variant="outline" icon={Plus} onClick={() => addDockerCLIMapEntry('proxies', Object.keys(jsonObject(document().proxies) ?? {}).length === 0 ? 'default' : 'https://docker.example.com:2376', {})}>{i18n.t('containers.services.addProfile')}</Button>
+                      </div>}>
+                        <For each={Object.keys(jsonObject(document().proxies) ?? {})}>{target => { const profile = () => jsonObject((jsonObject(document().proxies) ?? {})[target]) ?? {}; return <SettingsList>
+                          <SettingRow title={i18n.t('containers.services.proxyTarget')} control={<Button size="sm" variant="ghost-destructive" aria-label={i18n.t('containers.services.removeProfile')} onClick={() => removeDockerCLIMapEntry('proxies', target)}><Trash class="h-3.5 w-3.5" /></Button>}><Input class="w-full" value={target} onChange={event => setDockerCLIMapEntry('proxies', target, event.currentTarget.value, profile())} aria-label={i18n.t('containers.services.proxyTarget')} /></SettingRow>
+                          <For each={['httpProxy', 'httpsProxy', 'ftpProxy', 'allProxy', 'noProxy'] as const}>{key => <SettingRow title={i18n.t(`containers.services.proxyFields.${key}` as Parameters<typeof i18n.t>[0])} control={<Input class="w-full sm:w-64" aria-label={i18n.t(`containers.services.proxyFields.${key}` as Parameters<typeof i18n.t>[0])} type={key === 'noProxy' || serviceConfigurationSecretsVisible() ? 'text' : 'password'} value={typeof profile()[key] === 'string' ? profile()[key] as string : ''} onInput={event => setDockerCLIMapEntry('proxies', target, target, objectWithString(profile(), key, event.currentTarget.value))} placeholder={i18n.t(key === 'noProxy' ? 'containers.services.proxyBypassPlaceholder' : 'containers.services.proxyURLPlaceholder')} autocomplete="new-password" />} />}</For>
+                        </SettingsList>; }}</For>
+                        <Show when={Object.keys(jsonObject(document().proxies) ?? {}).length === 0}><p class="text-xs text-muted-foreground">{i18n.t('containers.services.noProxyProfiles')}</p></Show>
+                      </SettingsSection>
+                    </Show>
+                    <Show when={serviceConfigurationMode() === 'credentials'}>
+                      <p class="text-xs text-muted-foreground">{i18n.t('containers.services.credentialsScope')}</p>
+                      <SettingsList><SettingRow title={i18n.t('containers.services.credentialStore')} control={<Input class="w-full sm:w-64" aria-label={i18n.t('containers.services.credentialStore')} value={dockerCLIString(document(), 'credsStore')} onInput={event => setDockerCLIString('credsStore', event.currentTarget.value)} placeholder={i18n.t('containers.services.credentialStorePlaceholder')} autocomplete="off" />} /></SettingsList>
+                      <SettingsSection title={i18n.t('containers.services.credentialHelpers')} actions={<Button size="sm" variant="outline" icon={Plus} onClick={() => addDockerCLIMapEntry('credHelpers', 'registry.example.com', '')}>{i18n.t('containers.services.addHelper')}</Button>}>
+                        <For each={Object.keys(jsonObject(document().credHelpers) ?? {})}>{registry => { const helper = () => (jsonObject(document().credHelpers) ?? {})[registry]; return <SettingsList><SettingRow title={i18n.t('containers.services.registry')} control={<Button size="sm" variant="ghost-destructive" aria-label={i18n.t('containers.services.removeHelper')} onClick={() => removeDockerCLIMapEntry('credHelpers', registry)}><Trash class="h-3.5 w-3.5" /></Button>}>
+                          <div class="grid min-w-0 gap-3 sm:grid-cols-2"><Input value={registry} onChange={event => setDockerCLIMapEntry('credHelpers', registry, event.currentTarget.value, helper())} aria-label={i18n.t('containers.services.registry')} /><Input value={typeof helper() === 'string' ? helper() as string : ''} onInput={event => setDockerCLIMapEntry('credHelpers', registry, registry, event.currentTarget.value)} placeholder={i18n.t('containers.services.credentialStorePlaceholder')} aria-label={i18n.t('containers.services.credentialHelper')} /></div>
+                        </SettingRow></SettingsList>; }}</For>
+                      </SettingsSection>
+                      <SettingsSection title={i18n.t('containers.services.signedInRegistries')} description={i18n.t('containers.services.registryCredentialsProtected')}><Show when={(source.protected_registries?.length ?? 0) > 0} fallback={<p class="text-xs text-muted-foreground">{i18n.t('containers.services.noSignedInRegistries')}</p>}><div class="flex flex-wrap gap-2"><For each={source.protected_registries}>{registry => <Tag tone="soft" size="sm">{registry}</Tag>}</For></div></Show></SettingsSection>
+                    </Show>
+                  </>}</Show>
                   </Show>
                 </Show>
-              </>}</Show>
-            </Show>
+              </Show>
+            </>}</Show>
           </Show>
         </Show>
+      </Show>
     </fieldset>
-    <Show when={review()}>{value => <section class="space-y-3 rounded-lg border p-4" aria-label={i18n.t('containers.review.title')}>
-      <h3 class="font-semibold">{i18n.t('containers.review.title')}</h3>
-      <For each={value().preflight.plan.summary ?? []}>{summary => <p>{summary}</p>}</For>
-      <For each={value().preflight.plan.risk_flags ?? []}>{flag => <div><strong>{flag.title}</strong><p>{flag.detail}</p></div>}</For>
-      <div class="flex justify-end gap-2"><Button variant="outline" onClick={() => setReview(null)}>{i18n.t('containers.actions.cancel')}</Button>
+    <Show when={review()}>{value => <SettingsSection title={i18n.t('containers.review.title')} aria-label={i18n.t('containers.review.title')}>
+      <For each={value().preflight.plan.summary ?? []}>{summary => <p class="text-sm">{summary}</p>}</For>
+      <For each={value().preflight.plan.risk_flags ?? []}>{flag => <SettingRow tone="warning" title={flag.title} description={flag.detail} />}</For>
+      <div class="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={() => setReview(null)}>{i18n.t('containers.actions.cancel')}</Button>
       <Button disabled={!canSave() || busy()} onClick={() => void runReviewedOperation()}>{i18n.t('containers.actions.run')}</Button></div>
-    </section>}</Show>
+    </SettingsSection>}</Show>
     <Show when={operation()}>{value => <p role="status">{i18n.t(`containers.operationStates.${value().state}` as Parameters<typeof i18n.t>[0])}</p>}</Show>
     <Show when={operation()?.error_code}><p role="alert">{operation()?.error_code}: {operation()?.error_message}</p></Show>
-    <Show when={!review()}><div class="flex justify-end gap-2">
+    <Show when={!review()}><div class="flex flex-wrap justify-end gap-2">
       <Button variant="outline" disabled={!canSave() || busy() || !serviceConfigurationSourceEditable() || serviceConfigurationLoading()} onClick={() => void submitServiceConfiguration('save')}>{i18n.t('containers.services.save')}</Button>
       <Show when={serviceConfigurationSource()?.apply_modes.includes('save_and_restart')}><Button disabled={!canSave() || busy() || !serviceConfigurationSourceEditable() || !props.service?.capabilities.restart || serviceConfigurationLoading()} onClick={() => void submitServiceConfiguration('save_and_restart')}>{i18n.t('containers.services.saveRestart')}</Button></Show>
     </div></Show>
-  </div>;
+  </section>;
 }

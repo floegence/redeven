@@ -59,6 +59,7 @@ export type PluginCenterViewProps = {
   pluginOwnerScope?: object | false;
   retainedDataAPI?: PluginRetainedDataAPI;
   connectionsAPI?: PluginConnectionsAPI;
+  onOpenConnections?: (item: PluginInventoryItem) => void;
   canManageConnections?: boolean;
   canOpenPluginSurfaces: boolean;
   runtimeRecovery?: PluginRuntimeRecoveryPresentation;
@@ -751,7 +752,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                 if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
               }}
               onReviewInstall={() => installItem(item)}
-              onConnections={props.connectionsAPI && item.networkConnectors?.length ? () => setConnectionsKey(item.inventoryKey) : undefined}
+              onConnections={props.connectionsAPI && item.networkConnectors?.length ? () => props.onOpenConnections ? props.onOpenConnections(item) : setConnectionsKey(item.inventoryKey) : undefined}
               onRestoreData={props.canRecoverPluginData && props.retainedDataAPI ? () => requestDataRecovery(item) : undefined}
               marketDetail={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.detail : undefined}
               marketDetailLoading={marketDetailState()?.pluginID === item.pluginID && marketDetailState()?.loading === true}

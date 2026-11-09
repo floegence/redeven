@@ -314,7 +314,9 @@ export function EnvAppThemePicker(props: EnvAppThemePickerProps): JSX.Element {
           role={props.presentation === 'inline' ? 'region' : 'dialog'}
           aria-modal={props.presentation === 'inline' ? undefined : 'false'}
           aria-label={i18n.t('shell.themePicker.title')}
-          data-floe-surface="floating"
+          // IMPORTANT: Inline settings are ordinary body content. Floating
+          // surface tokens add a second background and shadow to this region.
+          data-floe-surface={props.presentation === 'inline' ? undefined : 'floating'}
           data-envapp-theme-menu={props.presentation === 'inline' ? 'inline' : 'topbar'}
           data-floating-presence={props.presentation === 'inline' ? undefined : popoverPresence.state()}
           class={props.presentation === 'inline' ? 'p-4' : cn(

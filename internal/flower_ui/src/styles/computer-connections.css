@@ -16,12 +16,16 @@
   color: var(--muted-foreground);
 }
 
-/* The shared content owns spacing in both the global host and standalone guide. */
+/* IMPORTANT: The global Settings host owns outer spacing; only the standalone
+   guide supplies its own inset. Keep the domain content in the host's scroller. */
 .flower-computer-dialog-body { padding: 0; }
 .flower-computer-content {
   container-type: inline-size;
   padding: var(--floe-pad-group);
 }
+.flower-computer-content[data-presentation='embedded'] { padding: 0; }
+.flower-computer-subpage-navigation { display: flex; align-items: center; gap: var(--floe-gap-control); margin-bottom: var(--floe-gap-section); }
+.flower-computer-subpage-navigation h3 { margin: 0; min-width: 0; font-size: var(--floe-type-body); font-weight: 600; }
 
 .flower-computer-panel {
   overflow-wrap: anywhere;

@@ -3,7 +3,7 @@ import '../index.css';
 import './flower-feature.css';
 import { afterEach, expect, it, vi } from 'vitest';
 import { render } from 'solid-js/web';
-import { createSignal } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { page, userEvent } from 'vitest/browser';
 import { FloeConfigProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import { FlowerComputerConnections } from '../../../../flower_ui/src/FlowerComputerConnections';
@@ -12,6 +12,8 @@ import deDE from './i18n/locales/catalogs/de-DE.json';
 import zhTW from './i18n/locales/catalogs/zh-TW.json';
 import { computerUseEnUS as copy, type FlowerComputerCopy } from '../../../../flower_ui/src/computerUseCopy';
 import type { FlowerManagedProfile, FlowerComputerAccess, FlowerComputerCapability, FlowerComputerEnvironment } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { SettingsPanelContext, type SettingsPanelRegistration } from '../../../../settings_ui/src/SettingsPanelHost';
+import type { SettingsTarget } from '../../../../settings_ui/src/settingsSession';
 
 let dispose: (() => void) | undefined;
 afterEach(async () => { dispose?.(); dispose = undefined; document.documentElement.classList.remove('dark'); await page.viewport(1280, 720); });
@@ -20,7 +22,7 @@ const waitFor = async (predicate: () => boolean) => {
 };
 const button = (text: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find(item => controlText(item) === text)!;
 const environment: FlowerComputerEnvironment = { hostname: 'Work Mac', platform: 'darwin', managed: { state: 'on_demand' }, desktop: { state: 'permission_required', reason: 'screen_recording_required' }, chrome: { installations: [{ id: "browser-aaaaaaaaaaaaaaaaaaaaaaaa", kind: "google_chrome" as const, name: "Google Chrome", installed: true, prepared: true, connected: false }], profiles: [] } };
-function mount(options: { current?: string; fullAccess?: boolean; readonly?: boolean; connectionOnly?: boolean; copy?: FlowerComputerCopy; environment?: FlowerComputerEnvironment } = {}) {
+function mount(options: { current?: string; fullAccess?: boolean; readonly?: boolean; connectionOnly?: boolean; embedded?: boolean; installationOnly?: boolean; desktopSetup?: boolean; copy?: FlowerComputerCopy; environment?: FlowerComputerEnvironment } = {}) {
   const management = {
     loadEnvironment: vi.fn().mockResolvedValue(options.environment ?? environment),
     verifyDesktop: vi.fn<() => Promise<FlowerComputerCapability>>().mockResolvedValue({ state: 'ready' }),
@@ -44,14 +46,58 @@ function mount(options: { current?: string; fullAccess?: boolean; readonly?: boo
   const onInstallDesktopWithFlower = vi.fn().mockResolvedValue(undefined);
   const editPermission = vi.fn();
   const host = document.createElement('div'); document.body.append(host);
-  const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections open={open()} fullAccess={options.fullAccess} threadID={thread()} onOpenChange={setOpen}
+  const stop = render(() => <FloeConfigProvider><LayoutProvider><FlowerComputerConnections embedded={options.embedded} installationOnly={options.installationOnly} desktopSetup={options.desktopSetup} open={open()} fullAccess={options.fullAccess} threadID={thread()} onOpenChange={setOpen}
     connectionOnly={options.connectionOnly} onContinue={onContinue} onInstallDesktopWithFlower={onInstallDesktopWithFlower} onEditPermissionMode={editPermission}
     requested={{ origin: 'https://example.com', app: 'dev.fixture.Notes', foreground: true }}
     adapter={{ runtime: { display_name: 'Test environment', runtime_id: 'test', runtime_kind: 'env_local', carrier_kind: 'server', subtitle: '' }, canMutate: !options.readonly, computerManagement: management }} copy={options.copy ?? copy} /></LayoutProvider></FloeConfigProvider>, host);
   dispose = () => { stop(); host.remove(); };
-  return { management, setThread, setOpen, onContinue, onInstallDesktopWithFlower, editPermission };
+  return { management, setThread, setOpen, onContinue, onInstallDesktopWithFlower, editPermission, host };
 }
 async function ready() { await waitFor(() => !!button(copy.browserSettings) && !button(copy.browserSettings).disabled); }
+
+it('embeds browser settings without extra outer padding or a category-root Back action', async () => {
+  const { host } = mount({ embedded: true }); await ready();
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(button(copy.back)).toBeUndefined();
+  expect(getComputedStyle(host.querySelector<HTMLElement>('.flower-computer-content')!).padding).toBe('0px');
+  await userEvent.click(button(copy.manage));
+  const navigation = host.querySelector<HTMLElement>('[data-computer-subpage-navigation]')!;
+  expect(navigation).not.toBeNull();
+  expect(navigation.querySelector('h3')?.textContent).toBe(copy.chromeTitle);
+  expect(navigation.compareDocumentPosition(host.querySelector('[data-flower-computer-panel]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await userEvent.click(button(copy.setupChrome));
+  await userEvent.click(button(copy.back));
+  expect(host.querySelector('[data-flower-computer-panel]')?.getAttribute('data-flower-computer-panel')).toBe('chrome');
+  await userEvent.click(button(copy.back));
+  expect(host.querySelector('[data-flower-computer-panel]')?.getAttribute('data-flower-computer-panel')).toBe('overview');
+  expect(button(copy.back)).toBeUndefined();
+});
+
+it.each([{ installationOnly: true }, { desktopSetup: true }])('omits misleading Back actions at embedded focused roots: %j', async focused => {
+  const { host } = mount({ embedded: true, ...focused });
+  await waitFor(() => !!host.querySelector('[data-flower-computer-panel]'));
+  expect(button(copy.back)).toBeUndefined();
+  expect(host.querySelector('[data-computer-subpage-navigation]')).toBeNull();
+});
+
+it('uses embedded presentation when a contextual setup is registered with the Settings host', async () => {
+  const host = document.createElement('div'); document.body.append(host);
+  const [target, setTarget] = createSignal<SettingsTarget | null>(null);
+  const [entry, setEntry] = createSignal<SettingsPanelRegistration>();
+  const close = vi.fn();
+  const stop = render(() => <FloeConfigProvider><LayoutProvider><SettingsPanelContext.Provider value={{
+    open: setTarget, close, target, present: () => true, register: value => { setEntry(value); return () => setEntry(undefined); },
+  }}><FlowerComputerConnections open installationOnly threadID="thread" onOpenChange={close} copy={copy}
+    adapter={{ runtime: { display_name: 'Test environment', runtime_id: 'test', runtime_kind: 'env_local', carrier_kind: 'server', subtitle: '' }, canMutate: true }} />
+    <Show when={entry()}>{current => current().render()}</Show>
+  </SettingsPanelContext.Provider></LayoutProvider></FloeConfigProvider>, host);
+  dispose = () => { stop(); host.remove(); };
+  await waitFor(() => !!host.querySelector('[data-flower-computer-panel]'));
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(button(copy.back)).toBeUndefined();
+  expect(getComputedStyle(host.querySelector<HTMLElement>('.flower-computer-content')!).padding).toBe('0px');
+  expect(close).not.toHaveBeenCalled();
+});
 
 for (const width of [1000, 390]) {
   it(`hands missing Ubuntu desktop components to Flower at ${width}px`, async () => {
@@ -183,7 +229,7 @@ it('uses Chromium identity and aligned full-row capability actions', async () =>
     expect(getComputedStyle(states[index]).backgroundColor).toBe('rgba(0, 0, 0, 0)');
     expect(Math.abs(stateBounds[index].top + stateBounds[index].height / 2 - (bounds.top + bounds.height / 2))).toBeLessThan(1);
   }
-  button(copy.browserSettings).focus();
+  await userEvent.keyboard('{Tab}'); button(copy.browserSettings).focus();
   expect(button(copy.browserSettings).matches(':focus-visible')).toBe(true);
   expect(getComputedStyle(button(copy.browserSettings)).outlineStyle).toBe('solid');
   await userEvent.keyboard('{Enter}');
@@ -217,7 +263,7 @@ it('keeps conversation state out of settings without changing the selection', as
 it('returns a remote user to chat without selecting a replacement or resuming a task', async () => {
   const { management, onContinue } = mount(); await ready();
   expect(document.body.textContent).not.toContain(copy.currentMissingHint);
-  button(copy.close).click();
+  await page.getByRole('button', { name: copy.close, exact: true }).click();
   await waitFor(() => !document.querySelector('[data-flower-computer-panel]'));
   expect(management.selectCandidate).not.toHaveBeenCalled();
   expect(management.createManagedProfile).not.toHaveBeenCalled();
@@ -287,7 +333,7 @@ it('creates separate managed profiles without connecting a page or changing gran
 it('keeps full access separate from system permission and uses the existing mode editor', async () => {
   const { editPermission } = mount({ fullAccess: true }); await ready();
   expect(document.body.textContent).toContain(copy.permissionRequired);
-  button(copy.fullAccessTitle).click();
+  button(copy.permissions).click();
   expect(document.body.textContent).toContain(copy.fullAccessHint);
   expect(document.querySelector('input[type="url"]')).toBeNull();
   expect(button(copy.save)).toBeUndefined();
@@ -371,13 +417,13 @@ it('keeps the connected overview and its settings pages balanced in Chinese', as
   await waitFor(() => dialog.getAnimations({ subtree: true }).every(animation => animation.playState !== 'running'));
   expect(dialog.textContent).toContain(localizedCopy.connected);
   expect(dialog.textContent).toContain(localizedCopy.available);
-  const footer = dialog.querySelector<HTMLElement>('.flower-computer-footer')!;
-  expect(footer.getBoundingClientRect().width).toBeGreaterThan(dialog.clientWidth * 0.9);
+  const content = dialog.querySelector<HTMLElement>('.flower-computer-content')!;
+  expect(content.getBoundingClientRect().width).toBeGreaterThan(dialog.clientWidth * 0.9);
   const screenshot = async (name: string) => {
     if (import.meta.env.VITE_FLOWER_COMPUTER_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-computer-polish-${name}.png` });
   };
   await screenshot('zh-CN-overview');
-  for (const [name, action] of [['managed', localizedCopy.browserSettings], ['diagnostics', localizedCopy.details], ['help', localizedCopy.help], ['access', localizedCopy.fullAccessTitle]] as const) {
+  for (const [name, action] of [['managed', localizedCopy.browserSettings], ['diagnostics', localizedCopy.details], ['help', localizedCopy.help], ['access', localizedCopy.permissions]] as const) {
     button(action).click();
     await waitFor(() => document.querySelector('[data-flower-computer-panel]')?.getAttribute('aria-busy') === 'false');
     expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);

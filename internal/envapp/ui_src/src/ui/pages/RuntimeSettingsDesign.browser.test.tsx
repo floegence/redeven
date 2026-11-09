@@ -1,4 +1,5 @@
 import '../../index.css';
+import '../flower-feature.css';
 import { FloeProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
 import { commands, page, userEvent } from 'vitest/browser';
@@ -8,6 +9,7 @@ import { SETTINGS_NAV_ITEMS } from './settings/settingsStructure';
 import { createRuntimeSettingsFixture } from '../../../scripts/fixtures/runtime-settings/fixture';
 import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
 import { FLOWER_PROVIDER_TYPES } from '../../../../../flower_ui/src/settings/providerCatalog';
+import { FlowerStorageSettings } from './settings/FlowerStorageSettings';
 
 const api = vi.hoisted(() => ({ request: async (_url: string, _init: RequestInit): Promise<unknown> => ({}) }));
 vi.mock('../services/localApi', async (original) => ({ ...await original<typeof import('../services/localApi')>(), fetchLocalApiJSON: (url: string, init: RequestInit) => api.request(url, init) }));
@@ -20,13 +22,15 @@ async function mount(width = 1280, dark = false) {
   host = document.createElement('div'); host.style.height = '780px'; document.body.append(host);
   dispose = render(() => {
     fixture = createRuntimeSettingsFixture(); api.request = fixture.request;
-    return <FloeProvider config={{ theme: { storageKey: 'runtime-settings-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><EnvSettingsPage context={fixture.context} /></FloeProvider>;
+    return <FloeProvider config={{ theme: { storageKey: 'runtime-settings-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><EnvSettingsPage context={fixture.context} panels={{ storage: () => <FlowerStorageSettings controller={fixture.context.env.aiReadinessController!} canAdmin={fixture.context.canAdmin()} /> }} /></FloeProvider>;
   }, host);
   await expect.poll(() => document.documentElement.classList.contains('dark')).toBe(dark);
 }
 async function openSection(id: typeof SETTINGS_NAV_ITEMS[number]['id']) {
   fixture.setActiveSection(id);
-  await expect.element(page.getByTestId(`settings-section-${id}`).getByRole('heading', { level: 1 })).toBeVisible();
+  await expect.element(page.getByTestId(`settings-section-${id}`)).toBeVisible();
+  if (id === 'ai') await expect.poll(() => host.querySelector('[data-testid="settings-section-ai"] .flower-settings-provider-card')).not.toBeNull();
+  else if (id !== 'storage') await expect.element(page.getByTestId(`settings-section-${id}`).getByRole('heading', { level: 1 })).toBeVisible();
   return host.querySelector(`[data-testid="settings-section-${id}"]`)! as HTMLElement;
 }
 function expectNoOverflow(panel: HTMLElement) {
@@ -38,7 +42,7 @@ function expectNoOverflow(panel: HTMLElement) {
     expect(box.left, `${fixture.context.activeSection()} field left edge`).toBeGreaterThanOrEqual(bounds.left - 1);
   }
 }
-afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
+afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); vi.restoreAllMocks(); });
 
 it.each([false, true])('coordinates settings fields and selects with the surrounding surface (dark=%s)', async dark => {
   await mount(1280, dark);
@@ -255,14 +259,17 @@ it('pairs custom port fields in the value column without duplicating the range',
   expect(min.closest('.floe-setting-row')?.querySelector('code')).toBeNull();
 });
 
-it.each([1280, 1024, 768, 390, 320])('keeps all ten pages readable without overflow at %ipx', async (width) => {
+it.each([1280, 1024, 768, 390, 320])('keeps legacy runtime sections readable without overflow at %ipx', async (width) => {
   await mount(width);
-  for (const item of SETTINGS_NAV_ITEMS) {
+  // Injected domain panels are covered by the actual EnvSettingsDialog suite.
+  for (const item of SETTINGS_NAV_ITEMS.filter(item => ['connection', 'agent', 'runtime', 'codespaces', 'permission_policy', 'ai', 'config', 'logging', 'debug_console'].includes(item.id))) {
     const panel = await openSection(item.id); expectNoOverflow(panel);
-    expect(panel.querySelectorAll('h1')).toHaveLength(1);
+    expect(panel.querySelectorAll('h1')).toHaveLength(item.id === 'ai' ? 0 : 1);
     // Page identity takes the floe heading step, not a product-local display size.
-    expect(getComputedStyle(panel.querySelector('h1')!).fontSize).toBe('16px');
-    expect(getComputedStyle(panel.querySelector('h1')!).fontWeight).toBe('500');
+    if (item.id !== 'ai') {
+      expect(getComputedStyle(panel.querySelector('h1')!).fontSize).toBe('16px');
+      expect(getComputedStyle(panel.querySelector('h1')!).fontWeight).toBe('500');
+    } else expect(panel.querySelector('.flower-settings-policy-section')).not.toBeNull();
     for (const description of panel.querySelectorAll('.floe-setting-row__label p')) {
       expect(getComputedStyle(description).fontSize).toBe('12px');
     }
@@ -369,7 +376,6 @@ it('saves permission table changes, narrows grants to the ceiling, and prevents 
 it('selects default Flower permissions with the keyboard and saves the chosen policy', async () => {
   await mount();
   await openSection('ai');
-  await page.getByRole('tab', { name: 'Permissions', exact: true }).click();
   const selected = page.getByRole('radio', { name: /Approval required/ });
   await expect.element(selected).toBeVisible();
   await selected.click();
@@ -377,7 +383,7 @@ it('selects default Flower permissions with the keyboard and saves the chosen po
   await expect.poll(() => fixture.settings().ai?.permission_type).toBe('full_access');
   expect(document.activeElement?.getAttribute('aria-checked')).toBe('true');
   fixture.setCanAdmin(false);
-  await expect.element(page.getByRole('radio', { name: /Full access/ })).toBeDisabled();
+  await expect.poll(() => selected.element().closest('[inert]')).not.toBeNull();
 });
 
 it('retains drafts and scroll position when navigating, and saves real settings values', async () => {
@@ -401,7 +407,7 @@ it('retains drafts and scroll position when navigating, and saves real settings 
 it('opens every provider type at a mobile width with a reachable footer', async () => {
   await mount(390);
   await openSection('ai');
-  await page.getByRole('button', { name: 'Edit provider', exact: true }).click();
+  await page.getByRole('button', { name: 'Add provider', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect.element(dialog).toBeVisible();
   const choices = [...document.querySelectorAll<HTMLButtonElement>('.flower-provider-choice')];
@@ -422,14 +428,12 @@ it('opens every provider type at a mobile width with a reachable footer', async 
   await page.screenshot({ path: '../../../dist/settings-design/runtime-settings-provider-mobile.png' });
 });
 
-it('switches Flower groups without losing permissions or health access and respects read-only state', async () => {
+it('keeps Flower defaults and storage recovery reachable and respects read-only state', async () => {
   await mount(1280, true);
   await openSection('ai');
-  await page.getByRole('tab', { name: 'Permissions', exact: true }).click();
   await expect.element(page.getByText('Approval required', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'Health & storage', exact: true }).click();
+  const health = await openSection('storage');
   await expect.element(page.getByText('Flower backups', { exact: true })).toBeVisible();
-  const health = host.querySelector('[data-flower-settings-panel="health"]')!;
   const backupButton = [...health.querySelectorAll('button')].find(button => button.innerText === 'View backups')!;
   expect(backupButton.closest('.floe-setting-row__control')).not.toBeNull();
   await page.screenshot({ path: '../../../dist/settings-design/runtime-settings-health-dark.png' });
@@ -438,15 +442,14 @@ it('switches Flower groups without losing permissions or health access and respe
   await expect.element(page.getByPlaceholder('/home/user')).toBeDisabled();
 });
 
-it('navigates through the mobile section picker and exposes storage recovery from the model page', async () => {
+it('navigates through the mobile section picker to models and storage recovery', async () => {
   await mount(390);
-  await page.getByRole('combobox', { name: 'Runtime Settings', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Settings', exact: true }).click();
   await page.getByRole('option', { name: 'Flower', exact: true }).click();
-  await expect.element(page.getByTestId('settings-section-ai').getByRole('heading', { level: 1 })).toBeVisible();
+  await expect.element(page.getByTestId('settings-section-ai')).toBeVisible();
   fixture.setReadinessSnapshot({ state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false });
-  const recovery = page.getByRole('button', { name: 'Health & storage', exact: true });
-  await expect.element(recovery).toBeVisible();
-  await recovery.click();
+  await page.getByRole('combobox', { name: 'Settings', exact: true }).click();
+  await page.getByRole('option', { name: 'Storage', exact: true }).click();
   await expect.element(page.getByText('Flower backups', { exact: true })).toBeVisible();
 });
 
@@ -461,12 +464,13 @@ it('submits logging and port values using the flat settings API contract', async
   await page.getByRole('spinbutton', { name: 'Ending port', exact: true }).fill('23000');
   await expect.poll(() => fixture.settings().codespaces.code_server_port_min).toBe(22000);
   await expect.poll(() => fixture.settings().codespaces.code_server_port_max).toBe(23000);
-  await page.getByText('Use default port range', { exact: true }).click();
+  await userEvent.click(page.getByRole('checkbox', { name: 'Use default port range', exact: true }).element().closest('label')!);
   await expect.poll(() => fixture.settings().codespaces.code_server_port_min).toBe(0);
 });
 
-it('keeps a failed autosave draft and field geometry until explicit retry', async () => {
-  await mount();
+it.each([1280, 390, 320])('keeps a failed autosave draft and field geometry until explicit retry at %ipx', async width => {
+  const warnings = vi.spyOn(console, 'warn');
+  await mount(width);
   await openSection('runtime');
   const field = host.querySelector<HTMLInputElement>('input[placeholder="/home/user"]')!;
   const geometry = field.getBoundingClientRect().toJSON();
@@ -485,4 +489,5 @@ it('keeps a failed autosave draft and field geometry until explicit retry', asyn
   await expect.poll(() => fixture.settings().runtime.agent_home_dir).toBe('/workspace/unavailable');
   expect(host.querySelector('input[placeholder="/home/user"]')).toBe(field);
   expect(field.getBoundingClientRect().toJSON()).toEqual(geometry);
+  expect(warnings.mock.calls.filter(([message]) => String(message).includes('computations created outside'))).toHaveLength(0);
 });

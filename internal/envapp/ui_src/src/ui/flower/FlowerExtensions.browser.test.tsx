@@ -4,7 +4,7 @@ import { FloeProvider, useTheme } from '@floegence/floe-webapp-core';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { commands, page, userEvent } from 'vitest/browser';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { FlowerExtensionsSurface } from '../../../../../flower_ui/src/extensions/FlowerExtensionsSurface';
 import { AgentPluginCatalogView } from '../../../../../flower_ui/src/extensions/AgentPluginCatalog';
 import { FlowerExtensionsContext, extensionI18n } from '../../../../../flower_ui/src/extensions/context';
@@ -51,17 +51,18 @@ function fixture(empty = false, count = 0) {
   };
   return { adapter, setAdmin, saveMCP, deleteMCP };
 }
-async function mount(width = 1280, dark = false, locale = 'en-US', empty = false, count = 0, setup?: (adapter: FlowerExtensionsAdapter) => void) {
+async function mount(width = 1280, dark = false, locale = 'en-US', empty = false, count = 0, setup?: (adapter: FlowerExtensionsAdapter) => void, embedded = false) {
   await page.viewport(width, 850);
   localStorage.removeItem('extensions-test-theme');
   const state = fixture(empty, count); host = document.createElement('div'); host.style.height = '830px'; document.body.append(host);
   setup?.(state.adapter);
   const [active, setActive] = createSignal(true);
-  dispose = render(() => <FloeProvider config={{ theme: { storageKey: 'extensions-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><ThemeObserver /><FlowerExtensionsSurface active={active()} adapter={state.adapter} i18n={extensionI18n(locale)} onBack={vi.fn()} /></FloeProvider>, host);
+  const onBack = vi.fn();
+  dispose = render(() => <FloeProvider config={{ theme: { storageKey: 'extensions-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><ThemeObserver /><FlowerExtensionsSurface embedded={embedded} active={active()} adapter={state.adapter} i18n={extensionI18n(locale)} onBack={onBack} /></FloeProvider>, host);
   theme.setTheme(dark ? 'dark' : 'light');
   await expect.poll(() => document.documentElement.classList.contains('dark')).toBe(dark);
   await expect.poll(() => state.adapter.listSkills).toHaveBeenCalled();
-  return { ...state, setActive };
+  return { ...state, setActive, onBack };
 }
 function noOverflow() {
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
@@ -75,7 +76,36 @@ function noOverflow() {
     expect(box.left).toBeGreaterThanOrEqual(host.getBoundingClientRect().left - 1);
   }
 }
-afterEach(() => { dispose?.(); host?.remove(); document.documentElement.classList.remove('dark'); });
+beforeEach(() => { vi.spyOn(console, 'warn'); });
+afterEach(() => {
+  dispose?.(); host?.remove(); document.documentElement.classList.remove('dark');
+  const warnings = vi.mocked(console.warn).mock.calls.filter(([message]) => String(message).includes('computations created outside'));
+  vi.restoreAllMocks();
+  expect(warnings, 'extension navigation keeps reactive work inside its owner').toEqual([]);
+});
+
+it('lets the settings host own the embedded category heading, close action and scroll', async () => {
+  const state = await mount(700, false, 'en-US', false, 0, undefined, true);
+  expect(host.querySelector('.flower-extensions-header')).toBeNull();
+  expect(host.querySelector('h1')).toBeNull();
+  expect(host.querySelector(`button[aria-label="${extensionI18n('en-US').t('back')}"]`)).toBeNull();
+  const content = host.querySelector<HTMLElement>('.flower-extensions-content')!;
+  expect(getComputedStyle(content).overflowY).toBe('visible');
+  const panel = host.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])')!;
+  expect(getComputedStyle(panel).paddingInlineStart).toBe('0px');
+  await page.getByRole('tab', { name: 'MCP', exact: true }).click();
+  await page.getByRole('tab', { name: 'Skills', exact: true }).click();
+  expect(state.onBack).not.toHaveBeenCalled();
+  expect(host.querySelectorAll('[role="tabpanel"]:not([hidden])')).toHaveLength(1);
+  noOverflow();
+});
+
+it('retains the standalone extension page heading and navigation back', async () => {
+  const state = await mount();
+  await page.getByRole('button', { name: extensionI18n('en-US').t('back'), exact: true }).click();
+  expect(state.onBack).toHaveBeenCalledOnce();
+  expect(host.querySelector('h1')?.textContent).toBe(extensionI18n('en-US').t('title'));
+});
 
 it('separates primary tabs from the page title and keeps plugin empty state concise', async () => {
   await mount(1280, false, 'zh-CN');
@@ -139,6 +169,7 @@ it.each([false, true])('uses supplied skill and MCP icons and reacts to theme ch
   await page.screenshot({ path: `__screenshots__/flower-extension-icons/skills-${dark ? 'dark' : 'light'}.png` });
   await page.getByRole('tab', { name: 'MCP', exact: true }).click();
   const serverImage = () => host.querySelector<HTMLImageElement>('[role="tabpanel"]:not([hidden]) .flower-extension-icon img');
+  await expect.poll(() => serverImage()?.getAttribute('src')).toBe(suppliedMCPIcon(dark));
   await expect.poll(() => serverImage()?.naturalWidth).toBeGreaterThan(0);
   expect(serverImage()).toHaveAttribute('src', suppliedMCPIcon(dark));
   await page.screenshot({ path: `__screenshots__/flower-extension-icons/mcp-${dark ? 'dark' : 'light'}.png` });
@@ -457,9 +488,9 @@ it.each([[320, false, 'zh-TW'], [390, false, 'zh-CN'], [390, true, 'de-DE'], [12
   await expect.element(page.getByRole('heading', { name: i18n.t('plugins.emptyTitle'), exact: true })).toBeVisible();
   const tabs = [...host.querySelectorAll<HTMLElement>('[role="tab"]')];
   expect(tabs.map(tab => tab.querySelector('svg')?.innerHTML).filter((value, index, all) => all.indexOf(value) === index)).toHaveLength(3);
-  const selected = tabs.find(tab => tab.getAttribute('aria-selected') === 'true')!;
-  expect(getComputedStyle(selected, '::after').height).toBe('2px');
-  expect(getComputedStyle(selected, '::after').backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  const indicator = host.querySelector<HTMLElement>('.flower-extensions-tab-indicator')!;
+  expect(getComputedStyle(indicator).height).toBe('2px');
+  expect(getComputedStyle(indicator).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
   expect(host.querySelector('.flower-plugin-segments')).toBeNull();
   for (const tab of tabs) {
     const box = tab.getBoundingClientRect();

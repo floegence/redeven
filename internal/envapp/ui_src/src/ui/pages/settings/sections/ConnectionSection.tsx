@@ -35,7 +35,7 @@ export function ConnectionSection() {
   };
 
   return (
-    <SettingsSection variant="page" icon={Globe} title={i18n.t('settings.connection.title')} description={i18n.t('settings.connection.description')}>
+    <SettingsSection variant="page" icon={Globe} title={i18n.t('settings.connection.title')}>
       <SettingsList>
         <SettingRow title={i18n.t('settings.connection.title')} control={<DotIndicator active={connected()} label={connectionStatus()} />} />
         <SettingRow title={i18n.t('settings.connection.connectionServiceAddress')}

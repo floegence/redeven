@@ -1,8 +1,12 @@
-import { Button } from '@floegence/floe-webapp-core/ui';
-import { For, Show, createSignal } from 'solid-js';
+import { Button, Dropdown, Switch } from '@floegence/floe-webapp-core/ui';
+import { MoreHorizontal } from '@floegence/floe-webapp-core/icons';
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { Dialog } from '../primitives/EnvAppModal';
+import { useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { useI18n } from '../i18n';
 import type { HostAccessState } from '../services/hostAccess';
-import { HostAccessFeatureIllustration, HostAccessFeatureMark, HostAccessHelperIllustration, HostAccessPermissionIllustration, HostAccessStateIllustration } from './HostAccessIllustration';
+import { HostAccessFeatureIllustration, HostAccessHelperIllustration, HostAccessPermissionIllustration, HostAccessStateIllustration } from './HostAccessIllustration';
+import { SettingRow } from './settings/SettingsPrimitives';
 import './host-access.css';
 export function HostAccessWelcome(props: {
     applicationsStarted?: boolean;
@@ -102,16 +106,16 @@ export function HostAccessFeatureSettings(props: {
     allowed: boolean;
     busy: boolean;
     ready?: boolean;
+    error?: string;
     onChange: (state: HostAccessState) => Promise<void>;
     onReconfigure: () => void;
 }) {
     const i18n = useI18n();
-    return <section class="host-access-feature-settings" aria-label={i18n.t(props.feature === 'applications' ? 'hostAccess.applicationFeature' : 'remoteDesktop.title')}>
-      <div class="host-access-feature-heading">
-        <HostAccessFeatureMark feature={props.feature} />
-        <div class="host-access-feature-copy"><div class="host-access-feature-title"><h3>{i18n.t(props.feature === 'applications' ? 'hostAccess.applicationFeature' : 'remoteDesktop.title')}</h3><HostAccessStatus state={props.state} ready={props.ready} /></div><p>{i18n.t(props.feature === 'applications' ? 'hostAccess.appDescription' : 'hostAccess.desktopDescription')}</p></div>
-      </div>
-      <HostAccessManagement {...props} inlineStatus />
+    const title = () => i18n.t(props.feature === 'applications' ? 'hostAccess.applicationFeature' : 'remoteDesktop.title');
+    return <section class="host-access-feature-settings" aria-label={title()}>
+      <SettingRow class="host-access-feature-row" title={title()}
+        description={i18n.t(props.state === 'paused' ? 'hostAccess.paused' : props.state === 'unconfigured' ? 'hostAccess.unconfigured' : props.ready === false ? 'hostAccess.needsAttention' : 'hostAccess.enabled')}
+        control={<HostAccessManagement {...props} compact title={title()} />} />
     </section>;
 }
 
@@ -123,26 +127,65 @@ function HostAccessStatus(props: { state: HostAccessState; ready?: boolean }) {
 export function HostAccessManagement(props: {
     state: HostAccessState;
     ready?: boolean;
-    inlineStatus?: boolean;
+    compact?: boolean;
+    title?: string;
+    error?: string;
     allowed: boolean;
     busy: boolean;
     onChange: (state: HostAccessState) => Promise<void>;
     onReconfigure: () => void;
 }) {
     const i18n = useI18n();
+    const presented = useSettingsPresentation('applications');
     const [confirm, setConfirm] = createSignal<'paused' | 'unconfigured'>();
+    const [menuOpen, setMenuOpen] = createSignal(false);
+    const canManage = () => presented() && props.allowed && !props.busy;
+    // IMPORTANT: Dropdown reads controlled props from event handlers. Allocate
+    // conditional reactivity here under the component owner, never in its getter.
+    const effectiveMenuOpen = createMemo(() => canManage() && menuOpen());
+    // IMPORTANT: Portalled menu visibility follows live host authority, just
+    // like confirmations. A hidden retained category never keeps active items.
+    createEffect(() => {
+      if (!canManage()) setMenuOpen(false);
+      if (!presented() || !props.allowed) setConfirm(undefined);
+    });
+    const commit = async () => {
+      const action = confirm();
+      if (!action || !canManage()) return;
+      try { await props.onChange(action); setConfirm(undefined); }
+      catch { /* The owning panel keeps the failure visible for reconciliation. */ }
+    };
+    const menuItems = createMemo(() => [
+      ...(props.state === 'enabled' && props.ready === false ? [{ id: 'paused', label: i18n.t('hostAccess.pause') }] : []),
+      { id: 'unconfigured', label: i18n.t('hostAccess.remove'), tone: 'danger' as const },
+    ]);
+    if (props.compact) return <div class="host-access-feature-control">
+      {/* IMPORTANT: The compact switch expresses current authority; turning it
+          off still requires the existing explicit confirmation, never autosave. */}
+      <Show when={props.state !== 'unconfigured' && props.ready !== false} fallback={<Button size="sm" variant="outline" disabled={!canManage()} onClick={() => { if (canManage()) props.onReconfigure(); }}>{i18n.t(props.state === 'paused' ? 'hostAccess.resume' : props.state === 'unconfigured' ? 'hostAccess.setup' : 'hostAccess.continue')}</Button>}>
+        <Switch aria-label={props.title} checked={props.state === 'enabled'} disabled={!canManage()} onClick={event => {
+          // Keep the native checked state authoritative while confirmation is open.
+          event.preventDefault();
+          if (!canManage()) return;
+          if (props.state === 'enabled') setConfirm('paused'); else props.onReconfigure();
+        }} />
+      </Show>
+      <Show when={props.state !== 'unconfigured'}><Dropdown align="end" open={effectiveMenuOpen()} onOpenChange={setMenuOpen} trigger={<MoreHorizontal class="h-4 w-4" />} triggerClass="host-access-feature-more" triggerAriaLabel={`${i18n.t('hostAccess.manage')} · ${props.title}`} disabled={!canManage()} items={menuItems()} onSelect={action => { if (canManage()) setConfirm(action as 'paused' | 'unconfigured'); }} /></Show>
+      <Dialog open={presented() && Boolean(confirm())} onOpenChange={open => { if (!open && !props.busy) setConfirm(undefined); }}
+        closeLabel={i18n.t('common.actions.close')} title={i18n.t(confirm() === 'paused' ? 'hostAccess.pauseTitle' : 'hostAccess.removeTitle')}
+        footer={<><Button variant="ghost" disabled={props.busy} onClick={() => setConfirm(undefined)}>{i18n.t('common.actions.cancel')}</Button><Button variant="destructive" disabled={!canManage()} onClick={() => void commit()}>{i18n.t(confirm() === 'paused' ? 'hostAccess.pause' : 'hostAccess.remove')}</Button></>}>
+        <p class="host-access-confirm-target">{props.title}</p><p class="text-sm text-muted-foreground">{i18n.t(confirm() === 'paused' ? 'hostAccess.pauseHint' : 'hostAccess.removeHint')}</p>
+        <Show when={props.error}><p role="alert" class="host-app-error">{props.error}</p></Show>
+      </Dialog>
+    </div>;
     return <section class="host-access-management" aria-label={i18n.t('hostAccess.manage')}>
-  <Show when={!confirm() && !props.inlineStatus}><HostAccessStatus state={props.state} ready={props.ready} /></Show>
+  <Show when={!confirm()}><HostAccessStatus state={props.state} ready={props.ready} /></Show>
   <Show when={confirm()} fallback={<div class="host-access-actions">
-   <Show when={props.state !== 'enabled' || props.ready === false}><Button variant="outline" disabled={!props.allowed || props.busy} onClick={props.onReconfigure}>{i18n.t(props.state === 'paused' ? 'hostAccess.resume' : props.state === 'unconfigured' ? 'hostAccess.setup' : 'hostAccess.continue')}</Button></Show>
-   <Show when={props.state === 'enabled'}><Button variant="outline" disabled={!props.allowed || props.busy} onClick={() => setConfirm('paused')}>{i18n.t('hostAccess.pause')}</Button></Show>
-   <Show when={props.state !== 'unconfigured'}><Button variant="ghost" disabled={!props.allowed || props.busy} onClick={() => setConfirm('unconfigured')}>{i18n.t('hostAccess.remove')}</Button></Show>
+   <Show when={props.state !== 'enabled' || props.ready === false}><Button variant="outline" disabled={!canManage()} onClick={() => { if (canManage()) props.onReconfigure(); }}>{i18n.t(props.state === 'paused' ? 'hostAccess.resume' : props.state === 'unconfigured' ? 'hostAccess.setup' : 'hostAccess.continue')}</Button></Show>
+   <Show when={props.state === 'enabled'}><Button variant="outline" disabled={!canManage()} onClick={() => { if (canManage()) setConfirm('paused'); }}>{i18n.t('hostAccess.pause')}</Button></Show>
+   <Show when={props.state !== 'unconfigured'}><Button variant="ghost" disabled={!canManage()} onClick={() => { if (canManage()) setConfirm('unconfigured'); }}>{i18n.t('hostAccess.remove')}</Button></Show>
   </div>}>{action => <div class="host-access-confirm" role="alert"><div class="host-access-state-summary"><HostAccessStateIllustration state={action() === 'paused' ? 'paused' : 'remove'} /><h3>{i18n.t(action() === 'paused' ? 'hostAccess.pauseTitle' : 'hostAccess.removeTitle')}</h3></div><p>{i18n.t(action() === 'paused' ? 'hostAccess.pauseHint' : 'hostAccess.removeHint')}</p><div class="host-access-actions">
-   <Button variant="ghost" disabled={props.busy} onClick={() => setConfirm(undefined)}>{i18n.t('common.actions.cancel')}</Button><Button variant="destructive" disabled={!props.allowed || props.busy} onClick={async () => { try {
-            await props.onChange(action());
-            setConfirm(undefined);
-        }
-        catch { /* The owning panel keeps the failure visible for reconciliation. */ } }}>{i18n.t(action() === 'paused' ? 'hostAccess.pause' : 'hostAccess.remove')}</Button>
+   <Button variant="ghost" disabled={props.busy} onClick={() => setConfirm(undefined)}>{i18n.t('common.actions.cancel')}</Button><Button variant="destructive" disabled={!canManage()} onClick={() => void commit()}>{i18n.t(action() === 'paused' ? 'hostAccess.pause' : 'hostAccess.remove')}</Button>
   </div></div>}</Show>
  </section>;
 }

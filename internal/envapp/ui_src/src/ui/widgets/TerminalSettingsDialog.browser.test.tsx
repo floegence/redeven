@@ -11,6 +11,7 @@ import { TERMINAL_THEME_DEFINITIONS } from '@floegence/floeterm-terminal-web';
 import { TerminalSettingsDialog } from './TerminalSettingsDialog';
 
 const layoutState = vi.hoisted(() => ({ mobile: false }));
+vi.mock('../services/localApi', async original => ({ ...await original<object>(), fetchLocalApiJSON: async () => ({ supported: true, can_manage: true, defaults: { max_lines: 1000, max_bytes: 1048576 } }) }));
 
 const mediaCommands = commands as unknown as Readonly<{
   emulateMediaPreferences: (preferences: Readonly<{
@@ -36,7 +37,7 @@ type MountedDialog = Readonly<{
   changes: string[];
 }>;
 
-async function mountDialog(initialTheme = 'system', expandPreviews = true): Promise<MountedDialog> {
+async function mountDialog(initialTheme = 'system', expandPreviews = true, embedded = false): Promise<MountedDialog> {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const [selectedTheme, setSelectedTheme] = createSignal(initialTheme);
@@ -45,6 +46,7 @@ async function mountDialog(initialTheme = 'system', expandPreviews = true): Prom
   const dispose = render(() => (
     <TerminalSettingsDialog
       open
+      embedded={embedded}
       userTheme={selectedTheme()}
       fontSize={12}
       fontFamilyId={selectedFont()}
@@ -107,6 +109,24 @@ describe('TerminalSettingsDialog browser theme gallery', () => {
     layoutState.mobile = false;
     await mediaCommands.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'no-preference' });
     await page.viewport(1280, 720);
+  });
+
+  it.each([1100, 390])('embeds terminal preferences without a second padded scroll surface at %ipx', async width => {
+    await page.viewport(width, 900);
+    const mounted = await mountDialog('system', false, true); cleanup = mounted.dispose;
+    await expect.poll(() => document.querySelectorAll('[data-terminal-history-settings] input').length).toBe(2);
+    const body = document.querySelector<HTMLElement>('.terminal-settings-body')!;
+    expect(getComputedStyle(body).paddingLeft).toBe('0px');
+    expect(getComputedStyle(body).paddingRight).toBe('0px');
+    expect(getComputedStyle(body).overflowY).toBe('visible');
+    const size = page.getByRole('spinbutton', { name: 'Font size', exact: true });
+    await expect.element(size).toBeVisible();
+    expect(body.querySelectorAll('.floe-setting-row')).toHaveLength(5);
+    const adjacentSection = body.querySelector('.floe-settings-section + .floe-settings-section');
+    expect(adjacentSection).not.toBeNull();
+    expect(getComputedStyle(adjacentSection!).marginTop).toBe('0px');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
   });
 
   it('keeps mobile input labels single-line and guidance outside controls at 320px', async () => {

@@ -85,8 +85,8 @@ describe('goal-based host access',()=>{
   expect(dialog.querySelectorAll('.host-access-feature-settings')).toHaveLength(2);
   expect(dialog.textContent).toContain('Enabled');
   expect(dialog.textContent).toContain('Paused · settings retained');
-  expect(textButton('Pause',dialog)).toBeDefined();
-  expect(textButton('Enable again',dialog)).toBeDefined();
+  const switches = [...dialog.querySelectorAll<HTMLInputElement>('[role=switch]')];
+  expect(switches.map(input => input.checked)).toEqual([true, false]);
   expect(state.permission).not.toHaveBeenCalled();
  });
  it('reports desktop settings failures and never mutates the application feature',async()=>{
@@ -95,10 +95,11 @@ describe('goal-based host access',()=>{
   access.save.mockRejectedValue(new Error('Disconnected'));
   dispose=render(()=><ApplicationsWithSettings/>,host);await settle();textButton('Access settings').click();await settle();
   const desktop=document.querySelector('[aria-label="Remote desktop"].host-access-feature-settings')!;
-  textButton('Pause',desktop).click();textButton('Pause',desktop).click();await settle();
+  desktop.querySelector<HTMLInputElement>('[role=switch]')!.click(); await settle();
+  textButton('Pause',document.querySelectorAll('[role=dialog]')[1]).click();await settle();
   expect(access.save).toHaveBeenCalledExactlyOnceWith('desktop','paused');
   expect(document.querySelector('[role=dialog]')?.textContent).toContain('Could not confirm the update');
-  expect(desktop.querySelector('.host-access-confirm')).not.toBeNull();
+  expect(document.querySelectorAll('[role=dialog]')).toHaveLength(2);
   expect(state.launch).not.toHaveBeenCalled();expect(state.permission).not.toHaveBeenCalled();
  });
  it('guides the first visit without requesting permissions and permits browsing',async()=>{

@@ -859,6 +859,17 @@ describe('linked environment owner interactions', () => {
       await settle();
       return document.querySelector<HTMLElement>('.flower-turn-launcher-window')!;
     };
+    const submit = async (control: HTMLButtonElement) => {
+      // IMPORTANT: PromptCard admits after a paint. Observe this submission,
+      // never read the previous owner's call after an arbitrary fixed delay.
+      await vi.waitFor(() => expect(control.disabled).toBe(false));
+      const previous = vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.length;
+      control.click();
+      await vi.waitFor(() => {
+        expect(launchLocalEnvironmentFlowerTurn).toHaveBeenCalledTimes(previous + 1);
+        expect(control.disabled).toBe(false);
+      });
+    };
     const launcher = await open('runtime');
     const input = launcher.querySelector('textarea')!;
     input.value = 'Diagnose this failure'; input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -868,7 +879,7 @@ describe('linked environment owner interactions', () => {
     await settle();
     const send = launcher.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!;
     const before = vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.length;
-    send.click(); await settle();
+    await submit(send);
     const sent = vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.at(-1)![1];
     const content = (sent.context_action as EnvironmentFlowerContextActionEnvelope).context[0].content;
     for (const fact of ['probe_failed', 'Probe connection refused', 'start-context-fixture', 'local_runtime_launch_failed', 'port already in use']) {
@@ -877,7 +888,7 @@ describe('linked environment owner interactions', () => {
     expect(input.value).toBe('Diagnose this failure');
     expect(input.disabled).toBe(false);
     expect(send.disabled).toBe(false);
-    send.click(); await settle();
+    await submit(send);
     expect(vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.length).toBe(before + 2);
     expect(vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.at(-1)![1].context_action).toEqual(sent.context_action);
     button(launcher, 'Close').click(); await settle();
@@ -889,7 +900,7 @@ describe('linked environment owner interactions', () => {
     const cloudInput = cloudLauncher.querySelector('textarea')!;
     cloudInput.value = 'Inspect Cloud'; cloudInput.dispatchEvent(new Event('input', { bubbles: true }));
     await settle();
-    cloudLauncher.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!.click(); await settle();
+    await submit(cloudLauncher.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
     const cloudAction = vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.at(-1)![1].context_action as EnvironmentFlowerContextActionEnvelope;
     const cloudContent = cloudAction.context[0].content;
     expect(cloudContent).not.toContain('port already in use');
@@ -901,7 +912,7 @@ describe('linked environment owner interactions', () => {
     const reopenedInput = reopened.querySelector('textarea')!;
     reopenedInput.value = 'Inspect current state'; reopenedInput.dispatchEvent(new Event('input', { bubbles: true }));
     await settle();
-    reopened.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!.click(); await settle();
+    await submit(reopened.querySelector<HTMLButtonElement>('.floe-prompt-card-submit')!);
     const refreshedAction = vi.mocked(launchLocalEnvironmentFlowerTurn).mock.calls.at(-1)![1].context_action as EnvironmentFlowerContextActionEnvelope;
     const refreshed = refreshedAction.context[0].content;
     expect(refreshed).toContain('"freshness": "fresh"');

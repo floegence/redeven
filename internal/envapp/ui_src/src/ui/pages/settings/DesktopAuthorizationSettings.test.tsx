@@ -3,19 +3,22 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DesktopAuthorizationSettings } from './DesktopAuthorizationSettings';
+import { SettingsPanelContext } from '../../../../../../settings_ui/src/SettingsPanelHost';
 import type { RemoteDesktopStatus } from '../../services/remoteDesktopApi';
 
 const state = vi.hoisted(() => ({ save: vi.fn(), forget: vi.fn(), refresh: vi.fn(), access: () => ({ phase: 'ready', generation: 0 }) }));
 vi.mock('../../services/remoteDesktopApi', () => ({ setRemoteDesktopUnattended: state.save, forgetRemoteDesktopAuthorization: state.forget }));
 vi.mock('../EnvContext', () => ({ useEnvContext: () => ({ resourceCacheAccess: () => state.access() }) }));
 vi.mock('../../i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async original => ({
+  ...await original<object>(),
   Button: (props: any) => <button disabled={props.disabled} onClick={props.onClick}>{props.children}</button>,
   Switch: (props: any) => <label>{props.label}<input type="checkbox" role="switch" checked={props.checked} disabled={props.disabled} onChange={event => props.onChange(event.currentTarget.checked)} /></label>,
 }));
 const ready: RemoteDesktopStatus = { capabilities: { backend: 'wayland', state: 'ready', screen: true, input: true, audio: true, clipboard: true, unattended: true, authorization: 'saved', displays: [] }, unattended: true, control_in_use: false, last_display_id: '' };
 let host: HTMLDivElement, dispose: (() => void) | undefined;
 let setAccess!: (value: { phase: string; generation: number }) => void;
+let setPresented!: (value: boolean) => void;
 let setAllowed!: (value: boolean) => void;
 let setStatus!: (value: RemoteDesktopStatus) => void;
 const settle = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
@@ -27,7 +30,8 @@ async function mount(status = ready, allowed = true) {
     const [access, updateAccess] = createSignal({ phase: 'ready', generation: 0 }); state.access = access; setAccess = updateAccess;
     const [permission, updateAllowed] = createSignal(allowed); setAllowed = updateAllowed;
     const [current, updateStatus] = createSignal(status); setStatus = updateStatus;
-    return <DesktopAuthorizationSettings status={current()} allowed={permission()} refresh={state.refresh} />;
+    const [presented, updatePresented] = createSignal(true); setPresented = updatePresented;
+    return <SettingsPanelContext.Provider value={{ present: presented, target: () => ({ section: 'applications' }), open: () => {}, close: () => updatePresented(false), register: () => () => {} }}><DesktopAuthorizationSettings status={current()} allowed={permission()} refresh={state.refresh} /></SettingsPanelContext.Provider>;
   }, host); await settle();
 }
 const button = (name: string) => [...host.querySelectorAll('button')].find(item => item.textContent === name)!;
@@ -79,4 +83,17 @@ it('reports a failed mutation and leaves authorization to the canonical status',
   button(forget).click(); button(confirm).click(); await settle();
   expect(host.querySelector('[role=alert]')?.textContent).toContain('remoteDesktop.settingsFailed');
   expect(state.refresh).not.toHaveBeenCalled(); expect(button(forget)).toBeDefined();
+});
+
+// Retained controls must reject synthetic/stale events, not just pointer input.
+it('retires hidden authorization controls and confirmation without replay on reopening', async () => {
+  await mount(); button(forget).click(); const staleConfirm = button(confirm);
+  const toggle = host.querySelector<HTMLInputElement>('[role=switch]')!;
+  setPresented(false); await settle();
+  toggle.dispatchEvent(new Event('change', { bubbles: true })); staleConfirm.click();
+  expect(state.save).not.toHaveBeenCalled(); expect(state.forget).not.toHaveBeenCalled();
+  expect(button(confirm)).toBeUndefined(); expect(toggle.disabled).toBe(true);
+  setPresented(true); await settle(); staleConfirm.click();
+  expect(state.save).not.toHaveBeenCalled(); expect(state.forget).not.toHaveBeenCalled();
+  expect(button(confirm)).toBeUndefined();
 });

@@ -15,7 +15,6 @@ export function ConfigFileSection() {
       variant="page"
       icon={FileCode}
       title={i18n.t('settings.configFile.title')}
-      description={i18n.t('settings.configFile.description')}
     >
       <SettingsList>
         <SettingRow

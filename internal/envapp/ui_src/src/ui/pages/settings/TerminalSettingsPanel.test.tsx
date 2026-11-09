@@ -7,6 +7,8 @@ import { TerminalSettingsAttachmentsProvider, terminalSettingsResource, useTermi
 import type { RuntimeWorkbenchLayoutSnapshot, RuntimeWorkbenchWidgetState, RuntimeWorkbenchLayoutEvent } from '../../workbench/runtimeWorkbenchLayout';
 import type { TerminalSettingsDialog } from '../../widgets/TerminalSettingsDialog';
 import type { EnvResourceCacheAccess } from '../../services/envResourceCache';
+import { SettingsPanelContext } from '../../../../../../settings_ui/src/SettingsPanelHost';
+import type { SettingsTarget } from '../../../../../../settings_ui/src/settingsSession';
 
 type EditorProps = Parameters<typeof TerminalSettingsDialog>[0];
 const state = vi.hoisted(() => ({
@@ -25,6 +27,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 vi.mock('../../i18n', () => ({ useI18n: () => ({ t: (key: string, values?: { number: number }) => values ? `${key} ${values.number}` : key }) }));
 vi.mock('../EnvContext', () => ({ useEnvContext: () => ({ resourceCacheAccess: () => state.access(), env: () => ({ permissions: { can_read: true, can_write: state.permission(), can_execute: true } }), openSettings: state.open }) }));
 vi.mock('./EnvSettingsPageContext', () => ({ useEnvSettingsPage: () => ({ canInteract: () => state.access().phase === 'ready', canAdmin: () => state.permission() }) }));
+vi.mock('./SettingsPrimitives', () => ({ SettingsResourceToolbar: (props: { label: string; children: import('solid-js').JSX.Element; actions?: import('solid-js').JSX.Element }) => <div aria-label={props.label}>{props.children}{props.actions}</div> }));
 vi.mock('../../services/terminalSessionCatalog', () => ({ useTerminalSessionCatalog: () => ({ sessions: () => state.sessions(), refresh: state.refresh }) }));
 vi.mock('../../services/terminalPreferences', () => ({ ensureTerminalPreferencesInitialized: () => {}, useTerminalPreferences: () => state.preferences, TERMINAL_MIN_FONT_SIZE: 10, TERMINAL_MAX_FONT_SIZE: 20 }));
 vi.mock('../../services/workbenchLayoutApi', () => ({ getWorkbenchLayoutSnapshot: state.snapshot, putWorkbenchWidgetState: state.put, connectWorkbenchLayoutEventStream: state.stream }));
@@ -38,6 +41,7 @@ const widgetState = (revision = 1, sessions = ['session-a'], fontSize = 12): Run
 const snapshot = (seq = 1): RuntimeWorkbenchLayoutSnapshot => ({ seq, revision: seq, updated_at_unix_ms: seq, widgets: [widget()], widget_states: [widgetState()], sticky_notes: [], annotations: [], background_layers: [] });
 let host: HTMLDivElement, dispose: (() => void) | undefined, registry: NonNullable<ReturnType<typeof useTerminalSettingsAttachments>>;
 let setTarget!: (target: string | undefined) => void, setAccess!: (access: EnvResourceCacheAccess) => void;
+let setPresented!: (present: boolean) => void, setHostTarget!: (target: SettingsTarget | null) => void;
 const settle = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 beforeEach(() => {
@@ -51,15 +55,19 @@ afterEach(() => { dispose?.(); host.remove(); });
 async function mount(target?: TerminalSettingsTarget | string) {
   const Harness = () => {
     const [access, updateAccess] = createSignal<EnvResourceCacheAccess>({ phase: 'ready', generation: 0 }); state.access = access; setAccess = updateAccess;
-    const [resource, updateTarget] = createSignal(typeof target === 'string' ? target : target ? terminalSettingsResource(target) : undefined); setTarget = updateTarget;
+    const initial = typeof target === 'string' ? target : target ? terminalSettingsResource(target) : undefined;
+    const [resource, updateTarget] = createSignal(initial);
+    const [present, updatePresent] = createSignal(true); setPresented = updatePresent;
+    const [presentedTarget, updateHostTarget] = createSignal<SettingsTarget | null>({ section: 'terminal', resource: initial }); setHostTarget = updateHostTarget;
+    setTarget = next => { updateTarget(next); updateHostTarget({ section: 'terminal', resource: next }); };
     registry = useTerminalSettingsAttachments()!;
-    return <TerminalSettingsPanel resource={resource()} />;
+    return <SettingsPanelContext.Provider value={{ present, target: presentedTarget, open: updateHostTarget, close: () => updateHostTarget(null), register: () => () => {} }}><TerminalSettingsPanel resource={resource()} /></SettingsPanelContext.Provider>;
   };
   dispose = render(() => <TerminalSettingsAttachmentsProvider><Harness /></TerminalSettingsAttachmentsProvider>, host); await settle();
 }
 const editorElement = () => [...host.querySelectorAll<HTMLElement>('[data-editor]')].find(element => !element.closest('[hidden]'))!;
 const editor = () => state.editors[Number(editorElement().dataset.editor)];
-const targetSelect = () => host.querySelector<HTMLSelectElement>('[aria-label="terminal.settings.target"]')!;
+const targetSelect = () => host.querySelector<HTMLSelectElement>('select[aria-label="terminal.settings.target"]')!;
 function emit(seq: number, payload: RuntimeWorkbenchLayoutEvent['payload']) { state.stream.mock.lastCall![0].onEvent({ seq, type: 'fixture', created_at_unix_ms: seq, payload }); }
 function owner(widgetID: string | null = null, session = 'session-a') {
   const [controllers, setControllers] = createSignal<ReadonlyMap<string, string>>(new Map([[session, 'authority-a']]));
@@ -139,7 +147,7 @@ it('does not roll back newer stream state when an older font response arrives', 
   editor().onFontSizeChange(16); await settle(); expect(state.put).toHaveBeenCalledOnce();
   emit(5, widgetState(5, ['session-a', 'session-b'], 19)); await settle(); expect(editor().fontSize).toBe(19);
   pending.resolve(widgetState(2, ['session-a'], 16)); await settle(); expect(editor().fontSize).toBe(19); expect(state.stream).toHaveBeenCalledOnce();
-  expect(host.querySelector<HTMLSelectElement>('[aria-label="terminal.settings.sessionTarget"]')!.options.length).toBe(3);
+  expect(host.querySelector<HTMLSelectElement>('select[aria-label="terminal.settings.sessionTarget"]')!.options.length).toBe(3);
 });
 
 it.each([false, true])('keeps a saved font when a delayed full layout snapshot has older widget state (missing=%s)', async missing => {
@@ -220,4 +228,99 @@ it('uses the latest widget revision while preserving its existing session placem
   await mount({ kind: 'widget', id: 'widget-a' }); state.snapshot.mockResolvedValue({ ...snapshot(4), widget_states: [widgetState(4, ['session-a', 'session-b'], 14)] });
   editor().onFontFamilyChange('iosevka'); await settle();
   expect(state.put).toHaveBeenCalledExactlyOnceWith('widget-a', { base_revision: 4, widget_type: 'redeven.terminal', state: { kind: 'terminal', session_ids: ['session-a', 'session-b'], font_size: 14, font_family_id: 'iosevka' } });
+});
+
+it.each(['resource', 'category', 'closed'] as const)('rejects retained widget callbacks after %s presentation changes', async change => {
+  await mount({ kind: 'widget', id: 'widget-a' }); const stale = editor();
+  if (change === 'resource') setTarget(undefined);
+  else if (change === 'category') setHostTarget({ section: 'logging' });
+  else setPresented(false);
+  await settle(); const reads = state.snapshot.mock.calls.length;
+  stale.onFontSizeChange(16); stale.onFontFamilyChange('iosevka'); await settle();
+  expect(state.snapshot).toHaveBeenCalledTimes(reads); expect(state.put).not.toHaveBeenCalled();
+});
+
+it.each([false, true])('cancels an unsubmitted font preflight after navigation (return=%s)', async returnToTarget => {
+  const target = { kind: 'widget', id: 'widget-a' } as const;
+  await mount(target); const pending = deferred<RuntimeWorkbenchLayoutSnapshot>(); state.snapshot.mockReturnValueOnce(pending.promise);
+  editor().onFontSizeChange(16); setTarget(undefined); await settle();
+  if (returnToTarget) { setTarget(terminalSettingsResource(target)); await settle(); }
+  pending.resolve(snapshot()); await settle(); expect(state.put).not.toHaveBeenCalled();
+});
+
+it.each(['resource', 'category', 'closed'] as const)('rejects a retained history transport after %s presentation changes', async change => {
+  await mount({ kind: 'session', id: 'session-a' }); const live = owner(); await settle();
+  const stale = editor().retentionTransport!;
+  if (change === 'resource') setTarget(undefined);
+  else if (change === 'category') setHostTarget({ section: 'logging' });
+  else setPresented(false);
+  await settle();
+  await expect(stale.configureHistoryRetention!('session-a', limits)).rejects.toThrow('settings.targetUnavailable');
+  expect(live.configure).not.toHaveBeenCalled(); expect(live.attach).not.toHaveBeenCalled();
+});
+
+it.each([false, true])('cancels an unsubmitted retention preflight after navigation (return=%s)', async returnToTarget => {
+  const target = { kind: 'widget', id: 'widget-a', sessionId: 'session-a' } as const;
+  await mount(target); const live = owner('widget-a'); await settle();
+  const transport = editor().retentionTransport!; const pending = deferred<RuntimeWorkbenchLayoutSnapshot>(); state.snapshot.mockReturnValueOnce(pending.promise);
+  const result = transport.configureHistoryRetention!('session-a', limits);
+  const rejected = expect(result).rejects.toThrow('settings.targetUnavailable');
+  setTarget(undefined); await settle();
+  if (returnToTarget) { setTarget(terminalSettingsResource(target)); await settle(); }
+  pending.resolve(snapshot()); await rejected;
+  expect(live.configure).not.toHaveBeenCalled(); expect(live.takeover).not.toHaveBeenCalled();
+});
+
+it.each(['resource', 'category', 'closed'] as const)('rejects retained local preferences and default retention after %s presentation changes', async change => {
+  await mount(); const stale = editor();
+  if (change === 'resource') setTarget(terminalSettingsResource({ kind: 'session', id: 'session-a' }));
+  else if (change === 'category') setHostTarget({ section: 'logging' });
+  else setPresented(false);
+  await settle();
+  expect(stale.onThemeChange('light')).toBe(false); stale.onFontSizeChange(18); stale.onFontFamilyChange('iosevka');
+  stale.onFollowInputChange?.(false); stale.onMobileInputModeChange('system'); stale.onWorkIndicatorEnabledChange(false);
+  expect(stale.retentionCanManage).toBe(false);
+  for (const value of Object.values(state.preferences)) if (vi.isMockFunction(value)) expect(value).not.toHaveBeenCalled();
+});
+
+it('settles an accepted widget PUT after navigation without replaying it', async () => {
+  const target = { kind: 'widget', id: 'widget-a' } as const; await mount(target); const first = editorElement();
+  const pending = deferred<RuntimeWorkbenchWidgetState>(); state.put.mockReturnValueOnce(pending.promise);
+  editor().onFontSizeChange(16); await settle(); expect(state.put).toHaveBeenCalledOnce();
+  setTarget(undefined); await settle(); pending.resolve(widgetState(2, ['session-a'], 16)); await settle();
+  setTarget(terminalSettingsResource(target)); await settle();
+  expect(editorElement()).toBe(first); expect(editor().fontSize).toBe(16); expect(state.put).toHaveBeenCalledOnce();
+});
+
+it('keeps active local preference actions available and retires them on disposal', async () => {
+  await mount(); const current = editor(); expect(current.retentionCanManage).toBe(true);
+  expect(current.onThemeChange('light')).toBe(true); current.onFontSizeChange(18); current.onFontFamilyChange('iosevka');
+  current.onFollowInputChange?.(false); current.onMobileInputModeChange('system'); current.onWorkIndicatorEnabledChange(false);
+  for (const value of Object.values(state.preferences)) if (vi.isMockFunction(value)) expect(value).toHaveBeenCalledOnce();
+  dispose?.(); dispose = undefined;
+  expect(current.onThemeChange('dark')).toBe(false); current.onFontSizeChange(12); current.onFontFamilyChange('jetbrains');
+  current.onFollowInputChange?.(true); current.onMobileInputModeChange('floe'); current.onWorkIndicatorEnabledChange(true);
+  for (const value of Object.values(state.preferences)) if (vi.isMockFunction(value)) expect(value).toHaveBeenCalledOnce();
+});
+
+it('settles accepted retention while preserving read identity and the retained draft', async () => {
+  const target = { kind: 'widget', id: 'widget-a', sessionId: 'session-a' } as const;
+  await mount(target); const live = owner('widget-a'); await settle();
+  const transport = editor().retentionTransport!, input = editorElement().querySelector('input')!; input.value = 'unfinished draft';
+  const pending = deferred<object>(); live.configure.mockReturnValueOnce(pending.promise);
+  const result = transport.configureHistoryRetention!('session-a', limits); await settle(); expect(live.configure).toHaveBeenCalledOnce();
+  setHostTarget({ section: 'logging' }); await settle();
+  expect(editor().retentionTransport).toBe(transport); expect(input.value).toBe('unfinished draft');
+  pending.resolve({ accepted: true }); await expect(result).resolves.toEqual({ accepted: true });
+  setHostTarget({ section: 'terminal', resource: terminalSettingsResource(target) }); await settle();
+  expect(editor().retentionTransport).toBe(transport); expect(input.value).toBe('unfinished draft'); expect(live.configure).toHaveBeenCalledOnce();
+});
+
+it.each(['closed', 'category'] as const)('retires a font preflight across a %s presentation roundtrip', async change => {
+  const target = { kind: 'widget', id: 'widget-a' } as const; await mount(target);
+  const pending = deferred<RuntimeWorkbenchLayoutSnapshot>(); state.snapshot.mockReturnValueOnce(pending.promise); editor().onFontSizeChange(16);
+  if (change === 'closed') setPresented(false); else setHostTarget({ section: 'logging' });
+  await settle();
+  if (change === 'closed') setPresented(true); else setHostTarget({ section: 'terminal', resource: terminalSettingsResource(target) });
+  await settle(); pending.resolve(snapshot()); await settle(); expect(state.put).not.toHaveBeenCalled();
 });
