@@ -72,6 +72,9 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
   const desktopSettingsReady = () => applicationResource.ready() && !desktopError() && desktopState() === 'enabled' && Boolean(desktopStatus()?.capabilities.screen);
   const [pictureExpanded, setPictureExpanded] = createSignal(false);
   const [pictureVisited, setPictureVisited] = createSignal(false);
+  // IMPORTANT: Select reads admission during events outside rendering. Resolve
+  // this conditional under the page owner, never in a compiled JSX getter.
+  const picturePresented = createMemo(() => pictureExpanded() && applicationTuningReady());
   createEffect(() => { if (!presented() || !applicationTuningReady()) setPictureExpanded(false); });
   const [desktopBusy, setDesktopBusy] = createSignal(false);
   const [desktopRequest, setDesktopRequest] = createSignal(0);
@@ -885,7 +888,7 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
             <summary><span>{i18n.t('hostAccess.pictureSettings')}</span><span class="host-access-picture-hint">{i18n.t('hostAccess.pictureOptional')}</span></summary>
             {/* Retain unsaved choices after collapse, pause or lost permissions;
                 only the current visible stage can open portals or submit changes. */}
-            <Show when={pictureVisited()}><ApplicationPictureSettings active={pictureExpanded() && applicationTuningReady()} allowed={canLaunch()} macOS={isMac()} /></Show>
+            <Show when={pictureVisited()}><ApplicationPictureSettings active={picturePresented()} allowed={canLaunch()} macOS={isMac()} /></Show>
           </details>
         </HostAccessFeatureSettings>
         <Show when={desktopStatus() && !desktopError()} fallback={<div class="host-access-notice"><p>{i18n.t(desktopError() ? 'remoteDesktop.statusFailed' : 'remoteDesktop.checking')}</p><Button variant="outline" disabled={desktopRefreshing()} onClick={() => void refreshDesktop()}>{i18n.t('remoteDesktop.refresh')}</Button></div>}>

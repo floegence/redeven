@@ -158,6 +158,16 @@ async function openCategory(section: EnvSettingsSection) {
   return panel;
 }
 
+async function expandPictureSettings(panel: HTMLElement) {
+  // IMPORTANT: The host owner admits picture controls only after explicit
+  // disclosure. Exercise that path instead of bypassing its retained state.
+  const disclosure = panel.querySelector<HTMLDetailsElement>('.host-access-picture')!;
+  expect(disclosure.open).toBe(false);
+  await userEvent.click(disclosure.querySelector('summary')!);
+  await expect.element(page.getByRole('combobox', { name: 'Picture quality', exact: true })).toBeEnabled();
+  await expect.poll(() => disclosure.open).toBe(true);
+}
+
 function inspectCategory(section: EnvSettingsSection, panel: HTMLElement, locale: Locale) {
   const copy = createTestI18nHelpers(locale);
   const dialog = document.querySelector<HTMLElement>('[role=dialog]')!;
@@ -232,6 +242,9 @@ it.each([1440, 1024, 768, 390, 320])('renders all 18 actual category owners with
 it.each([1440, 390, 320])('gives host settings deliberate feature rows and aligned picture fields at %ipx', async width => {
   await mount(width);
   const panel = await openCategory('applications');
+  expect(panel.querySelector('.application-picture-fields')).toBeNull();
+  expect(api.request.mock.calls.some(([url]) => String(url).endsWith('/host-applications/picture'))).toBe(false);
+  await expandPictureSettings(panel);
   await expect.poll(() => {
     const transform = getComputedStyle(panel.closest<HTMLElement>('[role=dialog]')!).transform;
     return transform === 'none' || new DOMMatrixReadOnly(transform).isIdentity;
@@ -444,6 +457,7 @@ it('keeps surviving permission controls in place while appending sorted external
 it('saves real picture selections immediately and never writes from category navigation', async () => {
   await mount(1024);
   const panel = await openCategory('applications');
+  await expandPictureSettings(panel);
   const owner = api.request.getMockImplementation()!;
   const updates: unknown[] = [];
   api.request.mockImplementation(async (url: string, init: RequestInit = {}) => {
@@ -459,24 +473,32 @@ it('saves real picture selections immediately and never writes from category nav
   const field = picker.element();
   await openCategory('appearance');
   await openCategory('applications');
+  expect(panel.querySelector<HTMLDetailsElement>('.host-access-picture')!.open).toBe(false);
+  expect((field as HTMLElement).checkVisibility()).toBe(false);
+  expect(updates).toHaveLength(1);
+  await expandPictureSettings(panel);
   expect(picker.element()).toBe(field);
   expect(panel.querySelector('.application-picture-save')).toBeNull();
   expect(updates).toHaveLength(1);
   session.close();
   session.open({ section: 'applications' });
+  expect(panel.querySelector<HTMLDetailsElement>('.host-access-picture')!.open).toBe(false);
+  await expandPictureSettings(panel);
   await expect.element(picker).toBeVisible();
   expect(updates).toHaveLength(1);
 });
 
 it.each(['Picture quality', 'Resolution limit', 'Frame rate limit'])('closes the retained %s popup on category navigation and dialog close', async label => {
   const warnings = vi.spyOn(console, 'warn');
-  await mount(1024); await openCategory('applications');
+  await mount(1024); const panel = await openCategory('applications');
+  await expandPictureSettings(panel);
   const picker = page.getByRole('combobox', { name: label, exact: true });
   await picker.click(); await expect.element(page.getByRole('listbox')).toBeVisible();
   await openCategory('appearance');
   await expect.element(page.getByRole('listbox')).not.toBeInTheDocument();
   await openCategory('applications');
   await expect.element(page.getByRole('listbox')).not.toBeInTheDocument();
+  await expandPictureSettings(panel);
   await picker.click(); await expect.element(page.getByRole('listbox')).toBeVisible();
   session.close();
   await expect.element(page.getByRole('listbox')).not.toBeInTheDocument();
