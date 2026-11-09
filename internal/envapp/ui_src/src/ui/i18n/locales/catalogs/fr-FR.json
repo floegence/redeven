@@ -254,6 +254,7 @@
   },
   "common": {
     "actions": {
+      "back": "Retour",
       "open": "Ouvrir",
       "save": "Enregistrer",
       "cancel": "Annuler",

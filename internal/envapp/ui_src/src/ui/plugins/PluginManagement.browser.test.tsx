@@ -30,7 +30,7 @@ import { ActivityPluginSurfaceWindow } from './ActivityPluginSurfaceWindow';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PluginConfirmationDialog, createPluginConfirmationQueue } from './PluginConfirmationQueue';
 import { PluginCenterView } from './PluginCenterView';
-import { PluginCenterDrawer } from './PluginCenterDrawer';
+import { PluginCenterPageFixture } from './pluginCenterPage.testHarness';
 import { PluginSurfaceContainer, type PluginSurfaceResolution } from './PluginSurfaceContainer';
 import { PluginPanel } from './PluginPanel';
 import { PluginPinContextMenu } from './PluginPinContextMenu';
@@ -2109,7 +2109,7 @@ it.each([{ width: 1440, height: 900 }, { width: 390, height: 844 }])(
   },
 );
 
-describe('Workbench Plugin Center dialog continuity', () => {
+describe('Workbench Plugin Center page continuity', () => {
   it.each(['no-preference', 'reduce'] as const)('retains management state and restores focus with %s motion', async (reducedMotion) => {
     await mediaCommands.emulateMediaPreferences({ reducedMotion });
     await page.viewport(1440, 1000);
@@ -2121,23 +2121,26 @@ describe('Workbench Plugin Center dialog continuity', () => {
     }], viewport: { x: 40, y: 20, scale: 0.7 }, locked: false, filters: {}, selectedWidgetId: 'saved-plugin', theme: DEFAULT_WORKBENCH_THEME });
     const definition: WorkbenchWidgetDefinition = { ...redevenWorkbenchWidgets.find((item) => item.type === 'redeven.plugin')!,
       body: () => <div>Saved plugin component</div> };
-    disposers.push(render(() => <>
-      <div data-test-scaled-canvas inert={open()} style={{ transform: 'translate(80px, 40px) scale(0.7)', 'transform-origin': 'top left' }}>
+    const close = () => {
+      setOpen(false);
+      queueMicrotask(() => host.querySelector<HTMLButtonElement>('[data-testid="center-entry"]')?.focus());
+    };
+    disposers.push(render(() => <PluginCenterPageFixture open={open()} background={
+      <div data-test-scaled-canvas style={{ transform: 'translate(80px, 40px) scale(0.7)', 'transform-origin': 'top left' }}>
         <button data-testid="center-entry" onClick={() => setOpen(true)}>Manage plugins</button>
         <button data-testid="canvas-input">Canvas input</button>
         <div class="h-[800px] w-[1400px]">
           <WorkbenchSurface state={canvas} setState={setCanvas} widgetDefinitions={[definition]} launcherWidgetTypes={[]} enableKeyboard={!open()} />
         </div>
       </div>
-      <PluginCenterDrawer open={open()} onOpenChange={setOpen} title="Plugin Center">
-        <PluginCenterView showTitle={false} projection={projection} loading={false} canManagePlugins canOpenPluginSurfaces
-          onRefresh={() => undefined} onCommand={() => undefined} />
-      </PluginCenterDrawer>
-    </>, host));
+    }>
+      <PluginCenterView visible={open()} focusRequest={open() ? 1 : 0} projection={projection} loading={false} canManagePlugins canOpenPluginSurfaces
+        onRefresh={() => undefined} onCommand={() => undefined} onClose={close} />
+    </PluginCenterPageFixture>, host));
     await userEvent.click(page.getByTestId('center-entry'));
     await settle();
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    await expect.poll(() => dialog.getBoundingClientRect().bottom).toBeLessThanOrEqual(981);
+    const dialog = document.querySelector<HTMLElement>('[data-redeven-plugin-center-page]')!;
+    await expect.poll(() => dialog.getBoundingClientRect().bottom).toBe(1000);
     expectInsideViewport(dialog, { width: 1440, height: 1000 });
     expectNoHorizontalOverflow(dialog);
     expect(dialog.querySelectorAll('h1, h2')).toHaveLength(1);
@@ -2150,16 +2153,15 @@ describe('Workbench Plugin Center dialog continuity', () => {
     while (isolated && !isolated.inert) isolated = isolated.parentElement;
     expect(isolated).not.toBeNull();
     const placement = structuredClone(canvas());
-    dialog.focus();
+    dialog.querySelector<HTMLElement>('[data-plugin-center-view]')!.focus();
     await userEvent.keyboard('{ArrowRight}{Delete}{Backspace}');
     expect(canvas()).toEqual(placement);
-    await userEvent.keyboard('{Escape}');
-    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
-    // Floe restores focus after the unmount paint, outside the close stack.
+    await userEvent.click(dialog.querySelector('[data-plugin-center-close]')!);
+    expect(dialog.dataset.pageVisible).toBe('false');
     await expect.poll(() => document.activeElement).toBe(host.querySelector('[data-testid="center-entry"]'));
     await userEvent.click(page.getByTestId('center-entry'));
     await settle();
-    const restored = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const restored = document.querySelector<HTMLElement>('[data-redeven-plugin-center-page]')!;
     expect(restored.contains(content)).toBe(true);
     expect(restored.querySelector<HTMLInputElement>('input[type="search"], input[placeholder]')?.value).toBe('Metrics');
     await expectScreenshotHasPixelVariance();

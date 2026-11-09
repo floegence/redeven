@@ -254,6 +254,7 @@
   },
   "common": {
     "actions": {
+      "back": "返回",
       "open": "打开",
       "save": "保存",
       "cancel": "取消",

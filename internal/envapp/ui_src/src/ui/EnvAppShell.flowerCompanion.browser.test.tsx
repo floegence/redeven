@@ -23,6 +23,7 @@ let testFilesMenu = false;
 let testDesktopBridge = false;
 let testRealFlowerLauncher = false;
 let testRealFlowerPreview = false;
+let testRealPluginCenter = false;
 let RealEnvFlowerLauncher: typeof import('./widgets/FlowerTurnLauncherWindow').FlowerTurnLauncherWindow;
 let registeredCommands: Array<{ id: string; execute: () => void }> = [];
 let pluginCreationNavigationFixture: { open: (instanceID: string) => Promise<void>; navigate?: (commit: () => unknown) => Promise<boolean> } | undefined;
@@ -363,7 +364,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
   const RealDialog = actual.Dialog;
   return {
     ...actual,
-    Button: (props: any) => (
+    Button: (props: any) => testRealPluginCenter ? <actual.Button {...props} /> : (
       <button
         type="button"
         class={props.class}
@@ -1247,6 +1248,7 @@ beforeEach(() => {
   testDesktopBridge = false;
   testRealFlowerLauncher = false;
   testRealFlowerPreview = false;
+  testRealPluginCenter = false;
   pluginCreationNavigationFixture = undefined;
   pluginCreationInventory = undefined;
   setAssetRecoveryReason(null);
@@ -2245,6 +2247,62 @@ describe('EnvAppShell Activity Flower browser integration', () => {
       window.history.replaceState(window.history.state, '', initial);
     }
   });
+
+  it.each([{ width: 1280, theme: 'light' }, { width: 1280, theme: 'dark' }, { width: 390, theme: 'light' }])(
+    'renders Plugin Center as a full content page with reachable shell chrome at $width px in $theme', async ({ width, theme }) => {
+      testRealFlowerLauncher = true; testRealFlowerPreview = true; testRealPluginCenter = true;
+      await page.viewport(width, 800);
+      document.documentElement.classList.remove('light', 'dark');
+      document.documentElement.classList.add(theme);
+      pluginCreationInventory = { items: [] };
+      const fixture = width < 720 ? await mountProductionMobileShell() : await mountShell();
+      pluginCreationSessionReady?.();
+      await flushAsync();
+      const flower = document.querySelector('#redeven-activity-flower-product');
+      fixture.input.value = 'Retain my ordinary draft';
+      const enter = async () => {
+        await page.elementLocator(document.querySelector('[aria-controls="redeven-plugin-switcher"]')!).click();
+        await page.getByRole('button', { name: 'Plugin Center', exact: true }).click();
+        await expect.poll(() => document.querySelector('[data-plugin-center-search]')).not.toBeNull();
+        await expect.element(page.elementLocator(document.querySelector('[data-plugin-center-search]')!)).toBeVisible();
+      };
+      await enter();
+      const center = document.querySelector<HTMLElement>('[data-redeven-plugin-center-page]')!;
+      const content = document.querySelector<HTMLElement>('[data-plugin-creation-content-host="activity"]')!;
+      await expect.poll(() => Math.abs(center.getBoundingClientRect().top - content.getBoundingClientRect().top)).toBeLessThan(1);
+      for (const side of ['left', 'right', 'bottom', 'width'] as const) {
+        expect(Math.abs(center.getBoundingClientRect()[side] - content.getBoundingClientRect()[side])).toBeLessThan(1);
+      }
+      expect(center.closest('[role="dialog"]')).toBeNull();
+      expect(document.querySelector('.redeven-plugin-center-drawer')).toBeNull();
+      const chrome = document.querySelector(width < 720 ? '[data-floe-shell-slot="mobile-tab-bar"]' : '[data-floe-shell-slot="activity-bar"]')!;
+      await expect.element(page.elementLocator(chrome)).toBeVisible();
+      expect(chrome.closest('[inert]')).toBeNull();
+      expect(document.querySelector('#redeven-activity-flower-product')).toBe(flower);
+      expect(fixture.input.value).toBe('Retain my ordinary draft');
+      const search = center.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
+      await page.elementLocator(search).fill('keep this search');
+      await page.screenshot({ path: `__screenshots__/plugin-center-page-${width}-${theme}.png` });
+      await page.getByRole('button', { name: 'Back', exact: true }).click();
+      await expect.poll(() => center.dataset.pageVisible).toBe('false');
+      expect(fixture.input.value).toBe('Retain my ordinary draft');
+      await enter();
+      expect(document.querySelector('[data-redeven-plugin-center-page]')).toBe(center);
+      expect(search.value).toBe('keep this search');
+      if (width >= 720) {
+        await page.getByRole('button', { name: 'File Browser', exact: true }).first().click();
+        await expect.poll(() => center.dataset.pageVisible).toBe('false');
+        await enter();
+        const mode = page.getByRole('tab', { name: 'Workbench', exact: true });
+        await mode.click();
+        const workbench = () => document.querySelector<HTMLElement>('[data-plugin-creation-content-host="workbench"]')!;
+        await expect.poll(() => Math.abs(center.getBoundingClientRect().top - workbench().getBoundingClientRect().top)).toBeLessThan(1);
+        expect(document.querySelector('[data-redeven-plugin-center-page]')).toBe(center);
+        expect(search.value).toBe('keep this search');
+        await page.screenshot({ path: `__screenshots__/plugin-center-page-workbench-${theme}.png` });
+      }
+    },
+  );
 
   it('retains shell and editor identity while plugin creation owns the foreground', async () => {
     await page.viewport(1280, 800);

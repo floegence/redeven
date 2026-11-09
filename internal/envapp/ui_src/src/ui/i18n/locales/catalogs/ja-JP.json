@@ -254,6 +254,7 @@
   },
   "common": {
     "actions": {
+      "back": "戻る",
       "open": "開く",
       "save": "保存",
       "cancel": "キャンセル",

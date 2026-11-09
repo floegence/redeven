@@ -10,7 +10,7 @@ for (const forbidden of ['navigation.commit', 'setViewMode(', 'activateActivityS
 const transcripts = [...shell.matchAll(/transcriptVisible=\{([^}]+)\}/g)];
 assert.ok(transcripts.length > 0);
 for (const [, expression] of transcripts) assert.ok(expression.includes('!settingsSession.present()'));
-assert.match(shell, /workbenchPluginCenterBlocking = \(\) => settingsSession.present\(\) \|\| pluginCenterPresent\(\)/);
+assert.match(shell, /workbenchPluginCenterBlocking = \(\) => settingsSession.present\(\) \|\| pluginCenterOpen\(\)/);
 assert.match(shell, /visiblePluginWindows = createMemo\(\(\) => workbenchPluginCenterBlocking\(\) \? \[\]/);
 const mobile = read('internal/envapp/ui_src/src/ui/MobileShellTools.tsx');
 assert.doesNotMatch(mobile, /<EnvAppThemePicker|<LanguagePreferenceMenu/);
@@ -57,7 +57,8 @@ assert.match(settings, /<FlowerExtensionsSurface embedded/);
 assert.doesNotMatch(settings, /onBack=\{\(\) => props\.session\.close/);
 // IMPORTANT: Plugin management is an independent feature, not configuration.
 // Only exact installed/author connection editors belong in Settings.
-assert.match(shell, /<PluginCenterDrawer/);
+assert.match(shell, /<PluginPageViewport page="center"/);
+assert.doesNotMatch(shell, /PluginCenterDrawer/);
 const pluginCenterOpen = shell.slice(shell.indexOf('const openPluginCenter ='), shell.indexOf('const openPluginCenter =') + 1000);
 assert.doesNotMatch(pluginCenterOpen, /openSettings\(['"]plugins/);
 assert.doesNotMatch(settings, /PluginCenterView|renderPlugins|renderInstalled/);

@@ -254,6 +254,7 @@
   },
   "common": {
     "actions": {
+      "back": "뒤로",
       "open": "열기",
       "save": "저장",
       "cancel": "취소",

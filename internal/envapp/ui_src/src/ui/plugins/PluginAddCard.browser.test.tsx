@@ -8,7 +8,7 @@ import { page, userEvent } from 'vitest/browser';
 import { FloeConfigProvider } from '@floegence/floe-webapp-core';
 import { I18nProvider } from '../i18n';
 import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from '../i18n/storageKey';
-import { PluginCenterDrawer } from './PluginCenterDrawer';
+import { PluginCenterPageFixture } from './pluginCenterPage.testHarness';
 import { PluginCenterView } from './PluginCenterView';
 import type { PluginInventoryItem } from './pluginTypes';
 
@@ -106,14 +106,14 @@ it.each([
 });
 
 
-it('keeps the drawer open across add-menu dismissal and nested installation', async () => {
+it('keeps the page open across add-menu dismissal and nested installation', async () => {
   await page.viewport(1024, 800);
   const host = document.createElement('div'); document.body.append(host);
   const [open, setOpen] = createSignal(true);
-  dispose = render(() => <FloeConfigProvider><I18nProvider><PluginCenterDrawer open={open()} onOpenChange={setOpen} title="Plugin Center">
+  dispose = render(() => <FloeConfigProvider><I18nProvider><PluginCenterPageFixture open={open()}>
     <PluginCenterView projection={{ items: [item] }} loading={false} canManagePlugins canOpenPluginSurfaces
       onRefresh={vi.fn()} onCommand={vi.fn()} onCreatePlugin={vi.fn()} onOpenDrafts={vi.fn()} onClose={() => setOpen(false)} />
-  </PluginCenterDrawer></I18nProvider></FloeConfigProvider>, host);
+  </PluginCenterPageFixture></I18nProvider></FloeConfigProvider>, host);
   await expect.element(page.getByRole('button', { name: 'Add plugin', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add plugin', exact: true }).click();
   await expect.element(page.getByRole('menuitem', { name: 'Create a plugin', exact: true })).toBeVisible();
@@ -122,9 +122,9 @@ it('keeps the drawer open across add-menu dismissal and nested installation', as
   await expect.poll(() => document.activeElement?.classList.contains('plugin-center-add-trigger')).toBe(true);
   await page.getByRole('button', { name: 'Add plugin', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Install from source', exact: true }).click();
-  await expect.poll(() => document.querySelectorAll('[data-floe-dialog-panel]').length).toBe(2);
-  await userEvent.keyboard('{Escape}');
   await expect.poll(() => document.querySelectorAll('[data-floe-dialog-panel]').length).toBe(1);
+  await userEvent.keyboard('{Escape}');
+  await expect.poll(() => document.querySelectorAll('[data-floe-dialog-panel]').length).toBe(0);
   expect(open()).toBe(true);
   await expect.poll(() => document.activeElement?.classList.contains('plugin-center-add-trigger')).toBe(true);
 });

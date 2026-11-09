@@ -917,7 +917,11 @@ function PluginCenterShell(props: {
     const request = props.focusRequest ?? 0;
     if (props.visible === false || request <= handledFocusRequest) return;
     handledFocusRequest = request;
-    queueMicrotask(() => searchRef?.focus({ preventScroll: true }));
+    // Focus after the retained page has applied its visible geometry.
+    const frame = requestAnimationFrame(() => {
+      if (props.visible !== false) searchRef?.focus({ preventScroll: true });
+    });
+    onCleanup(() => cancelAnimationFrame(frame));
   });
   const filterGroups = [
 { id: 'category' as const, get dimension() { return i18n.t('uiCopy.plugin.categories'); }, get value() { return props.category; }, onSelect: (value: string) => props.onCategorySelect(value as PluginPresentationCategory | 'all'), get items() { return [
@@ -951,11 +955,24 @@ function PluginCenterShell(props: {
     disabled: !props.canManage || props.loading,
   }];
   return (
-    <section ref={(element) => { props.rootRef?.(element); }} data-plugin-center-view onKeyDown={props.onKeyDown} tabIndex={-1} class="redeven-plugin-motion relative flex h-full min-h-0 min-w-0 flex-col text-foreground animate-in fade-in duration-200 motion-reduce:animate-none">
+    <section ref={(element) => { props.rootRef?.(element); }} data-plugin-center-view onKeyDown={props.onKeyDown} tabIndex={-1} class="redeven-plugin-motion relative flex h-full min-h-0 min-w-0 flex-col text-foreground animate-in fade-in motion-reduce:animate-none">
       <header class="w-full shrink-0 border-b bg-background" data-plugin-center-toolbar>
         <div class="flex w-full min-w-0 flex-wrap items-center gap-2 px-3 py-2 sm:flex-nowrap" data-plugin-center-toolbar-primary>
-          <Show when={props.showTitle !== false}><div class="flex min-w-0 shrink-0 items-center gap-2">
-            <h1 class="truncate text-[length:var(--floe-type-body)] font-medium">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
+          <Show when={props.showTitle !== false || props.onClose}><div class="flex min-w-0 shrink-0 items-center gap-2">
+            <Show when={props.onClose}>
+              <Button
+                variant="ghost"
+                size="icon"
+                data-plugin-center-close
+                class="h-11 w-11 shrink-0 sm:h-8 sm:w-8"
+                aria-label={i18n.t('common.actions.back')}
+                title={i18n.t('common.actions.back')}
+                onClick={() => props.onClose?.()}
+              >
+                <ArrowLeft class="h-3.5 w-3.5" />
+              </Button>
+            </Show>
+            <Show when={props.showTitle !== false}><h1 class="truncate text-[length:var(--floe-type-body)] font-medium">{i18n.t('uiCopy.plugin.centerTitle')}</h1></Show>
           </div></Show>
           <label class="relative order-last block w-full min-w-0 basis-full sm:order-none sm:ml-auto sm:max-w-[480px] sm:flex-1 sm:basis-auto">
               <span class="sr-only">{i18n.t('uiCopy.plugin.searchPlaceholder')}</span>
@@ -1026,19 +1043,6 @@ function PluginCenterShell(props: {
             >
               <RefreshIcon class={cn('h-3.5 w-3.5', (props.loading || props.refreshing) && 'animate-spin motion-reduce:animate-none')} />
             </Button>
-            <Show when={props.onClose}>
-              <Button
-                variant="ghost"
-                size="icon"
-                data-plugin-center-close
-                class="h-11 w-11 shrink-0 sm:h-8 sm:w-8"
-                aria-label={i18n.t('uiCopy.plugin.closeCenter')}
-                title={i18n.t('uiCopy.plugin.closeCenter')}
-                onClick={() => props.onClose?.()}
-              >
-                <X class="h-3.5 w-3.5" />
-              </Button>
-            </Show>
           </div>
         </div>
         <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 px-3 pb-2 sm:px-4" data-plugin-center-toolbar-secondary>

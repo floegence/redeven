@@ -868,7 +868,7 @@ vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
     </Show>
   ),
   Dialog: (props: any) => { createEffect(() => {
-    if (!props.open && settingsPresenceState.holdExit && (props.class?.includes('redeven-unified-settings-dialog') || props.class?.includes('redeven-plugin-center-drawer'))) settingsPresenceState.finishExit = () => props.onPresenceChange?.(false);
+    if (!props.open && settingsPresenceState.holdExit && (props.class?.includes('redeven-unified-settings-dialog'))) settingsPresenceState.finishExit = () => props.onPresenceChange?.(false);
     else props.onPresenceChange?.(Boolean(props.open));
   }); return (
     <Show when={props.open}>
@@ -1549,7 +1549,8 @@ function findActivityButton(root: ParentNode, activityID: string): HTMLButtonEle
 function expectPluginCenterStandalone(host: ParentNode): void {
   const view = host.querySelector('[data-plugin-center-view]');
   expect(view).toBeTruthy();
-  expect(view?.closest('.redeven-plugin-center-drawer')).not.toBeNull();
+  expect(view?.closest('[data-redeven-plugin-center-page]')).not.toBeNull();
+  expect(view?.closest('[role="dialog"]')).toBeNull();
   expect(view?.closest('.redeven-unified-settings-dialog')).toBeNull();
   expect(new URL(window.location.href).searchParams.has('settings')).toBe(false);
 }
@@ -2099,6 +2100,34 @@ describe('EnvAppShell environment entry affordances', () => {
       dispose();
     }
   }, 10000);
+
+  it.each(['activity', 'workbench'])('yields the retained Plugin Center to access recovery in %s', async (mode) => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', mode);
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => protocolSnapshot.state === 'connected');
+      await flushAsync();
+      if (mode === 'activity') (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      else (host.querySelector('[data-workbench-dock-action="plugins"]') as HTMLButtonElement).click();
+      {
+        await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
+        (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement).click();
+      }
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
+      const page = host.querySelector<HTMLElement>('[data-redeven-plugin-center-page]')!;
+      expect(page.dataset.pageVisible).toBe('true');
+      publishLocalAccessExpired();
+      await flushAsync();
+      expect(host.querySelector('input[type="password"]')).not.toBeNull();
+      expect(page.dataset.pageVisible).toBe('false');
+      expect(page.getAttribute('aria-hidden')).toBe('true');
+      expect(host.querySelector('[data-redeven-plugin-center-page]')).toBe(page);
+    } finally { dispose(); }
+  });
 
   it('opens exact installed connection Settings above the retained standalone Plugin Center', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -3618,7 +3647,7 @@ describe('EnvAppShell environment entry affordances', () => {
       (host.querySelector('button[aria-label="Close Plugin Center"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => sidebarActiveTabValue === 'monitor');
 
-      await flushUntil(() => !host.querySelector('.redeven-plugin-center-drawer'));
+      await flushUntil(() => !host.querySelector('[data-redeven-plugin-center-page][data-page-visible="true"]'));
       expect(new URL(window.location.href).searchParams.has('settings')).toBe(false);
 
       const reopenedPluginTrigger = host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null;
@@ -3724,7 +3753,7 @@ describe('EnvAppShell environment entry affordances', () => {
       const expectCenter = (present = true) => {
         expect(sidebarActiveTabValue).toBe('terminal');
         if (present) expect(host.querySelector('[data-plugin-center-view]')).toBe(center);
-        else expect(center?.isConnected).toBe(false);
+        else { expect(center?.isConnected).toBe(true); expect(pluginCenterViewState.lastProps.visible).toBe(false); }
         expect(pluginCenterViewState.lastProps.selectedInventoryKey).toBe('instance:plugin_example_metrics');
         if (present) expectPluginCenterStandalone(host);
         else expect(new URL(window.location.href).searchParams.has('settings')).toBe(false);
@@ -3735,7 +3764,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expectCenter();
       expect(host.querySelector('[data-placement="activity"]')).toBeNull();
       await open();
-      await flushUntil(() => !host.querySelector('.redeven-plugin-center-drawer'));
+      await flushUntil(() => !host.querySelector('[data-redeven-plugin-center-page][data-page-visible="true"]'));
       await flushUntil(() => Boolean(host.querySelector('[data-placement="activity"]')));
       expectCenter(false);
       const surface = host.querySelector('[data-placement="activity"]')!;
@@ -3743,10 +3772,10 @@ describe('EnvAppShell environment entry affordances', () => {
       const instanceID = pluginSurfaceFrameState.lastProps.instanceID;
       const focusRequest = pluginSurfaceFrameState.lastProps.focusRequest;
       await pluginPanelState.lastProps.onOpenPluginDetails('instance:plugin_example_metrics');
-      await flushUntil(() => Boolean(host.querySelector('.redeven-plugin-center-drawer')));
+      await flushUntil(() => Boolean(host.querySelector('[data-redeven-plugin-center-page][data-page-visible="true"]')));
       expectCenter();
       await open();
-      await flushUntil(() => !host.querySelector('.redeven-plugin-center-drawer'));
+      await flushUntil(() => !host.querySelector('[data-redeven-plugin-center-page][data-page-visible="true"]'));
       expectCenter(false);
       expect(host.querySelectorAll('[data-placement="activity"]')).toHaveLength(1);
       expect(surface.querySelector('iframe')).toBe(frame);
@@ -3759,10 +3788,10 @@ describe('EnvAppShell environment entry affordances', () => {
       expectCenter(false);
       expect(background.inert).toBe(false);
       await pluginPanelState.lastProps.onOpenPluginDetails('instance:plugin_example_metrics');
-      await flushUntil(() => Boolean(host.querySelector('.redeven-plugin-center-drawer')));
+      await flushUntil(() => Boolean(host.querySelector('[data-redeven-plugin-center-page][data-page-visible="true"]')));
       expectCenter();
       await open();
-      await flushUntil(() => !host.querySelector('.redeven-plugin-center-drawer'));
+      await flushUntil(() => !host.querySelector('[data-redeven-plugin-center-page][data-page-visible="true"]'));
       expectCenter(false);
       expect(pluginSurfaceFrameState.lastProps.instanceID).not.toBe(instanceID);
     } finally { dispose(); }
@@ -3806,7 +3835,7 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally { dispose(); }
   }, 10000);
 
-  it.each([false, true])('waits for successful Workbench placement and modal exit before focusing: navigation=%s', async changeMode => {
+  it.each([false, true])('waits for successful Workbench placement before leaving the page and focusing: navigation=%s', async changeMode => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(examplePluginProjection('enabled'));
@@ -3823,21 +3852,23 @@ describe('EnvAppShell environment entry affordances', () => {
       const open = () => pluginCenterViewState.lastProps.onCommand({ type: 'open_surface', ...target }, new AbortController().signal);
       workbenchPluginSurfaceState.open.mockRejectedValueOnce(new Error('Placement unavailable'));
       await expect(open()).rejects.toThrow('Placement unavailable');
-      expect(host.querySelector('.redeven-plugin-center-drawer')).not.toBeNull();
-      settingsPresenceState.holdExit = true;
-      await open();
+      expect(host.querySelector('[data-redeven-plugin-center-page][data-page-visible="true"]')).not.toBeNull();
+      const placement = deferred<undefined>();
+      workbenchPluginSurfaceState.open.mockReturnValueOnce(placement.promise);
+      const opening = open();
       await flushAsync();
       expect(workbenchPluginSurfaceState.focus).not.toHaveBeenCalled();
-      expect(settingsPresenceState.finishExit).toBeTypeOf('function');
+      expect(pluginCenterViewState.lastProps.visible).toBe(true);
       if (changeMode) {
         findButtonByText(host, 'Activity')!.click();
         await flushUntil(() => window.localStorage.getItem('redeven_envapp_desktop_view_mode') === 'activity');
       }
-      settingsPresenceState.finishExit!();
+      placement.resolve(undefined);
+      await opening;
       await flushAsync();
       if (changeMode) expect(workbenchPluginSurfaceState.focus).not.toHaveBeenCalled();
       else expect(workbenchPluginSurfaceState.focus).toHaveBeenCalledExactlyOnceWith(target);
-      await flushUntil(() => !host.querySelector('.redeven-plugin-center-drawer'), 60);
+      await flushUntil(() => !host.querySelector('[data-redeven-plugin-center-page][data-page-visible="true"]'), 60);
       expect(workbenchPluginSurfaceState.open).toHaveBeenLastCalledWith(target);
       expect(host.querySelector('[data-placement="activity"]')).toBeNull();
       expect(window.localStorage.getItem('redeven_envapp_desktop_view_mode')).toBe(changeMode ? 'activity' : 'workbench');
@@ -5098,7 +5129,7 @@ describe('EnvAppShell environment entry affordances', () => {
     document.body.appendChild(host);
     const { EnvAppShell } = await import('./EnvAppShell');
     const dispose = render(() => <EnvAppShell />, host);
-    const drawer = () => host.querySelector('.redeven-plugin-center-drawer');
+    const centerPage = () => host.querySelector('[data-redeven-plugin-center-page][data-page-visible="true"]');
     const changeMode = async (label: string) => {
       findButtonByText(host, label)!.click();
       await flushUntil(() => host.querySelector(`[data-testid="display-mode-view-${label.toLowerCase()}"]`)?.getAttribute('style')?.includes('display: block') ?? false, 60);
@@ -5106,19 +5137,19 @@ describe('EnvAppShell environment entry affordances', () => {
     try {
       await flushUntil(() => Boolean(pluginPanelState.lastProps?.onOpenCenter), 60);
       await pluginPanelState.lastProps.onOpenCenter();
-      await flushUntil(() => Boolean(drawer()));
+      await flushUntil(() => Boolean(centerPage()));
       await changeMode('Activity');
       await changeMode('Workbench');
-      expect(drawer()).not.toBeNull();
+      expect(centerPage()).not.toBeNull();
       await pluginPanelState.lastProps.onOpenCenter();
-      await flushUntil(() => Boolean(drawer()));
+      await flushUntil(() => Boolean(centerPage()));
       publishProtocolWaiting({ code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' });
       await flushUntil(() => Boolean(host.querySelector('[data-testid="connection-recovery-view"]')));
-      const retainedDrawer = drawer();
-      expect(retainedDrawer).not.toBeNull();
+      const retainedPage = centerPage();
+      expect(retainedPage).not.toBeNull();
       publishProtocolConnected();
       await vi.waitFor(() => expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeNull(), { timeout: 2500 });
-      expect(drawer()).toBe(retainedDrawer);
+      expect(centerPage()).toBe(retainedPage);
     } finally { dispose(); }
   }, 10000);
 

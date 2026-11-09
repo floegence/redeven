@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin discovery, placement and layout continuity
 tags: [ui, plugins, activity, workbench, plugin-center]
 lifecycle: contract
-reviewed_at: "2026-11-07"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -23,7 +23,7 @@ Use environment-scoped Shell preferences with independent Activity/Workbench pin
 Authenticated session-ready invokes idempotent Host recoverEnabled without timers. Every placement consumes action_state; source classification/grants/policy/recovery cannot derive can_open. [Installation](plugin-package-review.md#installation-progress) owns durable Execution observation; [package review](plugin-package-review.md#package-review) external packages. Failure preserves placement. Plugin Center joins inventory/grants/Host requirements/policy. Method effects cannot rename capabilities; failure reloads authority/requires fresh confirmation.
 
 ### Activity pages/windows
-Plugin Center opens or focuses a floating window without changing the Activity page. Closing returns focus to its connected trigger; search, filters, selection and scroll remain. A matching retained pinned page keeps its independent slot and edits; management never moves its iframe. Queued opens capture placement and cannot reverse subsequent user navigation. Workbench management retains drawer-to-canvas behavior. Creation Open uses an independent project-owned window in either mode; its route, composer and preview stay mounted. Hidden projects retain their windows without moving iframes. Mobile isolates the creation page until close; queued opens recheck their project. Capacity eviction closes only the exact window instance.
+Opening an installed plugin from Plugin Center opens or focuses a floating window above the previous Activity page. Closing returns focus to its connected trigger; search, filters, selection and scroll remain. A matching retained pinned page keeps its independent slot and edits; management never moves its iframe. Queued opens capture placement and cannot reverse subsequent user navigation. Workbench management opens the exact widget and leaves the retained Center page only after placement succeeds. Creation Open uses an independent project-owned window in either mode; its route, composer and preview stay mounted. Hidden projects retain their windows without moving iframes. Mobile isolates the creation page until close; queued opens recheck their project. Capacity eviction closes only the exact window instance.
 
 Allocate a fresh PluginSurfaceSlot only when placement and document are visible. Hidden unopened placements retain layout without iframe/authority; close requires no open/revoke round trip. Once opening starts, hiding retains independent slot/draft/selection/undo/pending work. Visible placements may open concurrently; each actual open captures current context revision and delivers later changes once. Windows use openSurfaceInSlot. Open/bridge failure replaces iframe with local recovery; timeout offers Retry. Restart restores shortcuts but opens a built-in page.
 

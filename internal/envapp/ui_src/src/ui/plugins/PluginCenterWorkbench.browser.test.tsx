@@ -5,7 +5,7 @@ import { NotificationProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
 import { afterEach, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
-import { PluginCenterDrawer } from './PluginCenterDrawer';
+import { PluginCenterPageFixture } from './pluginCenterPage.testHarness';
 import { PluginCenterView } from './PluginCenterView';
 import { PluginPanel } from './PluginPanel';
 import type { PluginInventoryItem } from './pluginTypes';
@@ -30,7 +30,6 @@ afterEach(() => {
 });
 
 const browserCommands = commands as unknown as {
-  dismissPluginCenterBackdrop: () => Promise<{ isolatedDuringExit: boolean }>;
   wheelScrollRegion: (request: { regionSelector: string; deltaY: number }) => Promise<{ before: number; after: number }>;
 };
 
@@ -38,7 +37,6 @@ function mountWorkbench(items: PluginInventoryItem[] = [item]) {
   const host = document.createElement('div');
   document.body.append(host);
   const [open, setOpen] = createSignal(false);
-  const [present, setPresent] = createSignal(false);
   const [launcher, setLauncher] = createSignal(false);
   const [selected, setSelected] = createSignal<string>();
   const [focusRequest, setFocusRequest] = createSignal(0);
@@ -54,10 +52,12 @@ function mountWorkbench(items: PluginInventoryItem[] = [item]) {
     setLauncher(false);
     setOpen(true);
   };
+  const close = () => { setOpen(false); queueMicrotask(() => trigger?.focus()); };
+  const onShell = vi.fn();
   dispose = render(() => <NotificationProvider>
-    <div data-test-workbench-background inert={open() || present()} aria-hidden={open() || present() || undefined}>
+    <PluginCenterPageFixture open={open()} onShellAction={onShell} background={
       <div class="workbench-surface" data-floe-dialog-surface-host="true" data-floe-surface-portal-layer="true"
-        onWheel={onWheel} style={{ position: 'relative', height: '100vh' }}>
+        onWheel={onWheel} style={{ position: 'relative', height: '100%' }}>
         <button type="button" data-test-background style={{ position: 'absolute', top: '4px', left: '4px' }} onClick={onBackground}>Canvas action</button>
         <button ref={trigger} type="button" data-test-launcher style={{ position: 'absolute', bottom: '24px', left: '48%' }} onClick={() => setLauncher(true)}>Plugins</button>
         <PluginPanel open={launcher()} placement="workbench" trigger={trigger} model={{ loading: false, tiles: [
@@ -66,12 +66,11 @@ function mountWorkbench(items: PluginInventoryItem[] = [item]) {
         ] }} onClose={() => setLauncher(false)} onOpenCenter={() => openCenter()}
           onOpenPluginDetails={openCenter} onOpenPluginSurface={() => undefined} onSetPluginPin={() => undefined} />
       </div>
-    </div>
-    <PluginCenterDrawer open={open()} onOpenChange={setOpen} onPresenceChange={setPresent} title="Plugin Center">
+    }>
       <PluginCenterView visible={open()} focusRequest={focusRequest()} selectedInventoryKey={selected()}
         projection={{ items }} loading={false} canManagePlugins canOpenPluginSurfaces
-        onRefresh={onRefresh} onCommand={onCommand} onClose={() => setOpen(false)} />
-    </PluginCenterDrawer>
+        onRefresh={onRefresh} onCommand={onCommand} onClose={close} />
+    </PluginCenterPageFixture>
   </NotificationProvider>, host);
   const enter = async (details = false) => {
     await page.elementLocator(host.querySelector('[data-test-launcher]')!).click();
@@ -83,24 +82,30 @@ function mountWorkbench(items: PluginInventoryItem[] = [item]) {
     } else {
       await page.elementLocator(document.querySelector(selector)!).click();
     }
-    await expect.poll(() => document.querySelector('[data-floe-dialog-presentation="bottom-drawer"] [data-floe-dialog-panel]')?.getAttribute('data-floating-presence')).toBe('open');
+    await expect.element(page.elementLocator(host.querySelector('[data-redeven-plugin-center-page]')!)).toBeVisible();
   };
-  return { host, enter, onRefresh, onBackground, onWheel, onCommand };
+  return { host, enter, onRefresh, onBackground, onWheel, onCommand, onShell };
 }
 
 it.each([{ width: 1440, height: 900 }, { width: 1920, height: 1080 }, { width: 1024, height: 768 }, { width: 720, height: 450 }])(
-  'keeps the drawer contained and details reachable at $width × $height', async ({ width, height }) => {
+  'fills the content viewport below shell chrome and keeps details reachable at $width × $height', async ({ width, height }) => {
     await page.viewport(width, height);
     const fixture = mountWorkbench();
     await fixture.enter();
-    const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
-    await expect.poll(() => panel.getBoundingClientRect().bottom).toBe(height - 20);
+    const panel = document.querySelector<HTMLElement>('[data-redeven-plugin-center-page]')!;
+    await expect.poll(() => panel.getBoundingClientRect().bottom).toBe(height);
     const rect = panel.getBoundingClientRect();
-    expect(rect.top).toBeGreaterThanOrEqual(64);
-    expect(rect.width).toBe(Math.min(1120, width - 48));
-    expect(rect.bottom).toBe(height - 20);
+    expect(rect.top).toBe(48);
+    expect(rect.left).toBe(48);
+    expect(panel.closest('[role="dialog"]')).toBeNull();
+    expect(document.querySelector('[data-floe-dialog-panel]')).toBeNull();
+    await page.elementLocator(fixture.host.querySelector('[data-test-shell-action]')!).click();
+    expect(fixture.onShell).toHaveBeenCalledOnce();
+    expect(rect.width).toBe(width - 48);
+    expect(rect.bottom).toBe(height);
     expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
     expect(panel.closest('[inert]')).toBeNull();
+    await page.elementLocator(panel.querySelector('[data-plugin-center-search]')!).click();
     expect(document.activeElement).toBe(panel.querySelector('[data-plugin-center-search]'));
     await page.elementLocator(panel.querySelector('[data-plugin-center-item]')!).click();
     const details = panel.querySelector<HTMLElement>('[data-plugin-center-details]')!;
@@ -123,15 +128,15 @@ it.each([{ width: 1440, height: 900 }, { width: 1920, height: 1080 }, { width: 1
   },
 );
 
-it('keeps nested confirmation focus and Escape independent from the drawer', async () => {
+it('keeps nested confirmation focus and Escape independent from the page', async () => {
   await page.viewport(1024, 768);
   const fixture = mountWorkbench();
   await fixture.enter(true);
-  const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+  const panel = document.querySelector<HTMLElement>('[data-redeven-plugin-center-page]')!;
   expect(panel.querySelector('[data-plugin-center-details]')?.getAttribute('data-plugin-center-details')).toBe(item.inventoryKey);
   await page.elementLocator(panel.querySelector('[data-plugin-center-install-external]')!).click();
   await page.getByRole('menuitem', { name: 'Install from source' }).click();
-  await expect.poll(() => document.querySelectorAll('[data-floe-dialog-panel]').length).toBe(2);
+  await expect.poll(() => document.querySelectorAll('[data-floe-dialog-panel]').length).toBe(1);
   const child = [...document.querySelectorAll<HTMLElement>('[data-floe-dialog-panel]')].find((element) => element !== panel)!;
   expect(child.getAttribute('aria-modal')).toBe('true');
   for (let index = 0; index < 12; index++) {
@@ -146,10 +151,10 @@ it('keeps nested confirmation focus and Escape independent from the drawer', asy
   await userEvent.keyboard('{Escape}');
   expect(panel.querySelector('[data-plugin-center-details]')).toBeNull();
   await userEvent.keyboard('{Escape}');
-  await expect.poll(() => panel.isConnected).toBe(false);
+  expect(panel.dataset.pageVisible).toBe('true');
 });
 
-it('retains search, filters, selection and scroll while excluding background input through exit', async () => {
+it('retains search, filters, selection and scroll while preserving the hidden canvas and reachable shell', async () => {
   await page.viewport(1440, 900);
   const items = Array.from({ length: 60 }, (_, index) => ({ ...item, inventoryKey: `instance:weather-${index}`, displayName: `Weather ${index}` }));
   const fixture = mountWorkbench(items);
@@ -163,9 +168,10 @@ it('retains search, filters, selection and scroll while excluding background inp
   expect(scroll.after).toBeGreaterThan(scroll.before);
   expect(fixture.onWheel).not.toHaveBeenCalled();
   const savedScroll = list.scrollTop;
-  expect((await browserCommands.dismissPluginCenterBackdrop()).isolatedDuringExit).toBe(true);
+  expect(fixture.host.querySelector('[data-test-workbench-background]')?.hasAttribute('inert')).toBe(true);
+  await page.elementLocator(document.querySelector('[data-plugin-center-close]')!).click();
   expect(fixture.onBackground).not.toHaveBeenCalled();
-  await expect.poll(() => document.querySelector('[data-floe-dialog-panel]')).toBeNull();
+  await expect.poll(() => document.querySelector<HTMLElement>('[data-redeven-plugin-center-page]')?.dataset.pageVisible).toBe('false');
   await page.elementLocator(fixture.host.querySelector('[data-test-background]')!).click();
   expect(fixture.onBackground).toHaveBeenCalledOnce();
   await fixture.enter();
@@ -176,17 +182,17 @@ it('retains search, filters, selection and scroll while excluding background inp
   await page.elementLocator(list.querySelectorAll('[data-plugin-center-item]')[6]).click();
   const selectedKey = document.querySelector('[data-plugin-center-details]')!.getAttribute('data-plugin-center-details');
   await page.elementLocator(document.querySelector('[data-plugin-center-close]')!).click();
-  await expect.poll(() => document.querySelector('[data-floe-dialog-panel]')).toBeNull();
+  await expect.poll(() => document.querySelector<HTMLElement>('[data-redeven-plugin-center-page]')?.dataset.pageVisible).toBe('false');
   await fixture.enter();
   expect(document.querySelector('[data-plugin-center-details]')!.getAttribute('data-plugin-center-details')).toBe(selectedKey);
-  expect(document.activeElement).toBe(search);
+  await expect.poll(() => document.activeElement).toBe(search);
 });
 
 it.each(['escape', 'cancel'] as const)('returns from a narrow uninstall confirmation through %s and preserves failed Open feedback', async (dismissal) => {
   await page.viewport(1024, 768);
   const fixture = mountWorkbench();
   await fixture.enter();
-  const panel = document.querySelector<HTMLElement>('[data-floe-dialog-panel]')!;
+  const panel = document.querySelector<HTMLElement>('[data-redeven-plugin-center-page]')!;
   fixture.onCommand.mockRejectedValueOnce(new Error('The plugin component could not be opened.'));
   await page.elementLocator(panel.querySelector('[data-plugin-center-card-primary]')!).click();
   const failure = panel.querySelector<HTMLButtonElement>('[data-floe-status-indicator] button')!;
@@ -196,7 +202,7 @@ it.each(['escape', 'cancel'] as const)('returns from a narrow uninstall confirma
   expect(panel.isConnected).toBe(true);
   await page.elementLocator(panel.querySelector('[data-plugin-center-card-menu]')!).click();
   await page.getByRole('menuitem', { name: 'Uninstall', exact: true }).click();
-  await expect.poll(() => document.querySelectorAll('[data-floe-dialog-panel]').length).toBe(2);
+  await expect.poll(() => document.querySelectorAll('[data-floe-dialog-panel]').length).toBe(1);
   const confirmation = [...document.querySelectorAll<HTMLElement>('[data-floe-dialog-panel]')].find((element) => element !== panel)!;
   await expect.poll(() => confirmation.contains(document.activeElement)).toBe(true);
   if (dismissal === 'escape') await userEvent.keyboard('{Escape}');
@@ -206,29 +212,17 @@ it.each(['escape', 'cancel'] as const)('returns from a narrow uninstall confirma
   expect(panel.isConnected).toBe(true);
 });
 
-it('opens an interactive management surface outside the inert Workbench after a Dock interaction', async () => {
+it('opens an interactive page outside the inert Workbench after a Dock interaction', async () => {
   await page.viewport(1440, 900);
-  const host = document.createElement('div');
-  document.body.append(host);
-  const [open, setOpen] = createSignal(false);
-  const onRefresh = vi.fn();
-  dispose = render(() => <>
-    <div inert={open()} aria-hidden={open() || undefined}>
-      <div class="workbench-surface" data-floe-dialog-surface-host="true" data-floe-surface-portal-layer="true" style={{ position: 'relative', height: '100vh' }}>
-        <button type="button" data-test-dock onClick={() => setOpen(true)}>Plugins</button>
-      </div>
-    </div>
-    <PluginCenterDrawer open={open()} onOpenChange={setOpen} title="Plugin Center">
-      <PluginCenterView projection={{ items: [item] }} loading={false} canManagePlugins canOpenPluginSurfaces onRefresh={onRefresh} onCommand={vi.fn()} onClose={() => setOpen(false)} />
-    </PluginCenterDrawer>
-  </>, host);
-  await page.elementLocator(host.querySelector('[data-test-dock]')!).click();
+  const fixture = mountWorkbench();
+  await fixture.enter();
   const search = document.querySelector<HTMLInputElement>('[data-plugin-center-search]')!;
   expect(search.closest('[inert]')).toBeNull();
   await page.elementLocator(search).fill('Weather');
   await page.elementLocator(document.querySelector('[data-plugin-center-refresh]')!).click();
-  expect(onRefresh).toHaveBeenCalledOnce();
+  expect(fixture.onRefresh).toHaveBeenCalledOnce();
   await page.elementLocator(document.querySelector('[data-plugin-center-close]')!).click();
-  await expect.poll(() => document.querySelector('[data-floe-dialog-mode]')).toBeNull();
-  expect(host.querySelector('[inert]')).toBeNull();
+  expect(document.querySelector('[data-floe-dialog-mode]')).toBeNull();
+  expect(fixture.host.querySelector('[data-test-workbench-background]')?.hasAttribute('inert')).toBe(false);
+  await expect.poll(() => document.activeElement).toBe(fixture.host.querySelector('[data-test-launcher]'));
 });

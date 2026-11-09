@@ -809,6 +809,7 @@ export const enUS = defineDictionary({
   },
   common: {
     actions: {
+      back: 'Back',
       more: 'More actions',
       open: 'Open',
       save: 'Save',

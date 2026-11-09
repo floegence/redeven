@@ -1,10 +1,12 @@
 import { createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 
-/** Keep one live creation container while Activity and Workbench change geometry. */
-export function PluginCreationViewport(props: {
+/** Keep a retained plugin page inside the current Activity or Workbench viewport. */
+export function PluginPageViewport(props: {
   host: HTMLElement | undefined;
   content: HTMLElement | null;
   blocked: boolean;
+  page: 'center' | 'creation';
+  visible?: boolean;
   children: JSX.Element;
 }) {
   const [bounds, setBounds] = createSignal<{ left: number; top: number; width: number; height: number }>();
@@ -29,8 +31,11 @@ export function PluginCreationViewport(props: {
   return <div class="absolute z-10 overflow-hidden bg-background"
     style={{ left: `${bounds()?.left ?? 0}px`, top: `${bounds()?.top ?? 0}px`,
       width: `${bounds()?.width ?? 0}px`, height: `${bounds()?.height ?? 0}px`,
-      visibility: bounds() ? 'visible' : 'hidden' }}
-    inert={props.blocked} aria-hidden={props.blocked || undefined} data-redeven-plugin-creation-page>
+      visibility: props.visible !== false && bounds() ? 'visible' : 'hidden' }}
+    inert={props.blocked || props.visible === false} aria-hidden={props.blocked || props.visible === false || undefined}
+    data-redeven-plugin-creation-page={props.page === 'creation' ? '' : undefined}
+    data-redeven-plugin-center-page={props.page === 'center' ? '' : undefined}
+    data-page-visible={props.visible !== false}>
     {props.children}
   </div>;
 }
