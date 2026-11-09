@@ -911,6 +911,7 @@
       "runErrorContextFixedOverhead": "系統指令與工具定義已超出模型可用的上下文容量。請增加伺服器端的上下文視窗大小，或選擇上下文容量更大的模型後重試。壓縮聊天記錄無法解決此問題。",
       "runErrorContextCompactionLimit": "壓縮後，對話仍超出模型的上下文上限。請縮短輸入內容，或選擇上下文容量更大的模型後重試。",
       "preparingSend": "正在準備訊息",
+      "pluginWorkspaceUnavailable": "外掛原始碼目錄無法使用，訊息尚未送出。請還原工作區後重試。",
       "sendFailed": "傳送失敗",
       "sendPreparationRecoveryDescription": "此訊息在重新啟動前尚未傳送。請還原至輸入框後重新提交。",
       "sendUnknown": "等待確認",

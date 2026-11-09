@@ -29,6 +29,15 @@ The administrator-only no-store storage endpoint inspects named Environment loca
 
 `scripts/relocate_prerelease_storage.py --state-dir <absolute> [--skills-source <absolute>]` previews exact moves. `--apply` requires the stopped Runtime lease; conflicts, unsupported links, special files or changed fingerprints stop without replacing data. Only relative links inside the renamed author-workspaces tree may be retained: validate every target component and link chain inside that tree without reading through links, hash each link target as opaque evidence, and preserve the original entries by renaming the tree. Absolute, escaping, missing and cyclic targets remain rejected. Other plugin trees and shared skills still reject links. SQLite and sidecars move as opaque bytes; orphan sidecars fail before migration. Shared skills copy only from the explicit source and retain originals; only Redeven-owned path metadata is rewritten. A durable journal binds original product metadata bytes to source fingerprints and permits only the selected lexical/canonical prefix rewrite; external shared-scope decisions remain separate. Explicit source arguments must match the journal. It fences feature admission until verified completion and supports interrupted moves and metadata publication. Interrupted copy stages remain untouched: inspect the reported stage, move it outside the Environment without deletion, and rerun the same command; source fingerprints are checked again. This offline tool is never called by startup and is not a permanent compatibility reader. Do not remove its guard while pending local relocations exist.
 
+`scripts/repair_prerelease_plugin_threads.py --state-dir <absolute> --bindings <json>`
+previews the one-time host thread-directory repair after a completed relocation.
+Export each workspace/source binding through the released owner-bound author API.
+`--apply` holds Runtime and author locks, verifies exact host database kinds and
+versions, and atomically updates only matching old-to-new directory settings.
+Unknown state, unrelated paths and missing bindings are rejected unchanged.
+Repeated repair is a no-op; frozen launch requests, other settings and opaque
+upstream stores remain untouched. Normal startup does not invoke this tool.
+
 ## Upstream format boundary
 Floret v7.108.3 owns the logical-version fence for its domain-37 store and migration from recognized logical-11 state. Redeven consumes the published module with `GOWORK=off`; it does not edit upstream schema or downgrade stores. A compatible build opens retained history before readiness; an old reader must report too-new rather than label valid newer state corrupt. Build-cache deletion cannot repair this mismatch.
 
@@ -44,5 +53,6 @@ Flower recovery covers only its declared conversation/read-state/upload/media co
 
 - internal/storagecontract: placement, rooted inventory and regression tests.
 - scripts/check_storage_ownership.mjs: bounded source gate in quick CI.
+- scripts/tests/test_plugin_thread_repair.py: exact bindings, atomic rollback, idempotence and schema/owner fences.
 - scripts/tests/test_storage_relocation.py: offline lease, conflicts, interruption, opaque bytes and skill metadata.
 - StorageSettings.browser.test.tsx: narrow layout, stale-response fencing and retained refresh failures.

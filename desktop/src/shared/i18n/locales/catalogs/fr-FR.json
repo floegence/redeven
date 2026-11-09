@@ -911,6 +911,7 @@
       "runErrorContextFixedOverhead": "Les instructions système et les définitions des outils dépassent le contexte disponible du modèle. Augmentez la fenêtre de contexte du serveur ou choisissez un modèle offrant davantage de contexte, puis réessayez. Compresser l’historique de discussion ne résoudra pas ce problème.",
       "runErrorContextCompactionLimit": "La conversation dépasse encore la limite de contexte du modèle après compression. Raccourcissez l’entrée ou choisissez un modèle offrant davantage de contexte, puis réessayez.",
       "preparingSend": "Préparation du message",
+      "pluginWorkspaceUnavailable": "Le dossier source du plugin est indisponible. Votre message n’a pas été envoyé. Restaurez l’espace de travail, puis réessayez.",
       "sendFailed": "Échec de l’envoi",
       "sendPreparationRecoveryDescription": "Ce message n’a pas été envoyé avant le redémarrage. Restaurez-le dans le champ de saisie, puis envoyez-le à nouveau.",
       "sendUnknown": "Confirmation nécessaire",

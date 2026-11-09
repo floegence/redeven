@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower turn submission, outbox and input recall
 tags: [ui, flower, composer, commands]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -23,6 +23,12 @@ admission, including receipt/live ordering and prepended history. Images reserve
 the same thumbnail geometry and use the authorized staged preview until admitted.
 Failed and unknown outcomes retain the frozen request for explicit recovery;
 server 5xx responses never prove rejection or authorize a fresh request identity.
+
+Composer-origin failures remain under their original transcript row with a
+visible explanation and persistent recovery actions; they are not duplicated in
+the queue dock. Queue-origin failures keep their existing dock placement.
+Workspace-unavailable codes receive localized copy without internal paths.
+Retry retains the request identity; copy, restore and removal never auto-submit.
 
 Agent preparation binds the
 already persisted execution authority to the admitted turn. No duplicate

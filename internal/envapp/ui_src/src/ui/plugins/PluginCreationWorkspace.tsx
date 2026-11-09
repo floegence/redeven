@@ -248,6 +248,7 @@ export function PluginCreationWorkspace(props: PluginCreationWorkspaceProps): JS
     }
   };
   const composerChanged = (value: FlowerComposerDraftSnapshot) => {
+    if (latestComposer?.scope_id === value.scope_id && latestComposer.revision === value.revision) return;
     composerRevision++;
     latestComposer = value;
     setComposerSaved(false);

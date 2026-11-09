@@ -49,6 +49,7 @@ if (mode === '--build') {
     const frame = page.frameLocator('iframe');
     await frame.getByRole('button', { name: 'Start', exact: true }).waitFor({ timeout: 30000 });
     await frame.getByText('25:00', { exact: true }).waitFor();
+    if (configuration.update) await frame.getByText('Focus session', { exact: true }).waitFor();
     const firstOrigin = await page.locator('iframe').getAttribute('src');
     assert.notEqual(new URL(firstOrigin).hostname, new URL(destination).hostname);
     await frame.getByRole('button', { name: 'Start', exact: true }).click();
@@ -70,9 +71,9 @@ if (mode === '--build') {
       assert.notEqual(new URL(firstOrigin).origin, new URL(secondOrigin).origin);
       report.assertions.push('Close and reopen allocate fresh surface identity and a new isolated origin');
     } else {
-      await page.getByRole('button', { name: 'Install in this environment', exact: true }).click();
+      await page.getByRole('button', { name: configuration.update ? 'Update' : 'Install in this environment', exact: true }).click();
       await page.getByRole('dialog').waitFor();
-      await page.getByRole('button', { name: 'Confirm installation', exact: true }).click();
+      await page.getByRole('button', { name: configuration.update ? 'Update plugin' : 'Confirm installation', exact: true }).click();
       await page.getByRole('button', { name: 'Installed', exact: true }).waitFor({ timeout: 30000 });
       await page.reload();
       await page.getByRole('button', { name: 'Installed', exact: true }).waitFor({ timeout: 30000 });

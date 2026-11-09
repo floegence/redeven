@@ -620,6 +620,7 @@ export type FlowerSurfaceCopy = Readonly<{
     sendAcceptedSyncing: string;
     preparingSend: string;
     sendFailed: string;
+    pluginWorkspaceUnavailable: string;
     sendUnknown: string;
     sendUnknownDescription: string;
     retrySend: string;
@@ -1145,6 +1146,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     sendAcceptedSyncing: "Received, syncing",
     preparingSend: "Preparing message",
     sendFailed: "Send failed",
+    pluginWorkspaceUnavailable: "The plugin source folder is unavailable. Your message was not submitted. Restore the workspace, then retry.",
     sendUnknown: "Confirmation needed",
     sendUnknownDescription: "The send result is unknown. Later messages are paused. Retry this same request or refresh the conversation.",
     retrySend: "Retry send",

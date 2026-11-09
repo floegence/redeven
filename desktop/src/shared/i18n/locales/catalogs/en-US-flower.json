@@ -643,6 +643,7 @@
     "runErrorContextFixedOverhead": "The system instructions and tool definitions exceed the model's available context. Increase the serving context window or choose a model with more context, then retry. Compressing chat history cannot resolve this.",
     "runErrorContextCompactionLimit": "The conversation still exceeds the model's context limit after compression. Shorten the input or choose a model with more context, then retry.",
     "preparingSend": "Preparing message",
+    "pluginWorkspaceUnavailable": "The plugin source folder is unavailable. Your message was not submitted. Restore the workspace, then retry.",
     "sendFailed": "Send failed",
     "sendPreparationRecoveryDescription": "This message was not sent before restart. Restore it to the editor and submit it again.",
     "sendUnknown": "Confirmation needed",

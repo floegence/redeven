@@ -5912,6 +5912,7 @@
       "runErrorContextCompactionLimit": "압축 후에도 대화가 모델의 컨텍스트 한도를 초과합니다. 입력을 줄이거나 컨텍스트 용량이 더 큰 모델을 선택한 후 다시 시도하세요.",
       "preparingSend": "메시지 준비 중",
       "sendFailed": "전송 실패",
+      "pluginWorkspaceUnavailable": "플러그인 소스 폴더를 사용할 수 없습니다. 메시지가 전송되지 않았습니다. 작업 공간을 복원한 후 다시 시도하세요.",
       "sendUnknown": "확인 필요",
       "sendUnknownDescription": "전송 결과를 알 수 없어 이후 메시지가 일시 중지되었습니다. 같은 요청을 다시 시도하거나 대화를 새로 고치세요.",
       "retrySend": "전송 다시 시도",

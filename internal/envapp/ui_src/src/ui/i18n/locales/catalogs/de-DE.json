@@ -5912,6 +5912,7 @@
       "runErrorContextCompactionLimit": "Die Unterhaltung überschreitet auch nach der Komprimierung das Kontextlimit des Modells. Kürzen Sie die Eingabe oder wählen Sie ein Modell mit größerem Kontext und versuchen Sie es erneut.",
       "preparingSend": "Nachricht wird vorbereitet",
       "sendFailed": "Senden fehlgeschlagen",
+      "pluginWorkspaceUnavailable": "Der Quellordner des Plugins ist nicht verfügbar. Deine Nachricht wurde nicht gesendet. Stelle den Arbeitsbereich wieder her und versuche es erneut.",
       "sendUnknown": "Bestätigung erforderlich",
       "sendUnknownDescription": "Das Sendeergebnis ist unbekannt. Weitere Nachrichten sind angehalten. Wiederhole dieselbe Anfrage oder aktualisiere den Chat.",
       "retrySend": "Senden wiederholen",

@@ -2,9 +2,40 @@ package ai
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/session"
 )
+
+var ErrPluginWorkspaceUnavailable = errors.New("plugin workspace source directory is unavailable")
+
+// Managed conversation paths are resolved from workspace ownership, never from
+// a retained absolute path. Ordinary conversations keep their chosen directory.
+func (s *Service) executionWorkingDir(ctx context.Context, meta *session.Meta, settings *threadstore.ThreadSettings) (string, error) {
+	if settings != nil && s.pluginCreation != nil {
+		source, found, err := s.pluginCreation.ThreadSourceScope(ctx, meta, settings.ThreadID)
+		if err != nil {
+			if found {
+				return "", fmt.Errorf("%w: %w", ErrPluginWorkspaceUnavailable, err)
+			}
+			return "", err
+		}
+		if found {
+			scope, err := s.scope.WithPrivateRoot(source.PrivateRoot, source.Directory)
+			if err != nil {
+				return "", fmt.Errorf("%w: %w", ErrPluginWorkspaceUnavailable, err)
+			}
+			directory, err := validateThreadWorkingDir(source.Directory, scope)
+			if err != nil {
+				return "", fmt.Errorf("%w: %w", ErrPluginWorkspaceUnavailable, err)
+			}
+			return directory, nil
+		}
+	}
+	return threadWorkingDir(settings)
+}
 
 // Sidebar membership is product policy, derived only from durable project
 // ownership. It never changes canonical conversation or runtime authority.

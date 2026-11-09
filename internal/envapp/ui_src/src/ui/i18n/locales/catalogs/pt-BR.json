@@ -5912,6 +5912,7 @@
       "runErrorContextCompactionLimit": "A conversa ainda excede o limite de contexto do modelo após a compactação. Encurte a entrada ou escolha um modelo com mais contexto e tente novamente.",
       "preparingSend": "Preparando mensagem",
       "sendFailed": "Falha no envio",
+      "pluginWorkspaceUnavailable": "A pasta de código do plugin está indisponível. Sua mensagem não foi enviada. Restaure o espaço de trabalho e tente novamente.",
       "sendUnknown": "Confirmação necessária",
       "sendUnknownDescription": "O resultado do envio é desconhecido. As mensagens seguintes estão pausadas. Tente a mesma solicitação novamente ou atualize a conversa.",
       "retrySend": "Tentar envio novamente",

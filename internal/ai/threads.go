@@ -756,6 +756,7 @@ func (s *Service) buildThreadCreateSettings(ctx context.Context, meta *session.M
 	}
 	scope := s.scope
 	if req.managedSource != nil {
+		workingDir = req.managedSource.Directory
 		scope, err = scope.WithPrivateRoot(req.managedSource.PrivateRoot, req.managedSource.Directory)
 		if err != nil {
 			return threadstore.ThreadSettings{}, err

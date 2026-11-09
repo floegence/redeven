@@ -251,6 +251,7 @@ export const flowerSurfaceEnUS = {
     sendAcceptedSyncing: "Received, syncing",
     preparingSend: "Preparing message",
     sendFailed: "Send failed",
+    pluginWorkspaceUnavailable: "The plugin source folder is unavailable. Your message was not submitted. Restore the workspace, then retry.",
     sendUnknown: "Confirmation needed",
     sendUnknownDescription: "The send result is unknown. Later messages are paused. Retry this same request or refresh the conversation.",
     retrySend: "Retry send",

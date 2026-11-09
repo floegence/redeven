@@ -47,6 +47,7 @@ export type TransportOutboxEntry = Readonly<{
   /** Request delivery only; canonical current remains the queue authority. */
   delivery?: 'pending' | 'accepted' | 'failed' | 'unknown';
   deliveryError?: string;
+  deliveryErrorCode?: string;
 }>;
 
 export type TransportOutboxReconciliation = Readonly<{

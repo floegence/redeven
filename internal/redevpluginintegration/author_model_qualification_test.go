@@ -134,7 +134,7 @@ func TestPluginCreationRealModelBuildInstallAndDelete(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Minute)
 	defer cancel()
 	draft, err := product.Create(ctx, meta, "model-draft")
 	if err != nil {
@@ -223,7 +223,7 @@ func TestPluginCreationRealModelBuildInstallAndDelete(t *testing.T) {
 	if err = env.Apply(authorCtx, artifact.ID); err != nil {
 		t.Fatal(err)
 	}
-	qualifyGeneratedAuthorBrowser(t, ctx, integration, meta, draft.WorkspaceID, env.Snapshot().PluginInstanceID, false, reportRoot)
+	qualifyGeneratedAuthorBrowser(t, ctx, integration, svc, meta, draft.WorkspaceID, env.Snapshot().PluginInstanceID, false, reportRoot)
 	productOwner, _ := plugincreation.OwnerFromSession(meta)
 	draft, err = store.Get(ctx, productOwner, draft.ID)
 	if err != nil {
@@ -240,6 +240,49 @@ func TestPluginCreationRealModelBuildInstallAndDelete(t *testing.T) {
 		t.Fatalf("install outcome: %+v", operation)
 	}
 	report["installation"] = operation
+	// Continuing an installed draft must execute another model turn, build a new
+	// immutable artifact and offer an update against the same installed instance.
+	followup, err := svc.SendUserTurn(ctx, meta, ai.SendUserTurnRequest{StorageGeneration: svc.StorageGeneration(), ThreadID: response.ThreadID, ClientRequestID: "model-followup-edit", Input: ai.RunInput{Text: "Refine this existing timer: add a compact visible caption Focus session beneath the timer, refine spacing and typography, preserve the 25:00 timer and Start/Pause/Reset behavior, and update source version to 0.1.1. Use plugin_author_get_status, read the existing source, make the change, and plugin_author_build until the real tests pass and a new artifact is returned. Preserve plugin identity and icon. Do not install, grant permissions, start a preview server or delegate."}, Options: ai.RunOptions{NoUserInteraction: true, MaxOutputTokens: 8000, ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, ToolAllowlist: []string{"skill_use", "file_read", "file_read_many", "list_files", "find", "file_write", "file_apply_patch", "terminal_exec", "terminal_read", "plugin_author_get_status", "plugin_author_build", "plugin_author_capture"}}})
+	if err != nil {
+		t.Fatal("follow-up admission:", err)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal("follow-up timed out")
+		case <-ticker.C:
+		}
+		detail, err := svc.GetFlowerThreadDetail(ctx, meta, response.ThreadID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if detail.Current.TurnID.String() == followup.TurnID && detail.Current.Activity == flruntime.ThreadActivityIdle && detail.Current.LastOutcome != nil {
+			if *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted {
+				t.Fatalf("follow-up outcome: %s", *detail.Current.LastOutcome)
+			}
+			break
+		}
+	}
+	artifacts, err = integration.author.store.ListArtifacts(authorCtx, owner, draft.WorkspaceID)
+	if err != nil || len(artifacts) < 2 || artifacts[0].ID == artifact.ID {
+		t.Fatalf("follow-up artifact: %+v %v", artifacts, err)
+	}
+	updated := artifacts[0]
+	if err = env.Apply(authorCtx, updated.ID); err != nil {
+		t.Fatal(err)
+	}
+	qualifyGeneratedAuthorBrowser(t, ctx, integration, svc, meta, draft.WorkspaceID, env.Snapshot().PluginInstanceID, false, reportRoot)
+	draft, err = store.Get(ctx, productOwner, draft.ID)
+	if err != nil || draft.InstallArtifactID != updated.ID {
+		t.Fatalf("updated installation receipt: %+v %v", draft, err)
+	}
+	updatedOperation, err := integration.host.GetInspectedInstall(authorCtx, draft.InstallRequestID)
+	if err != nil || updatedOperation.MutationOutcome != mutation.OutcomeCommitted || updatedOperation.Execution.PluginInstanceID != operation.Execution.PluginInstanceID {
+		t.Fatalf("update identity: %+v %v", updatedOperation, err)
+	}
+	report["followup_artifact"] = updated
+	report["followup_update"] = updatedOperation
+	operation = updatedOperation
 	if err = integration.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +299,7 @@ func TestPluginCreationRealModelBuildInstallAndDelete(t *testing.T) {
 	if err != nil || recovered.Execution.ID != operation.Execution.ID {
 		t.Fatalf("restart recovery: %+v %v", recovered, err)
 	}
-	qualifyGeneratedAuthorBrowser(t, ctx, integration, meta, draft.WorkspaceID, operation.Execution.PluginInstanceID, true, reportRoot)
+	qualifyGeneratedAuthorBrowser(t, ctx, integration, svc, meta, draft.WorkspaceID, operation.Execution.PluginInstanceID, true, reportRoot)
 	report["browser_verified"] = true
 	draft, err = store.Get(ctx, productOwner, draft.ID)
 	if err != nil {

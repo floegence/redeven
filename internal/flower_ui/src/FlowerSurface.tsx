@@ -1997,7 +1997,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const canonical = selectedQueuedTurns().map(turn => ({ requestKey: trimString(turn.request_key) || trimString(turn.queue_id), canonical: turn }));
     const confirmed = new Set(canonical.map(row => row.requestKey));
     return [...canonical, ...visibleTransportOutbox().filter(entry => !confirmed.has(entry.requestId)
-      && (entry.presentation !== 'composer' || entry.delivery === 'failed' || entry.delivery === 'unknown' || entry.terminalError))
+      && (entry.presentation !== 'composer' || Boolean(entry.operation)))
       .map(entry => ({ requestKey: entry.requestId, transport: entry }))];
   });
   const selectedComposerPendingSend = createMemo(() => visibleTransportOutbox().find(entry =>
@@ -5618,7 +5618,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           }
         }
         if (!unknown && entry.presentation !== 'composer' && entry.draftReferences?.some(reference => reference.kind === 'thread')) outboxDraftRestorers.get(entry.requestId)?.();
-        setTransportOutbox(outbox => outbox.put({ ...retained, delivery: unknown ? 'unknown' : 'failed', deliveryError: getErrorMessage(error) }));
+        setTransportOutbox(outbox => outbox.put({ ...retained, delivery: unknown ? 'unknown' : 'failed', deliveryError: getErrorMessage(error),
+          deliveryErrorCode: error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined }));
         if (retained.parentThreadId) {
           if (activeSubagentID() === retained.threadId) void refreshActiveSubagentDetail();
         } else if (!isPendingDraftKey(retained.threadId)) void requestThreadDetail(retained.threadId, 'background_refresh', true).catch(() => undefined);
@@ -8280,7 +8281,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const retryOutboxEntry = (entry: TransportOutboxEntry) => {
     if (entry.terminalError || outboxResendInFlight.has(entry.requestId)) return;
-    setTransportOutbox(outbox => outbox.put({ ...entry, delivery: 'pending', deliveryError: undefined }));
+    setTransportOutbox(outbox => outbox.put({ ...entry, delivery: 'pending', deliveryError: undefined, deliveryErrorCode: undefined }));
     setOutboxRetryTick(tick => tick + 1);
   };
   const refreshOutboxEntry = (entry: TransportOutboxEntry) => {
@@ -8313,6 +8314,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show>
     </>;
   };
+  const outboxDeliveryDescription = (entry: TransportOutboxEntry) => entry.terminalError === 'attachments_unavailable_after_restart' ? copy().chat.attachmentRecoveryDescription
+    : entry.terminalError === 'storage_restored' ? copy().chat.restoredInputDescription
+    : entry.terminalError === 'preparation_unavailable_after_restart' ? copy().chat.sendPreparationRecoveryDescription
+    : entry.delivery === 'unknown' ? copy().chat.sendUnknownDescription
+    : entry.deliveryErrorCode === 'PLUGIN_WORKSPACE_UNAVAILABLE' ? copy().chat.pluginWorkspaceUnavailable
+    : entry.deliveryError;
   const canonicalReferencePreviewAvailable = () => Boolean(props.adapter.openCanonicalReference || props.adapter.resolveCanonicalReference);
   const openQueuedPathPreview = async (
     target: Readonly<{ kind: 'file' | 'directory'; label: string; path: string }>,
@@ -8446,6 +8453,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <div class="flower-queued-turn-content">
                 <span class="flower-queued-turn-label" title={label()}>{label()}</span>
                 <Show when={transport()}><span class="flower-queued-turn-compact-meta" role="status">{status()}</span></Show>
+                <Show when={failed() && transport()?.deliveryError}><span class="flower-send-error-detail">{outboxDeliveryDescription(transport()!)}</span></Show>
                 {queuedContentPreviews(turn, transport)}
               </div>
               <div class="flower-queued-turn-actions">
@@ -9991,7 +9999,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const composerChatDraftText = createMemo(() => trimString(currentComposerSessionDraft().chatDraft));
   const composerChatDraftHasRawText = createMemo(() => currentComposerSessionDraft().chatDraft.length > 0);
-  createEffect(() => props.embeddedConversation?.onDraftChange?.(reactiveDraftSnapshotFor(currentComposerSessionKey())));
+  createEffect(() => {
+    const snapshot = reactiveDraftSnapshotFor(currentComposerSessionKey());
+    const notify = props.embeddedConversation?.onDraftChange;
+    untrack(() => notify?.(snapshot));
+  });
   createEffect(() => props.embeddedConversation?.onDraftPresence?.(composerChatDraftHasRawText() || composerHasAttachments() || composerHasExplicitReferences()));
   const composerSlashCommand = createMemo(() => {
     if (goalCommand()) return { kind: 'intent' as const, command: '/goal' as const, operation: 'set' as const, text: goalCommand()!.text };
@@ -12767,6 +12779,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   </span>}</Show>
                 </div>
               </Show>
+              <Show when={pendingDelivery() && (pendingDelivery()!.delivery === 'failed' || pendingDelivery()!.delivery === 'unknown' || pendingDelivery()!.terminalError) ? pendingDelivery() : undefined}>{pending =>
+                <div class="flower-send-recovery" data-flower-transport-outbox-id={pending().requestId}
+                  data-flower-transport-delivery={pending().delivery} aria-description={outboxDeliveryDescription(pending())}>
+                  <Show when={outboxDeliveryDescription(pending())}>{description => <span class="flower-send-error-detail">{description()}</span>}</Show>
+                  <div class="flower-send-recovery-actions">{outboxRecoveryActions(pending)}</div>
+                </div>
+              }</Show>
             </div>
           </Show>
         </div>

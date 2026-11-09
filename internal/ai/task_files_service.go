@@ -150,7 +150,7 @@ func (s *Service) GetTaskFiles(ctx context.Context, meta *session.Meta, threadID
 		return out, err
 	}
 	if settings != nil {
-		cwd, e := threadWorkingDir(settings)
+		cwd, e := s.executionWorkingDir(ctx, meta, settings)
 		if e == nil {
 			if realCwd, e := filepath.EvalSymlinks(cwd); e == nil {
 				out.StateInWorkspace = taskPathWithin(stateReal, realCwd)

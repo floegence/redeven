@@ -414,7 +414,7 @@ func (s *Service) modelContextSnapshotForAdmission(ctx context.Context, meta *se
 	if err != nil {
 		return nil, err
 	}
-	workingDir, err := threadWorkingDir(settings)
+	workingDir, err := s.executionWorkingDir(ctx, meta, settings)
 	if err != nil {
 		return nil, err
 	}

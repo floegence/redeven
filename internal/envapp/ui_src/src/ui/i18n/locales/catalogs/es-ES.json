@@ -5912,6 +5912,7 @@
       "runErrorContextCompactionLimit": "La conversación sigue superando el límite de contexto del modelo después de la compresión. Acorte la entrada o elija un modelo con más contexto y vuelva a intentarlo.",
       "preparingSend": "Preparando mensaje",
       "sendFailed": "Error al enviar",
+      "pluginWorkspaceUnavailable": "La carpeta de código del complemento no está disponible. Tu mensaje no se ha enviado. Restaura el espacio de trabajo e inténtalo de nuevo.",
       "sendUnknown": "Confirmación necesaria",
       "sendUnknownDescription": "Se desconoce el resultado del envío. Los mensajes posteriores están en pausa. Reintenta la misma solicitud o actualiza la conversación.",
       "retrySend": "Reintentar envío",

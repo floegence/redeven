@@ -467,6 +467,9 @@ it('releases ordinary loading on a receipt without current and retries unchanged
   await waitFor(() => s.launch.mock.calls.length === 1);
   s.requests[0].reject(flowerTurnAdmissionError('rejected', new Error('Rejected')));
   await waitFor(() => s.rows()[0]?.dataset.flowerTransportDelivery === 'failed');
+  expect(s.runtime.querySelector('.flower-queued-turn-dock')).toBeNull();
+  expect(s.runtime.querySelectorAll('[data-flower-pending-message]')).toHaveLength(1);
+  expect(s.rows()[0].textContent).toContain('Rejected');
   expect(s.editor().value).toBe('');
   (s.rows()[0].querySelector('[aria-label="Retry send"]') as HTMLButtonElement).click();
   await waitFor(() => s.launch.mock.calls.length === 2);
@@ -475,6 +478,33 @@ it('releases ordinary loading on a receipt without current and retries unchanged
   await waitFor(() => s.editor().value === '');
   expect(s.runtime.querySelector('[data-flower-primary-action="send"]')?.getAttribute('aria-busy')).not.toBe('true');
   expect(s.rows()).toHaveLength(0);
+});
+
+it('explains an unavailable plugin workspace inline and retains the same retry identity', async () => {
+  const s = await setup({ idle: true });
+  s.type('Improve this plugin'); s.submit();
+  await waitFor(() => s.launch.mock.calls.length === 1);
+  s.requests[0].reject(flowerTurnAdmissionError('rejected', Object.assign(new Error('internal directory detail'), { code: 'PLUGIN_WORKSPACE_UNAVAILABLE' })));
+  await waitFor(() => s.rows()[0]?.dataset.flowerTransportDelivery === 'failed');
+  expect(s.rows()).toHaveLength(1);
+  expect(s.rows()[0].textContent).toContain('Your message was not submitted');
+  expect(s.rows()[0].textContent).not.toContain('internal directory detail');
+  const retry = s.rows()[0].querySelector<HTMLButtonElement>('[aria-label="Retry send"]')!;
+  expect(getComputedStyle(retry.parentElement!).opacity).toBe('1');
+  for (const width of [1280, 390]) {
+    await page.viewport(width, 900);
+    for (const dark of [false, true]) {
+      document.documentElement.classList.toggle('dark', dark);
+      const recovery = s.rows()[0];
+      expect(recovery.scrollWidth).toBeLessThanOrEqual(recovery.clientWidth + 1);
+      if (import.meta.env.VITE_PLUGIN_RECOVERY_SCREENSHOTS === '1') await page.screenshot({ path: `__screenshots__/plugin-send-recovery-${width}-${dark ? 'dark' : 'light'}.png` });
+    }
+  }
+  document.documentElement.classList.remove('dark');
+  retry.click();
+  await waitFor(() => s.launch.mock.calls.length === 2);
+  expect(s.launch.mock.calls[1][0].client_request_id).toBe(s.launch.mock.calls[0][0].client_request_id);
+  s.receipt(1);
 });
 
 it('assigns edited rejected input a fresh identity and retains edited references after confirmation', async () => {

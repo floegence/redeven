@@ -1638,13 +1638,29 @@ func flowerParentEventReadErrorCode(leafID string, err error) string {
 	return ""
 }
 
+// All user-turn entrypoints expose the same stable recovery contract.
+func writeAIUserTurnError(w http.ResponseWriter, err error) {
+	response := apiResp{OK: false, Error: err.Error()}
+	switch {
+	case errors.Is(err, ai.ErrPluginWorkspaceUnavailable):
+		response.Error = ai.ErrPluginWorkspaceUnavailable.Error()
+		response.ErrorCode = "PLUGIN_WORKSPACE_UNAVAILABLE"
+	case errors.Is(err, ai.ErrFlowerStorageRestored):
+		response.ErrorCode = "AI_STORAGE_RESTORED"
+	case errors.Is(err, ai.ErrLongTextAttachmentRequired):
+		response.ErrorCode = ai.LongTextAttachmentRequiredErrorCode
+	}
+	writeJSON(w, aiThreadActionHTTPStatus(err), response)
+}
+
 func aiThreadActionHTTPStatus(err error) int {
 	switch {
 	case err == nil:
 		return http.StatusOK
 	case errors.Is(err, sql.ErrNoRows):
 		return http.StatusNotFound
-	case errors.Is(err, flruntime.ErrRequestConflict),
+	case errors.Is(err, ai.ErrPluginWorkspaceUnavailable),
+		errors.Is(err, flruntime.ErrRequestConflict),
 		errors.Is(err, tessiven.ErrFlowerThreadBusy),
 		errors.Is(err, tessiven.ErrFlowerThreadInactive),
 		errors.Is(err, flruntime.ErrThreadBusy),
@@ -5324,16 +5340,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		body.StagingCapability = stagingCapability
 		resp, err := aiSvc.SendUserTurn(r.Context(), meta, body)
-		if errors.Is(err, ai.ErrFlowerStorageRestored) {
-			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: err.Error(), ErrorCode: "AI_STORAGE_RESTORED"})
-			return
-		}
 		if err != nil {
-			errorCode := ""
-			if errors.Is(err, ai.ErrLongTextAttachmentRequired) {
-				errorCode = ai.LongTextAttachmentRequiredErrorCode
-			}
-			writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode})
+			writeAIUserTurnError(w, err)
 			return
 		}
 		g.appendAudit(meta, "ai_thread_turn", "accepted", map[string]any{
@@ -5961,16 +5969,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			body.StagingCapability = stagingCapability
 			resp, err := aiSvc.SendUserTurn(r.Context(), meta, body)
-			if errors.Is(err, ai.ErrFlowerStorageRestored) {
-				writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: err.Error(), ErrorCode: "AI_STORAGE_RESTORED"})
-				return
-			}
 			if err != nil {
-				errorCode := ""
-				if errors.Is(err, ai.ErrLongTextAttachmentRequired) {
-					errorCode = ai.LongTextAttachmentRequiredErrorCode
-				}
-				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode})
+				writeAIUserTurnError(w, err)
 				return
 			}
 			g.appendAudit(meta, "ai_thread_turn", "accepted", map[string]any{

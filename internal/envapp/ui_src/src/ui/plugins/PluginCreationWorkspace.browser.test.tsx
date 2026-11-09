@@ -366,6 +366,34 @@ it('does not report a newer edit as saved when an older transaction completes', 
   }
 });
 
+it('keeps an unchanged composer saved when notified again', async () => {
+  draft = { ...baseDraft, id: crypto.randomUUID() };
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const session = coordinator.open('stable-composer-revision');
+  session.mutate(value => ({ ...value, text: 'Retained draft' }));
+  const writes = vi.fn(async () => {});
+  pauseComposerSave = writes;
+  let embedded: FlowerEmbeddedConversation | undefined;
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <FloeConfigProvider><I18nProvider><PluginCreationWorkspace
+    draftCoordinator={coordinator} draftID={draft.id} visible canManage
+    onBack={vi.fn()} onSaved={vi.fn()} onInstalled={vi.fn()}
+    renderFlower={options => { embedded = options.embeddedConversation; return <div>Conversation fixture</div>; }}
+  /></I18nProvider></FloeConfigProvider>, host);
+  try {
+    await expect.poll(() => embedded).toBeDefined();
+    embedded!.onDraftChange?.(session.snapshot());
+    await expect.poll(() => host.querySelector('.plugin-creation-save-state')?.textContent).toBe('Saved');
+    const count = writes.mock.calls.length;
+    embedded!.onDraftChange?.(session.snapshot());
+    expect(host.querySelector('.plugin-creation-save-state')?.textContent).toBe('Saved');
+    await new Promise(resolve => setTimeout(resolve, 350));
+    expect(writes.mock.calls.length).toBe(count);
+  } finally {
+    dispose?.(); dispose = undefined; coordinator.dispose(); await removePluginComposer(draft.id);
+  }
+});
+
 it('blocks a document reload until the latest composer transaction completes', async () => {
   draft = { ...baseDraft, id: crypto.randomUUID() };
   const coordinator = createFlowerComposerDraftCoordinator();

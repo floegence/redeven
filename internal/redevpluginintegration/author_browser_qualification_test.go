@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/pluginorigin"
 	"github.com/floegence/redeven/internal/session"
@@ -20,7 +21,7 @@ import (
 
 // Only the loopback authenticated carrier is a fixture. The author/formal Host,
 // product surface components, released SDK and generated application are real.
-func qualifyGeneratedAuthorBrowser(t *testing.T, ctx context.Context, integration *Integration, meta *session.Meta, workspace, instance string, formal bool, reports string) {
+func qualifyGeneratedAuthorBrowser(t *testing.T, ctx context.Context, integration *Integration, svc *ai.Service, meta *session.Meta, workspace, instance string, formal bool, reports string) {
 	t.Helper()
 	repo, err := filepath.Abs("../..")
 	if err != nil {
@@ -107,9 +108,14 @@ func qualifyGeneratedAuthorBrowser(t *testing.T, ctx context.Context, integratio
 			authorJSON(w, current, failure)
 			return
 		}
+		if r.URL.Path == "/_redeven_proxy/api/plugin-creation/drafts/"+draft.ID+"/resume" && r.Method == http.MethodPost {
+			current, failure := svc.ResumePluginDraft(r.Context(), meta, draft.ID)
+			authorJSON(w, current, failure)
+			return
+		}
 		if r.URL.Path == "/qualification.json" {
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"draftID": draft.ID, "workspaceID": workspace, "formal": formal, "target": target})
+			_ = json.NewEncoder(w).Encode(map[string]any{"draftID": draft.ID, "workspaceID": workspace, "formal": formal, "update": draft.InstalledPluginID != "", "target": target})
 			return
 		}
 		if r.URL.Path == "/" {
@@ -124,6 +130,9 @@ func qualifyGeneratedAuthorBrowser(t *testing.T, ctx context.Context, integratio
 	}
 	parent = u.Scheme + "://" + u.Host
 	name := "preview-browser.json"
+	if !formal && draft.InstalledPluginID != "" {
+		name = "update-browser.json"
+	}
 	if formal {
 		name = "installed-browser.json"
 	}

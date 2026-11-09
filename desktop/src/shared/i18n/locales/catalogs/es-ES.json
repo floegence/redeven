@@ -911,6 +911,7 @@
       "runErrorContextFixedOverhead": "Las instrucciones del sistema y las definiciones de herramientas superan el contexto disponible del modelo. Amplíe la ventana de contexto del servidor o elija un modelo con más contexto y vuelva a intentarlo. Comprimir el historial del chat no resuelve este problema.",
       "runErrorContextCompactionLimit": "La conversación sigue superando el límite de contexto del modelo después de la compresión. Acorte la entrada o elija un modelo con más contexto y vuelva a intentarlo.",
       "preparingSend": "Preparando mensaje",
+      "pluginWorkspaceUnavailable": "La carpeta de código del complemento no está disponible. Tu mensaje no se ha enviado. Restaura el espacio de trabajo e inténtalo de nuevo.",
       "sendFailed": "Error al enviar",
       "sendPreparationRecoveryDescription": "Este mensaje no se envió antes del reinicio. Restáuralo en el campo de entrada y envíalo de nuevo.",
       "sendUnknown": "Confirmación necesaria",

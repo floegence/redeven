@@ -5912,6 +5912,7 @@
       "runErrorContextCompactionLimit": "圧縮後も会話がモデルのコンテキスト上限を超えています。入力を短くするか、より大きなコンテキストを持つモデルを選んで再試行してください。",
       "preparingSend": "メッセージを準備中",
       "sendFailed": "送信に失敗",
+      "pluginWorkspaceUnavailable": "プラグインのソースフォルダーを利用できません。メッセージは送信されていません。ワークスペースを復元してから再試行してください。",
       "sendUnknown": "確認が必要",
       "sendUnknownDescription": "送信結果が不明なため、後続のメッセージは一時停止しています。同じリクエストを再試行するか、会話を更新してください。",
       "retrySend": "送信を再試行",

@@ -19,6 +19,127 @@ import (
 
 type pluginScopeBackend struct{ root string }
 
+func TestPluginConversationContinuesAfterSourceRelocation(t *testing.T) {
+	server := newRealtimeTestServer(t, 10*time.Millisecond)
+	state := t.TempDir()
+	svc := openRealtimeTestService(t, state, server.URL)
+	t.Cleanup(func() { _ = svc.Close() })
+	meta := testSendTurnMeta()
+	store, err := plugincreation.Open(filepath.Join(t.TempDir(), "drafts.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	product := plugincreation.New(store)
+	product.SetBackend(pluginScopeBackend{root})
+	svc.pluginCreation = product
+	draft, err := product.Create(t.Context(), meta, "relocated-project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := product.SourceScope(t.Context(), meta, draft.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, _ := plugincreation.OwnerFromSession(meta)
+	req := CreateThreadRequest{ClientRequestID: "relocated-launch", WorkingDir: source.Directory, managedSource: &source, pluginDraftID: draft.ID}
+	raw, _ := json.Marshal(req)
+	if _, err := store.FreezeLaunch(t.Context(), owner, draft.ID, req.ClientRequestID, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	thread, err := svc.CreateThreadWithOptions(t.Context(), meta, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := filepath.Join(t.TempDir(), "moved")
+	if err := os.Rename(root, next); err != nil {
+		t.Fatal(err)
+	}
+	next, err = filepath.EvalSymlinks(next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	product.SetBackend(pluginScopeBackend{next})
+	current, err := product.SourceScope(t.Context(), meta, draft.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	send := SendUserTurnRequest{ClientRequestID: "continued-after-relocation", ThreadID: thread.ThreadID, Input: RunInput{Text: "continue"}, Options: RunOptions{PermissionType: "full_access"}}
+	snapshot, err := svc.modelContextSnapshotForAdmission(t.Context(), meta, send)
+	if err != nil {
+		t.Fatalf("relocated model context: %v", err)
+	}
+	if text := modelContextSnapshotText(snapshot); !strings.Contains(text, current.Directory) || strings.Contains(text, source.Directory) {
+		t.Fatalf("context retained obsolete directory: %s", text)
+	}
+	effect, err := svc.prepareThreadEffect(meta, send.ClientRequestID, RunStartRequest{ThreadID: thread.ThreadID, Input: send.Input, Options: send.Options})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effect.builder.workingDir != current.Directory {
+		t.Fatalf("execution cwd=%q", effect.builder.workingDir)
+	}
+	// An unavailable source never consumes the request identity.
+	parked := current.Directory + ".unavailable"
+	if err := os.Rename(current.Directory, parked); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SendUserTurn(t.Context(), meta, send); !errors.Is(err, ErrPluginWorkspaceUnavailable) {
+		t.Fatalf("missing source admission: %v", err)
+	}
+	if err := os.Rename(parked, current.Directory); err != nil {
+		t.Fatal(err)
+	}
+	first, err := svc.SendUserTurn(t.Context(), meta, send)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := svc.SendUserTurn(t.Context(), meta, send)
+	if err != nil || first.TurnID == "" || first.TurnID != again.TurnID {
+		t.Fatalf("retry changed admitted turn: %+v %+v %v", first, again, err)
+	}
+	// Retry the same receipt and wait for actual provider execution, not only admission.
+	view, err := runTypedTurnForTest(t, t.Context(), svc, meta, send.ClientRequestID, RunStartRequest{ThreadID: thread.ThreadID, Input: send.Input, Options: send.Options})
+	if err != nil || view.LastOutcome == nil || *view.LastOutcome != flruntime.TurnOutcomeCompleted {
+		t.Fatalf("continued execution: %+v %v", view, err)
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	svc = openRealtimeTestService(t, state, server.URL)
+	svc.pluginCreation = product
+	send.ClientRequestID = "continued-after-restart"
+	view, err = runTypedTurnForTest(t, t.Context(), svc, meta, send.ClientRequestID, RunStartRequest{ThreadID: thread.ThreadID, Input: send.Input, Options: send.Options})
+	if err != nil || view.LastOutcome == nil || *view.LastOutcome != flruntime.TurnOutcomeCompleted {
+		t.Fatalf("restart execution: %+v %v", view, err)
+	}
+	// Frozen create evidence remains byte-identical when recovering missing product settings.
+	if err := svc.threadsDB.DeleteThreadProductData(t.Context(), meta.EndpointID, thread.ThreadID); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := svc.ResumePluginDraft(t.Context(), meta, draft.ID)
+	if err != nil || recovered.ThreadID != thread.ThreadID {
+		t.Fatalf("frozen create recovery: %+v %v", recovered, err)
+	}
+	retained, err := store.Get(t.Context(), owner, draft.ID)
+	if err != nil || retained.LaunchSnapshot != string(raw) {
+		t.Fatal("frozen create evidence changed", err)
+	}
+	settings, err := svc.threadsDB.GetThreadSettings(t.Context(), meta.EndpointID, thread.ThreadID)
+	if err != nil || settings.WorkingDir != current.Directory {
+		t.Fatalf("recovered settings: %+v %v", settings, err)
+	}
+	foreign := *meta
+	foreign.UserPublicID = "other-owner"
+	if _, err := svc.modelContextSnapshotForAdmission(t.Context(), &foreign, send); err == nil {
+		t.Fatal("foreign owner acquired managed source")
+	}
+}
+
 func (b pluginScopeBackend) CreateWorkspace(_ context.Context, _ *session.Meta, id string) (string, error) {
 	return id, os.MkdirAll(filepath.Join(b.root, id, "source"), 0700)
 }

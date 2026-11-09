@@ -3,7 +3,7 @@ type: Architecture Boundary
 title: ReDevPlugin host integration boundary
 tags: [architecture, dependencies, plugins, release]
 lifecycle: contract
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-08"
 ---
 # Summary
 
@@ -61,6 +61,13 @@ installation under a new request identity. Preview state and formal installation
 have separate stores and grants. Deleting author resources preserves installed
 plugins. Host-local source access is scoped to the authenticated draft and normal
 Flower effect approval; it does not authorize plugin execution.
+
+Managed conversation admission and execution resolve their working directory
+from the current owner-bound `SourceScope`, never a retained absolute path.
+Frozen create recovery uses that same source while preserving original request
+evidence and identity. Unavailable source fails before admission with
+`PLUGIN_WORKSPACE_UNAVAILABLE`; no obsolete directory fallback or grant widening
+is allowed. Preview success alone does not qualify continued authoring.
 
 Author-store locks belong to the owning Host process. The platform must
 open them atomically close-on-exec, so terminal and service descendants cannot

@@ -911,6 +911,7 @@
       "runErrorContextFixedOverhead": "As instruções do sistema e as definições das ferramentas excedem o contexto disponível do modelo. Aumente a janela de contexto do servidor ou escolha um modelo com mais contexto e tente novamente. Compactar o histórico da conversa não resolve esse problema.",
       "runErrorContextCompactionLimit": "A conversa ainda excede o limite de contexto do modelo após a compactação. Encurte a entrada ou escolha um modelo com mais contexto e tente novamente.",
       "preparingSend": "Preparando mensagem",
+      "pluginWorkspaceUnavailable": "A pasta de código do plugin está indisponível. Sua mensagem não foi enviada. Restaure o espaço de trabalho e tente novamente.",
       "sendFailed": "Falha no envio",
       "sendPreparationRecoveryDescription": "Esta mensagem não foi enviada antes da reinicialização. Restaure-a no campo de entrada e envie-a novamente.",
       "sendUnknown": "Confirmação necessária",

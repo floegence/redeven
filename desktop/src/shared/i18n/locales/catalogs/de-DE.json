@@ -911,6 +911,7 @@
       "runErrorContextFixedOverhead": "Systemanweisungen und Werkzeugdefinitionen überschreiten den verfügbaren Modellkontext. Vergrößern Sie das serverseitige Kontextfenster oder wählen Sie ein Modell mit größerem Kontext und versuchen Sie es erneut. Das Komprimieren des Chatverlaufs löst dieses Problem nicht.",
       "runErrorContextCompactionLimit": "Die Unterhaltung überschreitet auch nach der Komprimierung das Kontextlimit des Modells. Kürzen Sie die Eingabe oder wählen Sie ein Modell mit größerem Kontext und versuchen Sie es erneut.",
       "preparingSend": "Nachricht wird vorbereitet",
+      "pluginWorkspaceUnavailable": "Der Quellordner des Plugins ist nicht verfügbar. Deine Nachricht wurde nicht gesendet. Stelle den Arbeitsbereich wieder her und versuche es erneut.",
       "sendFailed": "Senden fehlgeschlagen",
       "sendPreparationRecoveryDescription": "Diese Nachricht wurde vor dem Neustart nicht gesendet. Stellen Sie sie im Eingabefeld wieder her und senden Sie sie erneut.",
       "sendUnknown": "Bestätigung erforderlich",

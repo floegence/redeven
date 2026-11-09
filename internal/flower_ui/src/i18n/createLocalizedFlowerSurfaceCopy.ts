@@ -446,6 +446,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       sendAcceptedSyncing: t(i18n, k('chat.sendAcceptedSyncing')),
       preparingSend: t(i18n, k('chat.preparingSend')),
       sendFailed: t(i18n, k('chat.sendFailed')),
+      pluginWorkspaceUnavailable: t(i18n, k('chat.pluginWorkspaceUnavailable')),
       sendUnknown: t(i18n, k('chat.sendUnknown')),
       sendUnknownDescription: t(i18n, k('chat.sendUnknownDescription')),
       retrySend: t(i18n, k('chat.retrySend')),

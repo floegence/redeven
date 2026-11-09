@@ -1522,7 +1522,9 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 		}
 		referenceAuthority = &resolved
 	}
-	workingDir, err := threadWorkingDir(settings)
+	pctx, cancel = context.WithTimeout(context.Background(), persistTO)
+	workingDir, err := s.executionWorkingDir(pctx, meta, settings)
+	cancel()
 	if err != nil {
 		return nil, err
 	}

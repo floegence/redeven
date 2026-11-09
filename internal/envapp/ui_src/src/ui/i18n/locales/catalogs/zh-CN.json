@@ -5912,6 +5912,7 @@
       "runErrorContextCompactionLimit": "压缩后，对话仍超出模型的上下文上限。请缩短输入内容，或选择上下文容量更大的模型后重试。",
       "preparingSend": "正在准备消息",
       "sendFailed": "发送失败",
+      "pluginWorkspaceUnavailable": "插件源码目录不可用，消息尚未提交。请恢复工作区后重试。",
       "sendUnknown": "等待确认",
       "sendUnknownDescription": "发送结果未知，后续消息已暂停。请重试同一请求或刷新会话。",
       "retrySend": "重试发送",

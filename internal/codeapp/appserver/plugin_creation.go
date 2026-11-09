@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/plugincreation"
 )
 
@@ -193,12 +192,8 @@ func (g *Server) handlePluginCreationAPI(w http.ResponseWriter, r *http.Request)
 					body.ThreadID = d.ThreadID
 				}
 				result, e := svc.SendUserTurn(ctx, meta, body)
-				if errors.Is(e, ai.ErrFlowerStorageRestored) {
-					writeJSON(w, 409, apiResp{OK: false, Error: e.Error(), ErrorCode: "AI_STORAGE_RESTORED"})
-					return true
-				}
 				if e != nil {
-					writeJSON(w, aiThreadActionHTTPStatus(e), apiResp{OK: false, Error: e.Error()})
+					writeAIUserTurnError(w, e)
 					return true
 				}
 				writeJSON(w, 202, apiResp{OK: true, Data: result})
