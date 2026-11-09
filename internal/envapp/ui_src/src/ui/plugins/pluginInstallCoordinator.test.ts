@@ -85,6 +85,29 @@ describe('durable inspected install recovery', () => {
     expect(h.coordinator.projections()[0]?.failure?.recovery).toBe('review_again');
     expect(h.refreshInventory).not.toHaveBeenCalled();
   });
+  it('retires a committed refresh warning after a later authoritative inventory without replay', async () => {
+    const receipt = operation(); receipt.execution.status = 'completed'; receipt.mutation_outcome = 'committed';
+    const h = harness(receipt); h.refreshInventory.mockRejectedValueOnce(new Error('offline'));
+    await h.coordinator.resume(); await Promise.resolve();
+    expect(h.coordinator.projections()[0]?.observation).toBe('refresh_failed');
+    h.coordinator.reconcileInventory();
+    await h.coordinator.resume();
+    expect(h.coordinator.projections()).toEqual([]);
+    expect(h.refreshInventory).toHaveBeenCalledOnce();
+    expect(h.lifecycle.getInspectedInstall).not.toHaveBeenCalled();
+    expect(h.completeApprovedInstall).not.toHaveBeenCalled();
+  });
+  it('never clears unknown or definitely failed operations merely because inventory succeeds', async () => {
+    vi.useFakeTimers();
+    const receipt = operation(); receipt.execution.status = 'orphaned'; receipt.mutation_outcome = 'unknown';
+    const h = harness(receipt); await h.coordinator.resume();
+    h.coordinator.reconcileInventory();
+    expect(h.coordinator.projections()[0]?.observation).toBe('reconnecting');
+    receipt.mutation_outcome = 'not_committed'; receipt.execution.status = 'failed';
+    await h.coordinator.retry('instance-1');
+    h.coordinator.reconcileInventory();
+    expect(h.coordinator.projections()[0]?.observation).toBe('failed');
+  });
   it('observes a new installation after the previous installation was forgotten', async () => {
     vi.useFakeTimers();
     const h = harness(); await h.coordinator.resume(); h.coordinator.forget('instance-1');

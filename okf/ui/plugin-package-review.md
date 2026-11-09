@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin package review, installation and saved-data recovery
 tags: [ui, plugins, review, lifecycle]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -28,6 +28,8 @@ One concise consent confirms the exact package. Installation enables the plugin 
 The Shell observes owner-scoped durable receipts and Execution progress. First installations can be recovered without an installed inventory row. Closing Plugin Center does not cancel admitted execution. Owner changes clear observers; reconnect restores receipts. Concurrent submits share one request, and lost replies query the same request ID.
 
 A committed receipt remains committed even if post-commit execution or inventory refresh fails. Refresh retries only reconciliation. Unknown outcomes neither replay nor erase data. Definite failure requires a new review. Retained data uses the dedicated released recovery APIs, never automatic deletion followed by install.
+
+Inventory refreshes share a queued read within the same turn and serialize later reads so post-mutation reconciliation cannot reuse a pre-mutation snapshot. Each result remains bound to the authenticated owner. A successful authoritative refresh retires committed-operation refresh warnings, including historical receipts whose installation is now absent; it never clears unknown effects or definite installation failures. Explicit refresh rereads installed state even if the market generation is unchanged. Completed installation stages retain their normal success presentation when a separate inventory read fails.
 
 Both update paths close affected slots, retire authority, preserve layout and reconcile inventory through the placement coordinator. Completion offers opening only when current inventory permits it.
 

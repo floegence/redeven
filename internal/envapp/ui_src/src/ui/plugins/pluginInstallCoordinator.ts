@@ -10,6 +10,7 @@ export type PluginInstallCoordinator = Readonly<{
   forget: (pluginInstanceID: string) => void;
   resume: () => Promise<void>;
   retry: (pluginInstanceID: string) => Promise<void>;
+  reconcileInventory: () => void;
   reset: () => void;
   dispose: () => void;
 }>;
@@ -115,6 +116,12 @@ export function createPluginInstallCoordinator(options: {
     if (current(id, attempt)) begin(receipt);
   };
   const forget = (id: string) => { const attempt = attempts.get(id); if (attempt) forgotten.set(id, attempt.requestID); attempt?.controller.abort(); attempts.delete(id); setProjections((items) => items.filter((item) => item.pluginInstanceID !== id)); };
+  // Only a fresh, owner-bound authoritative inventory may retire this warning.
+  // An absent item is also authoritative: historical receipts cannot resurrect it.
+  const reconcileInventory = () => {
+    if (disposed) return;
+    setProjections((items) => items.filter((item) => !(item.observation === 'refresh_failed' && item.receipt?.mutation_outcome === 'committed')));
+  };
   const reset = () => {
     scope.abort('Plugin owner changed');
     scope = new AbortController();
@@ -124,7 +131,7 @@ export function createPluginInstallCoordinator(options: {
     setProjections([]);
   };
   const dispose = () => { disposed = true; reset(); scope.abort('Plugin observer disposed'); };
-  return { projections, resume, retry, forget, reset, dispose };
+  return { projections, resume, retry, reconcileInventory, forget, reset, dispose };
 }
 
 function delay(ms: number, signal: AbortSignal): Promise<void> {

@@ -272,7 +272,7 @@ export function PluginInstallSteps(props: {
                 <AlertTriangle class="h-4 w-4 text-destructive" />
               </Show>
             )}><CheckCircle class="h-4 w-4 text-primary" /></Show>
-            <span class={cn('min-w-0 break-words', stage.status === 'pending' && 'text-muted-foreground', stage.status === 'running' && 'font-semibold text-foreground', stage.status === 'failed' && 'font-semibold text-destructive')}>
+            <span class={cn('min-w-0 break-words', stage.status === 'pending' && 'text-muted-foreground', stage.status === 'completed' && 'text-foreground', stage.status === 'running' && 'font-semibold text-foreground', stage.status === 'failed' && 'font-semibold text-destructive')}>
               {i18n.t(`uiCopy.plugin.installOperation.stage.${stage.stage}`)}
             </span>
             <Show when={stage.stage === 'download' && stage.status === 'running' && byteProgress()}>

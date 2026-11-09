@@ -109,6 +109,7 @@ import { classifyFilePreviewError, getFilePreviewErrorMeta } from './widgets/fil
 import type { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
+import { createPluginInventoryRefresh } from './plugins/pluginInventoryRefresh';
 import { startPluginAutomaticUpdates } from './plugins/pluginAutomaticUpdates';
 import { pluginInstalledSettingsResource } from './plugins/pluginSettingsTarget';
 import { PluginPanel } from './plugins/PluginPanel';
@@ -1639,18 +1640,24 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     && !pluginInventoryProjection()
     && pluginInventorySessionState.loading
   );
-  const refetchPluginInventory = async () => {
-    const owner = pluginInventorySource();
-    if (!owner) return undefined;
-    const state = await refetchPluginInventorySession();
-    return pluginInventorySource() === owner && !pluginInventoryError() && state?.owner === owner ? state.projection : undefined;
-  };
+  const refetchPluginInventory = createPluginInventoryRefresh({
+    owner: pluginInventorySource,
+    refresh: async () => {
+      const owner = pluginInventorySource();
+      // Solid's same-turn refetch suppression returns undefined, not the
+      // pending promise. The queue owns coalescing and freshness instead.
+      const state = await refetchPluginInventorySession(false);
+      const projection = pluginInventorySource() === owner && !pluginInventoryError() && state?.owner === owner ? state.projection : undefined;
+      if (projection) pluginInstallCoordinator?.reconcileInventory();
+      return projection;
+    },
+  });
   const refreshPluginSurfaceInventory = async (): Promise<boolean> => Boolean(await refetchPluginInventory());
-  const synchronizePluginInventoryForMarket = (result: PluginMarketCatalogResult): Promise<void> => {
+  const synchronizePluginInventoryForMarket = (result: PluginMarketCatalogResult, forceInventory = false): Promise<void> => {
     const requestedOwner = pluginInventorySource();
     const synchronize = async () => {
       if (!requestedOwner || pluginInventorySource() !== requestedOwner) return;
-      if (pluginMarketInventoryOwner === requestedOwner && result.generation <= pluginMarketInventoryGeneration) return;
+      if (!forceInventory && pluginMarketInventoryOwner === requestedOwner && result.generation <= pluginMarketInventoryGeneration) return;
       const projection = await refetchPluginInventory();
       if (projection && pluginInventorySource() === requestedOwner) {
         pluginMarketInventoryOwner = requestedOwner;
@@ -1687,7 +1694,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         await refetchPluginInventory();
         throw error;
       }
-      await synchronizePluginInventoryForMarket(result);
+      // An explicit refresh must reread installed state even when the market
+      // did not change; market generations do not version local installations.
+      await synchronizePluginInventoryForMarket(result, true);
     })();
     let tracked: Promise<void>;
     tracked = refresh.finally(() => {

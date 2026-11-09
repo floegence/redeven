@@ -7,7 +7,7 @@ vi.mock('./pages/HostApplicationsPresentation', () => ({ HostApplicationsPageSke
 import { For, Show, Suspense, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PluginPlatformRequestError, type PluginExecutionEventList, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
+import { PluginPlatformRequestError, type PluginExecutionEventList, type PluginInspectedInstallOperation, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
 import { EXAMPLE_PLUGIN_PACKAGE, exampleInspection } from './plugins/examplePluginPackage.test-fixture';
 import type { PluginInventoryProjection } from './plugins/pluginTypes';
 import { pluginInstalledSettingsResource } from './plugins/pluginSettingsTarget';
@@ -105,7 +105,7 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     ...exampleRecoveryIdentity(), plugin_instance_id: pluginInstanceID, status: 'ready',
   }));
   const execute = vi.fn(async (_command: any) => ({}));
-  const listInspectedInstalls = vi.fn(async () => []);
+  const listInspectedInstalls = vi.fn(async (): Promise<PluginInspectedInstallOperation[]> => []);
   const getInspectedInstall = vi.fn(async () => ({}));
   const listInstallExecutionEvents = vi.fn(async (): Promise<PluginExecutionEventList> => ({ execution_id: '', events: [], cursor: 0 }));
   const inspectExternalPackage = vi.fn(async (_request: any) => ({}));
@@ -2223,6 +2223,38 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('reconciles every restored committed install through the same authoritative refresh', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const projection = examplePluginProjection('enabled');
+    const receipts: PluginInspectedInstallOperation[] = Array.from({ length: 4 }, (_, index) => ({
+      request_id: `restored-${index}`, inspection_id: `inspection-${index}`,
+      package_sha256: `sha256:${'a'.repeat(64)}`, plugin_id: `plugin-${index}`, version: '1.0.0', mutation_outcome: 'committed',
+      execution: { execution_id: `execution-${index}`, plugin_instance_id: `instance-${index}`, kind: 'operation',
+        status: 'completed', cursor: 0, cancelable: false, created_at: '2026-11-09T00:00:00Z', updated_at: '2026-11-09T00:00:00Z' },
+    }));
+    projection.items = receipts.map((receipt) => ({ ...projection.items[0], inventoryKey: `instance:${receipt.execution.plugin_instance_id}`,
+      pluginID: receipt.plugin_id, pluginInstanceID: receipt.execution.plugin_instance_id }));
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(projection);
+    pluginLifecycleMocks.listInspectedInstalls.mockResolvedValue(receipts);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+      await flushAsync();
+      expect(pluginCenterViewState.lastProps.projection.items).toHaveLength(4);
+      expect(pluginCenterViewState.lastProps.installOperations).toEqual([]);
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+      expect(pluginLifecycleMocks.installExternalPackage).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  }, 10000);
+
   it('prefetches plugin inventory for the ready session and does not reload it across repeated Panel toggles', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -2513,6 +2545,36 @@ describe('EnvAppShell environment entry affordances', () => {
     } finally { dispose(); }
   }, 10000);
 
+  it('clears a committed refresh warning on manual refresh even when the market is unchanged', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const projection = examplePluginProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValueOnce(projection)
+      .mockRejectedValueOnce(new Error('temporary inventory failure')).mockResolvedValue(projection);
+    pluginLifecycleMocks.refreshMarketCatalog.mockResolvedValue({ generation: 13, changed: false, stale: false });
+    pluginLifecycleMocks.listInspectedInstalls.mockResolvedValue([{
+      request_id: 'committed-request', inspection_id: 'inspection', package_sha256: `sha256:${'a'.repeat(64)}`,
+      plugin_id: projection.items[0].pluginID, version: '1.0.0', mutation_outcome: 'committed',
+      execution: { execution_id: 'committed-execution', plugin_instance_id: projection.items[0].pluginInstanceID!, kind: 'operation',
+        status: 'completed', cursor: 0, cancelable: false, created_at: '2026-11-09T00:00:00Z', updated_at: '2026-11-09T00:00:00Z' },
+    }]);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => pluginCenterViewState.lastProps?.installOperations[0]?.observation === 'refresh_failed', 40);
+      expect(pluginCenterViewState.lastProps.installOperations).toHaveLength(1);
+      await pluginCenterViewState.lastProps.onRefresh();
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(3);
+      expect(pluginCenterViewState.lastProps.installOperations).toEqual([]);
+      expect(pluginCenterViewState.lastProps.projection).toBe(projection);
+      expect(pluginLifecycleMocks.installExternalPackage).not.toHaveBeenCalled();
+    } finally { dispose(); }
+  }, 10000);
+
   it('projects a newer market generation from the background stream without reopening Plugin Center', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -2548,7 +2610,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('coalesces a stream update and manual refresh for the same generation', async () => {
+  it('serializes stream updates and an explicit inventory refresh without suppressing either result', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadCachedMarketCatalog
@@ -2569,7 +2631,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await pluginCenterViewState.lastProps.onRefresh();
       await flushUntil(() => pluginLifecycleMocks.loadCachedMarketCatalog.mock.calls.length === 2, 40);
 
-      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(3);
     } finally {
       dispose();
     }

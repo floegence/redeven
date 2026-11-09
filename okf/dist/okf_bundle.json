@@ -24271,7 +24271,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-05",
+        "reviewed_at": "2026-11-09",
         "tags": [
           "lifecycle",
           "plugins",
@@ -24281,15 +24281,15 @@
         "title": "Plugin package review, installation and saved-data recovery",
         "type": "UI Contract"
       },
-      "body_length": 3211,
+      "body_length": 3829,
       "summary": "All plugin sources share released package inspection, exact review and durable installation. Market installs automatically inspect the selected repository/release/asset and expected package/security/contract hashes. Direct installation accepts HTTPS, GitHub repository or uploaded `.redevplugin` bytes.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Package review\n\nMulti-plugin repositories expose one selection step. No plugin signature, publisher trust badge, official-only wizard or separate client protocol exists.\n\nUpdates inspect the installed original source before presenting a candidate. Changing source requires explicit consent. Same-version changed contents and downgrades are blocked in update review. Changed revision/identity or expired inspection invalidates consent. Missing or changed security evidence requires explicit review; no market preview substitutes for current Host inspection.\n\nLead with verified localized identity and versions. Show access changes and saved-data conversion once; collapse technical declarations, limits, hashes and source facts. Worker/storage methods imply no broad host access.\n\nDialogs provide scrollable content, visible actions, keyboard focus, localization, touch targets and reduced motion. Progress retains identity. Cancellation fences late replies; source edits clear repository selection and market expectations.\n\nOne concise consent confirms the exact package. Installation enables the plugin without granting permissions. Both official and community packages direct later access decisions to installed details. Surface launch targets come only from Host `action_state` and per-Surface authority; missing permission leads to permission review, never a synthetic Enable/grant sequence.\n\n## Installation progress\n\nThe Shell observes owner-scoped durable receipts and Execution progress. First installations can be recovered without an installed inventory row. Closing Plugin Center does not cancel admitted execution. Owner changes clear observers; reconnect restores receipts. Concurrent submits share one request, and lost replies query the same request ID.\n\nA committed receipt remains committed even if post-commit execution or inventory refresh fails. Refresh retries only reconciliation. Unknown outcomes neither replay nor erase data. Definite failure requires a new review. Retained data uses the dedicated released recovery APIs, never automatic deletion followed by install.\n\nBoth update paths close affected slots, retire authority, preserve layout and reconcile inventory through the placement coordinator. Completion offers opening only when current inventory permits it.",
-          "char_count": 2296
+          "body": "## Package review\n\nMulti-plugin repositories expose one selection step. No plugin signature, publisher trust badge, official-only wizard or separate client protocol exists.\n\nUpdates inspect the installed original source before presenting a candidate. Changing source requires explicit consent. Same-version changed contents and downgrades are blocked in update review. Changed revision/identity or expired inspection invalidates consent. Missing or changed security evidence requires explicit review; no market preview substitutes for current Host inspection.\n\nLead with verified localized identity and versions. Show access changes and saved-data conversion once; collapse technical declarations, limits, hashes and source facts. Worker/storage methods imply no broad host access.\n\nDialogs provide scrollable content, visible actions, keyboard focus, localization, touch targets and reduced motion. Progress retains identity. Cancellation fences late replies; source edits clear repository selection and market expectations.\n\nOne concise consent confirms the exact package. Installation enables the plugin without granting permissions. Both official and community packages direct later access decisions to installed details. Surface launch targets come only from Host `action_state` and per-Surface authority; missing permission leads to permission review, never a synthetic Enable/grant sequence.\n\n## Installation progress\n\nThe Shell observes owner-scoped durable receipts and Execution progress. First installations can be recovered without an installed inventory row. Closing Plugin Center does not cancel admitted execution. Owner changes clear observers; reconnect restores receipts. Concurrent submits share one request, and lost replies query the same request ID.\n\nA committed receipt remains committed even if post-commit execution or inventory refresh fails. Refresh retries only reconciliation. Unknown outcomes neither replay nor erase data. Definite failure requires a new review. Retained data uses the dedicated released recovery APIs, never automatic deletion followed by install.\n\nInventory refreshes share a queued read within the same turn and serialize later reads so post-mutation reconciliation cannot reuse a pre-mutation snapshot. Each result remains bound to the authenticated owner. A successful authoritative refresh retires committed-operation refresh warnings, including historical receipts whose installation is now absent; it never clears unknown effects or definite installation failures. Explicit refresh rereads installed state even if the market generation is unchanged. Completed installation stages retain their normal success presentation when a separate inventory read fails.\n\nBoth update paths close affected slots, retire authority, preserve layout and reconcile inventory through the placement coordinator. Completion offers opening only when current inventory permits it.",
+          "char_count": 2914
         },
         {
           "id": "boundaries",
@@ -25137,5 +25137,5 @@
       ]
     }
   ],
-  "source_sha256": "714e7c3e8fa84abc5dcaa7ac8c0e56cc49967b2e3cae56d7ba862dfa6d94d2a2"
+  "source_sha256": "5e8c3d12d35a3564b372aab78b9beb4b28212d563ae161ecb1a253bf6a7de97b"
 }
