@@ -104,6 +104,12 @@ for (const file of ['internal/envapp/ui_src/src/ui/EnvAppThemePicker.tsx', 'desk
   assert.doesNotMatch(read(file), /TopBarIconButton|createFloatingPresence|DesktopAnchoredOverlaySurface|role="radio"/);
 }
 assert.doesNotMatch(shell, /<EnvAppThemePicker|<ThemeToggle/);
+const headerActions = shell.slice(shell.indexOf('const HeaderActions ='), shell.indexOf('const renderNotesOverlay ='));
+assert.ok(headerActions.includes('<DownloadTaskButton'));
+assert.doesNotMatch(headerActions, /openSettings|ActivityBarSettingsIcon|ThemePicker|ThemeToggle/);
+const activitySettings = shell.slice(shell.indexOf('const activityBottomItems ='), shell.indexOf('const environmentName ='));
+assert.match(activitySettings, /id: 'settings'/);
+assert.match(activitySettings, /onClick: \(\) => openSettings\(\)/);
 const welcome = read('desktop/src/welcome/DesktopSettingsDialog.tsx');
 assert.doesNotMatch(welcome, /props\.flowerLabel|settings.languageTitle|onBack=\{props.session.close/);
 assert.match(welcome, /header=\{/);

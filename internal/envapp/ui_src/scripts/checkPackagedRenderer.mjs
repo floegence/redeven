@@ -839,6 +839,20 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     const product = page.locator('#redeven-activity-flower-product');
     const surface = page.locator('#redeven-flower-surface');
     const composer = page.locator('.flower-composer textarea');
+    // IMPORTANT: Removing the redundant top-bar shortcut must keep the canonical
+    // Settings entry usable in the actual bundled shell, not only in fixtures.
+    for (const mode of ['Workbench', 'Activity']) {
+      await page.locator('[data-floe-shell-slot="top-bar"]:visible').getByRole('tab', { name: mode, exact: true }).click();
+      const topBar = page.getByRole('banner', { name: mode === 'Workbench' ? 'Display mode top bar' : 'Redeven environment toolbar', exact: true });
+      await topBar.waitFor({ state: 'visible' });
+      await topBar.getByRole('tab', { name: mode, exact: true, selected: true }).waitFor({ state: 'visible' });
+      assert.equal(await topBar.getByRole('button', { name: /^(Settings|Runtime Settings|Appearance|Theme)/i }).count(), 0);
+    }
+    await page.getByRole('button', { name: 'Runtime Settings', exact: true }).click();
+    const appearanceDialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+    await appearanceDialog.locator('[data-testid="settings-section-appearance"]').waitFor({ state: 'visible' });
+    await appearanceDialog.locator('.redeven-env-settings-dialog-close').click();
+    await appearanceDialog.waitFor({ state: 'hidden' });
     await page.getByRole('button', { name: 'Monitoring', exact: true }).click();
     await page.locator('.runtime-monitor-panel').waitFor({ state: 'visible' });
     const verifyCollapsedOutline = async () => {
@@ -1289,6 +1303,8 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
       single_collapsed_outline: true,
       frozen_page_context_verified: true,
       settings_panel_and_editor_retained: true,
+      header_settings_shortcut_absent: true,
+      activity_settings_entry_verified: true,
       tessiven_companion_hidden: true,
     };
   } finally {

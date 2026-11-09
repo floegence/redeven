@@ -5188,8 +5188,8 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
     </TopBarBrandButton>
   );
 
-  // IMPORTANT: Appearance has one Settings destination. Do not restore a
-  // separate top-bar theme picker or toggle; commands open that same category.
+  // IMPORTANT: Settings belongs to Activity navigation and mobile tools. Keep
+  // top bars free of settings/theme shortcuts; commands use the same category.
   const HeaderActions = () => (
     <div class="flex items-center gap-1">
       <Show when={!layout.isMobile()}>
@@ -5209,7 +5209,6 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         <NotesOverlayIcon class="w-4 h-4" />
       </TopBarIconButton>
       <DownloadTaskButton tooltip={topBarTooltip(i18n.t('shell.topbar.downloads'))} />
-      <TopBarIconButton label={i18n.t('settings.runtimeTitle')} tooltip={topBarTooltip(i18n.t('settings.runtimeTitle'))} onClick={() => openSettings()}><ActivityBarSettingsIcon class="h-4 w-4" /></TopBarIconButton>
     </div>
   );
 
