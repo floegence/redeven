@@ -265,6 +265,17 @@ try {
   await workspace.getByRole('button', { name: 'More actions', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Preview versions', exact: true }).click();
   await expect(page.getByRole('menuitem').filter({ hasText: '0.1.1' }).first()).toBeVisible();
+  await page.getByRole('menuitem').filter({ hasText: '0.1.0' }).first().click();
+  await frame.getByRole('button', { name: 'Start', exact: true }).waitFor();
+  await expect(frame.getByText('Focus session ready', { exact: true })).toHaveCount(0);
+  await page.reload();
+  await workspace.getByRole('tab', { name: 'Preview', exact: true }).click();
+  await frame.getByRole('button', { name: 'Start', exact: true }).waitFor();
+  await workspace.getByRole('button', { name: 'More actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Preview versions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Follow latest', exact: true }).click();
+  await frame.getByText('Focus session ready', { exact: true }).waitFor();
+  report.assertions.push('Real generated history restores earlier UI, retains its selection on reload and returns to the newest build');
   await page.keyboard.press('Escape');
   await expect(workspace).toHaveAttribute('data-project-id', report.draftID);
   await expect(workspace).toHaveAttribute('data-thread-id', report.threadID);
@@ -298,12 +309,13 @@ try {
   await expect(workspace.locator('[data-plugin-surface-host]')).toHaveAttribute('data-surface-instance-id', /.+/, { timeout: 30000 });
   await workspace.getByRole('button', { name: 'Open', exact: true }).click();
   report.assertions.push('A complete product process restart restores the durable draft, canonical thread, revision and installation');
-  await workspace.waitFor({ state: 'detached' });
-  const installedFrame = page.frameLocator('iframe').last();
+  await expect(workspace).toHaveAttribute('data-project-id', report.draftID);
+  const installedWindow = page.locator('[data-redeven-plugin-activity-window]').filter({ visible: true });
+  const installedFrame = installedWindow.frameLocator('iframe');
   await installedFrame.getByRole('button', { name: 'Begin focus', exact: true }).waitFor();
   await installedFrame.getByText('25:00', { exact: true }).waitFor();
   await installedFrame.getByText('Focus session ready', { exact: true }).waitFor();
-  report.installedOrigin = new URL(await page.locator('iframe').last().getAttribute('src')).origin;
+  report.installedOrigin = new URL(await installedWindow.locator('iframe').getAttribute('src')).origin;
   assert.notEqual(report.installedOrigin, report.previewOrigin);
   await page.screenshot({
     path: path.join(reportRoot, 'installed-application.png'),
@@ -345,28 +357,25 @@ try {
     'Product review installs the current preview, survives reload and opens the formal application',
   );
   await phase('Formal application verified after reload');
-  const restoredActivity = page.getByRole('tab', { name: 'Activity', exact: true });
-  if ((await restoredActivity.getAttribute('aria-selected')) !== 'true') await restoredActivity.click();
-  await page
-    .locator('nav[data-floe-shell-slot="activity-bar"]')
-    .getByRole('button', { name: 'Plugins', exact: true })
-    .click();
-  await page.locator('[data-plugin-center-market-action]').click();
-  await page.locator('[data-plugin-center-drafts]').click();
-  await page.locator('[data-plugin-draft-library] .divide-y > button').first().click();
+  await installedWindow.getByRole('button', { name: 'Close', exact: true }).click();
+  await installedWindow.waitFor({ state: 'detached' });
+  await workspace.getByRole('button', { name: 'Back to creation history', exact: true }).click();
+  await page.locator('[data-plugin-history-entry="' + report.draftID + '"]').click();
   await expect(workspace).toHaveAttribute('data-project-id', report.draftID);
   await expect(workspace).toHaveAttribute('data-thread-id', report.threadID);
   await workspace.getByRole('button', { name: 'More actions', exact: true }).click();
-  await page.getByText('Delete draft', { exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete draft', exact: true }).click();
+  await page.getByText('Delete project', { exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete project', exact: true }).click();
   await workspace.waitFor({ state: 'detached' });
+  await page.locator('[data-plugin-draft-library]').getByRole('button', { name: 'Back to Plugin Center', exact: true }).click();
   await page.getByRole('tab', { name: /^Installed/ }).click();
   const installedCard = page.locator('[data-plugin-directory-card]').filter({ hasText: 'Focus Timer' });
   await installedCard.getByRole('button', { name: 'Open', exact: true }).click();
-  await installedFrame.getByRole('button', { name: 'Begin focus', exact: true }).click();
-  await installedFrame.getByText('24:59', { exact: true }).waitFor({ timeout: 5000 });
-  await installedFrame.getByRole('button', { name: 'Pause', exact: true }).click();
-  await installedFrame.getByRole('button', { name: 'Reset', exact: true }).click();
+  const reopenedFrame = page.frameLocator('iframe').last();
+  await reopenedFrame.getByRole('button', { name: 'Begin focus', exact: true }).click();
+  await reopenedFrame.getByText('24:59', { exact: true }).waitFor({ timeout: 5000 });
+  await reopenedFrame.getByRole('button', { name: 'Pause', exact: true }).click();
+  await reopenedFrame.getByRole('button', { name: 'Reset', exact: true }).click();
   report.assertions.push('Deleting the dedicated draft preserves the installed application and its executable surface');
   await phase('Draft deletion preserves the formal application');
   assert.deepEqual(errors, []);
