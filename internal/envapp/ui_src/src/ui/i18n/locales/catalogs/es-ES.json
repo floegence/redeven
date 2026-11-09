@@ -8326,6 +8326,8 @@
     "openSystemSettings": "Abrir ajustes del sistema",
     "needsAttention": "Configuración pendiente",
     "controlMode": "Ratón y teclado",
+    "pictureSettings": "Ajustes de imagen de las aplicaciones",
+    "pictureOptional": "Opcional · automático por defecto",
     "permissionHelp": "¿No encuentras la app o los permisos no surten efecto?",
     "missingApplication": "Encontrar la app que necesita permiso",
     "addApplicationHint": "En este panel, pulsa + y añade «{app}». El botón selecciona la app exacta en Finder.",

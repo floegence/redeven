@@ -379,6 +379,8 @@ export const enUS = defineDictionary({
     "updateFailed": "Could not confirm the update. Refresh to check.",
     "useMode": "How to use",
     "enableConnect": "Enable and connect",
+    "pictureSettings": "Application picture settings",
+    "pictureOptional": "Optional · automatic by default",
     "permissionHelp": "Cannot find the app or permissions are not taking effect?",
     "missingApplication": "Find the permission app",
     "addApplicationHint": "In this permission pane, click + and add \"{app}\". The button below selects the exact app in Finder.",

@@ -68,6 +68,11 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
   const [desktopStatus, setDesktopStatus] = createSignal<RemoteDesktopStatus>();
   const desktopState = () => desktopStatus() ? hostAccessState(desktopStatus()!.access_state, desktopStatus()!.capabilities.screen) : undefined;
   const [desktopError, setDesktopError] = createSignal(false);
+  const applicationTuningReady = () => applicationResource.ready() && accessState() === 'enabled' && Boolean(catalog()?.availability.ready);
+  const desktopSettingsReady = () => applicationResource.ready() && !desktopError() && desktopState() === 'enabled' && Boolean(desktopStatus()?.capabilities.screen);
+  const [pictureExpanded, setPictureExpanded] = createSignal(false);
+  const [pictureVisited, setPictureVisited] = createSignal(false);
+  createEffect(() => { if (!presented() || !applicationTuningReady()) setPictureExpanded(false); });
   const [desktopBusy, setDesktopBusy] = createSignal(false);
   const [desktopRequest, setDesktopRequest] = createSignal(0);
   const [setupManaging, setSetupManaging] = createSignal(false);
@@ -860,24 +865,35 @@ export function EnvHostApplicationsPage(props: { registerPageContext?: FlowerPag
     </Show>
     <Show when={props.settingsOnly}>
       <div class="host-access-settings">
-        <ApplicationPictureSettings allowed={canLaunch()} macOS={isMac()} />
-        <DesktopAuthorizationSettings status={desktopStatus() ?? undefined} allowed={canLaunch() && !desktopBusy() && !desktopRefreshing()} refresh={refreshDesktop} />
         <Show when={displayError()}><p role="alert" class="host-app-error">{displayError()}</p></Show>
-        <Show when={nativeLaunch()}><p class="host-access-local-note">{i18n.t('hostAccess.nativeReady')}</p></Show>
+        <p class="host-access-settings-intro">{i18n.t(nativeLaunch() ? 'hostAccess.nativeReady' : 'hostAccess.independent')}</p>
         <SettingsList class="host-access-feature-group">
         <HostAccessFeatureSettings feature="applications" state={accessState()} error={displayError()} ready={Boolean(catalog()?.availability.ready)} allowed={canLaunch()} busy={accessBusy()} onChange={changeAccess} onReconfigure={() => {
           if (accessState() === 'paused' && catalog()?.availability.ready) void changeAccess('enabled').catch(() => {});
           else beginSetup();
-        }} />
+        }}>
+          <details class="host-access-picture" hidden={!applicationTuningReady()} open={pictureExpanded()} onToggle={event => {
+            const expanded = event.currentTarget.open && presented() && applicationTuningReady();
+            setPictureExpanded(expanded);
+            if (expanded) setPictureVisited(true);
+          }}>
+            <summary><span>{i18n.t('hostAccess.pictureSettings')}</span><span class="host-access-picture-hint">{i18n.t('hostAccess.pictureOptional')}</span></summary>
+            {/* Retain unsaved choices after collapse, pause or lost permissions;
+                only the current visible stage can open portals or submit changes. */}
+            <Show when={pictureVisited()}><ApplicationPictureSettings active={pictureExpanded() && applicationTuningReady()} allowed={canLaunch()} macOS={isMac()} /></Show>
+          </details>
+        </HostAccessFeatureSettings>
         <Show when={desktopStatus() && !desktopError()} fallback={<div class="host-access-notice"><p>{i18n.t(desktopError() ? 'remoteDesktop.statusFailed' : 'remoteDesktop.checking')}</p><Button variant="outline" disabled={desktopRefreshing()} onClick={() => void refreshDesktop()}>{i18n.t('remoteDesktop.refresh')}</Button></div>}>
           <HostAccessFeatureSettings feature="desktop" state={desktopState()!} error={displayError()} ready={Boolean(desktopStatus()?.capabilities.screen)} allowed={canLaunch()} busy={desktopBusy() || desktopRefreshing()} onChange={changeDesktopAccess} onReconfigure={() => {
             if (!canLaunch()) return;
             if (desktopState() === 'paused' && desktopStatus()?.capabilities.screen) void changeDesktopAccess('enabled').catch(() => {});
             else {  setDesktopRequest(value => value + 1); }
-          }} />
+          }}>
+            <Show when={desktopSettingsReady()}><DesktopAuthorizationSettings status={desktopStatus() ?? undefined} allowed={canLaunch() && !desktopBusy() && !desktopRefreshing()} refresh={refreshDesktop} /></Show>
+          </HostAccessFeatureSettings>
         </Show>
         </SettingsList>
-        <Show when={isMac()}><HostAccessSystemPermissions onRecovery={action => void requestPermission(action)} permissionAppName={catalog()?.availability.permission_app_name} screen={Boolean(catalog()?.availability.permissions?.screen_recording)} input={Boolean(catalog()?.availability.permissions?.accessibility)} allowed={canLaunch()} busy={permissionBusy()} onPermission={(permission, manage) => void requestPermission(permission, manage)} /></Show>
+        <Show when={isMac() && (applicationTuningReady() || desktopSettingsReady())}><HostAccessSystemPermissions onRecovery={action => void requestPermission(action)} permissionAppName={catalog()?.availability.permission_app_name} screen={Boolean(catalog()?.availability.permissions?.screen_recording)} input={Boolean(catalog()?.availability.permissions?.accessibility)} allowed={canLaunch()} busy={permissionBusy()} onPermission={(permission, manage) => void requestPermission(permission, manage)} /></Show>
       </div>
     </Show>
     <Dialog open={(!props.settingsOnly || presented()) && setupDialog()} onOpenChange={value=>{setSetupDialog(value);if(!value){for(const pending of pendingApplications.values())closePending(pending);pendingApplications.clear();setSelectedApplication(null);}}} class="host-apps-dialog" contentClass="host-apps-dialog-content" closeLabel={i18n.t('common.actions.close')} title={<Show when={selectedApplication()} keyed fallback={i18n.t(isMac()?'hostAccess.applications':setup()?.installed ? 'hostApplications.update.title' : 'hostApplications.prepare.title')}>{app => <span class="host-apps-dialog-identity"><ApplicationIcon app={app} /><span>{app.name}</span></span>}</Show>}>

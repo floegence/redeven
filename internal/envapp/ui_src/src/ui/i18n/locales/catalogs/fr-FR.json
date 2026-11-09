@@ -8326,6 +8326,8 @@
     "openSystemSettings": "Ouvrir les réglages système",
     "needsAttention": "Configuration à terminer",
     "controlMode": "Souris et clavier",
+    "pictureSettings": "Réglages d’image des applications",
+    "pictureOptional": "Facultatif · automatique par défaut",
     "permissionHelp": "Application introuvable ou autorisations sans effet ?",
     "missingApplication": "Trouver l’application à autoriser",
     "addApplicationHint": "Dans ce panneau, cliquez sur + et ajoutez « {app} ». Le bouton ci-dessous sélectionne l’application exacte dans le Finder.",

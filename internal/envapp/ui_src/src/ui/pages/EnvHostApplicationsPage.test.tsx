@@ -80,7 +80,7 @@ describe('goal-based host access',()=>{
   state.catalog.mockResolvedValue(mac(true,true,'enabled'));
   access.desktop.mockResolvedValue({access_state:'paused',capabilities:{backend:'macos',screen:true,input:true,state:'ready'}});
   dispose=render(()=><ApplicationsWithSettings/>,host);await settle();
-  textButton('Access settings').click();await settle();
+  button('Access settings').click();await settle();
   const dialog=document.querySelector('[role=dialog]')!;
   expect(dialog.querySelectorAll('.host-access-feature-settings')).toHaveLength(2);
   expect(dialog.textContent).toContain('Enabled');
@@ -93,7 +93,7 @@ describe('goal-based host access',()=>{
   state.catalog.mockResolvedValue(mac(true,true,'enabled'));
   access.desktop.mockResolvedValue({access_state:'enabled',capabilities:{backend:'macos',screen:true,input:true,state:'ready'}});
   access.save.mockRejectedValue(new Error('Disconnected'));
-  dispose=render(()=><ApplicationsWithSettings/>,host);await settle();textButton('Access settings').click();await settle();
+  dispose=render(()=><ApplicationsWithSettings/>,host);await settle();button('Access settings').click();await settle();
   const desktop=document.querySelector('[aria-label="Remote desktop"].host-access-feature-settings')!;
   desktop.querySelector<HTMLInputElement>('[role=switch]')!.click(); await settle();
   textButton('Pause',document.querySelectorAll('[role=dialog]')[1]).click();await settle();
@@ -119,11 +119,17 @@ describe('goal-based host access',()=>{
   state.catalog.mockResolvedValue(mac(true,true,'enabled'));textButton('Enable and view applications').click();await settle();
   expect(access.save).toHaveBeenCalledWith('applications','enabled');expect(state.launch).not.toHaveBeenCalled();await vi.waitFor(()=>expect(document.querySelector('[role=dialog]')).toBeNull());expect(host.querySelector('.host-apps-library')).not.toBeNull();
  });
- it('keeps paused access paused until explicitly enabled and keeps system management reachable',async()=>{
+ it('keeps paused access paused and routes missing grants through the feature setup',async()=>{
   state.catalog.mockResolvedValue(mac(true,false,'paused'));access.desktop.mockResolvedValue({access_state:'unconfigured',capabilities:{screen:false}});
   dispose=render(()=><ApplicationsWithSettings/>,host);await settle();expect(host.querySelector('.host-access-welcome')).toBeNull();expect(access.save).not.toHaveBeenCalled();
-  textButton('Access settings').click();await settle();
-  const system=document.querySelector<HTMLDetailsElement>('.host-access-system')!;system.open=true;expect([...system.querySelectorAll('.host-access-system-row span')].map(node=>node.textContent)).toEqual(['Allowed','Required']);expect(textButton('Open system settings',system)).toBeTruthy();textButton('Open system settings',system).click();await settle();expect(state.permission).toHaveBeenCalledWith('screen_recording_settings');expect(access.save).not.toHaveBeenCalled();
+  button('Access settings').click();await settle();
+  expect(document.querySelector('.host-access-system')).toBeNull();
+  textButton('Enable again',document.querySelector('[aria-label="Remote application windows"]')!).click();await settle();
+  const setup=document.querySelector('.host-apps-dialog')!;
+  expect(controlText(setup)).toContain('Use the mouse and keyboard');
+  expect(textButton('Allow screen display',setup)).toBeUndefined();
+  textButton('Allow mouse and keyboard',setup).click();await settle();
+  expect(state.permission).toHaveBeenCalledWith('accessibility');expect(access.save).not.toHaveBeenCalled();
  });
  it('reserves a selected browser application before awaiting explicit activation',async()=>{
   state.desktop=false;state.catalog.mockResolvedValue(mac(true,true));
@@ -868,4 +874,22 @@ describe('prepared browser handoff', () => {
     expect(document.querySelector('[role=dialog]')).toBeNull();
     expect(state.launch).not.toHaveBeenCalled();
   });
+});
+
+
+it.each([
+  { access_state:'unconfigured', screen:true, visible:false },
+  { access_state:'paused', screen:true, visible:false },
+  { access_state:'enabled', screen:false, visible:false },
+  { access_state:'enabled', screen:true, visible:true },
+])('scopes Wayland authorization to the enabled usable desktop: $access_state/$screen', async ({access_state,screen,visible}) => {
+  state.catalog.mockResolvedValue({access_state:'unconfigured', availability:{backend:'linux',supported:true,ready:false},applications:[app],sessions:[]});
+  access.desktop.mockResolvedValue({access_state,capabilities:{backend:'wayland',state:screen?'ready':'authorization_required',screen,input:screen,unattended:true,authorization:'saved'},unattended:true});
+  dispose=render(()=><ApplicationsWithSettings/>,host);await settle();
+  button('Access settings').click();await settle();
+  const desktop=document.querySelector('.host-access-feature-settings[aria-label="Remote desktop"]')!;
+  const authorization=desktop.querySelector('[role=switch][aria-label="Connect automatically after first approval"]');
+  expect(Boolean(authorization)).toBe(visible);
+  expect(document.querySelector('[data-testid=application-picture-settings]')).toBeNull();
+  expect(access.save).not.toHaveBeenCalled(); expect(state.permission).not.toHaveBeenCalled();
 });

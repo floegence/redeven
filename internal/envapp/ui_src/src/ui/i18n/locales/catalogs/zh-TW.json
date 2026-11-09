@@ -8322,6 +8322,8 @@
     "openSystemSettings": "開啟系統設定",
     "needsAttention": "需要完成設定",
     "controlMode": "滑鼠與鍵盤",
+    "pictureSettings": "應用程式畫面設定",
+    "pictureOptional": "選用 · 預設自動調整",
     "permissionHelp": "找不到 App，或權限未生效？",
     "missingApplication": "找到需要授權的 App",
     "addApplicationHint": "在此權限頁面按一下「+」，加入「{app}」。下方按鈕會在 Finder 中選取正確的 App。",

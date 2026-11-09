@@ -10,11 +10,12 @@ import { useSettingsPresentation } from '../../../../../../settings_ui/src/Setti
 
 type Picture = { mode: 'auto' | 'clarity' | 'smooth' | 'data'; max_dimension: number; frame_rate: number };
 const endpoint = '/_redeven_proxy/api/host-applications/picture';
-export function ApplicationPictureSettings(props: { allowed: boolean; macOS: boolean }) {
+export function ApplicationPictureSettings(props: { allowed: boolean; macOS: boolean; active?: boolean }) {
   const i18n = useI18n(), env = useEnvContext();
   const resources = createEnvResourceCollection(env);
   let disposed = false; onCleanup(() => { disposed = true; });
-  const presented = useSettingsPresentation('applications');
+  const categoryPresented = useSettingsPresentation('applications');
+  const presented = () => categoryPresented() && props.active !== false;
   const authority = createMemo(() => ({ generation: resources.access().generation, ready: resources.ready(), allowed: props.allowed }));
   const [saved, { refetch, mutate }] = createResource(() => resources.ready() ? resources.access().generation + 1 : false, async () => {
     const generation = resources.access().generation;

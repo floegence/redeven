@@ -20,6 +20,7 @@ let host: HTMLDivElement, dispose: (() => void) | undefined;
 let setAccess!: (value: { phase: string; generation: number }) => void;
 let setAllowed!: (value: boolean) => void;
 let setPresented!: (value: boolean) => void;
+let setActive!: (value: boolean) => void;
 const initial = { mode: 'auto', max_dimension: 0, frame_rate: 0 };
 const settle = async () => { await Promise.resolve(); await new Promise(resolve => setTimeout(resolve, 0)); };
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
@@ -30,7 +31,8 @@ async function mount(macOS = true, allowed = true) {
     const [access, updateAccess] = createSignal({ phase: 'ready', generation: 0 }); state.access = access; setAccess = updateAccess;
     const [permission, updateAllowed] = createSignal(allowed); setAllowed = updateAllowed;
     const [presented, updatePresented] = createSignal(true); setPresented = updatePresented;
-    return <SettingsPanelContext.Provider value={{ present: presented, target: () => ({ section: 'applications' }), open: () => {}, close: () => updatePresented(false), register: () => () => {} }}><ApplicationPictureSettings allowed={permission()} macOS={macOS} /></SettingsPanelContext.Provider>;
+    const [active, updateActive] = createSignal(true); setActive = updateActive;
+    return <SettingsPanelContext.Provider value={{ present: presented, target: () => ({ section: 'applications' }), open: () => {}, close: () => updatePresented(false), register: () => () => {} }}><ApplicationPictureSettings active={active()} allowed={permission()} macOS={macOS} /></SettingsPanelContext.Provider>;
   }, host); await settle();
 }
 const button = (name: string) => [...host.querySelectorAll('button')].find(item => item.textContent === name)!;
@@ -164,4 +166,26 @@ it.each(['retry', 'refresh'] as const)('rejects a captured %s feedback action wh
   expect(state.fetch).toHaveBeenCalledTimes(requests); expect(host.querySelector('[role=alert]')).toBeNull();
   setPresented(true); await settle(); expect(state.fetch).toHaveBeenCalledTimes(requests);
   expect(host.querySelector('[role=alert]')).not.toBeNull();
+});
+
+
+it('retains unsaved choices but rejects hidden stage actions and never replays on expansion', async () => {
+  await mount(); const pending = deferred<typeof initial>(); state.fetch.mockReturnValueOnce(pending.promise);
+  change(0, 'smooth'); change(2, '60');
+  setActive(false); await settle();
+  pending.resolve({ ...initial, mode: 'smooth' }); await settle();
+  change(0, 'data'); expect(state.fetch).toHaveBeenCalledTimes(2);
+  expect([...host.querySelectorAll('select')].every(select => select.disabled)).toBe(true);
+  expect(host.querySelector('[role=alert]')).toBeNull();
+  setActive(true); await settle(); expect(state.fetch).toHaveBeenCalledTimes(2);
+  // The forced native select mutation above changes mock DOM only. The final
+  // explicit retry below proves the retained draft was not changed by it.
+  expect(host.querySelectorAll('select')[2].value).toBe('60');
+  expect(host.querySelector('[role=alert]')).not.toBeNull();
+  const retry = state.buttons.find(props => props.children === 'common.actions.retry')!;
+  setActive(false); await settle(); retry.onClick(); expect(state.fetch).toHaveBeenCalledTimes(2);
+  setActive(true); await settle();
+  state.fetch.mockResolvedValue({ mode:'smooth', max_dimension:0, frame_rate:60 });
+  button('common.actions.retry').click(); await settle();
+  expect(JSON.parse(state.fetch.mock.lastCall![1].body)).toEqual({ mode:'smooth', max_dimension:0, frame_rate:60 });
 });

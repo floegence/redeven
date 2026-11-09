@@ -16,9 +16,10 @@ import { HostAccessFeatureSettings, HostAccessManagement, HostAccessPermissions,
 
 const media = commands as unknown as { emulateMediaPreferences: (preferences: { forcedColors?: 'active' | 'none'; reducedMotion?: 'reduce' | 'no-preference' }) => Promise<void> };
 
-const state=vi.hoisted(()=>({screen:false,input:false,access:'unconfigured',desktopAccess:'unconfigured',local:false,scope:'',permissionApp:'',openSettings:vi.fn(),save:vi.fn(),permission:vi.fn(),launch:vi.fn()}));
+const state=vi.hoisted(()=>({screen:false,input:false,access:'unconfigured',desktopAccess:'unconfigured',local:false,scope:'',permissionApp:'',picture:vi.fn(),openSettings:vi.fn(),save:vi.fn(),permission:vi.fn(),launch:vi.fn()}));
 vi.mock('./EnvContext',()=>({useEnvContext:()=>({env:()=>({name:'Work Mac',permissions:{can_read:true,can_write:true,can_execute:true}}),env_id:()=>state.scope,openSettings:state.openSettings,localRuntime:()=>({}),resourceCacheAccess:()=>({phase:'ready',generation:0,scope:state.scope})})}));
 vi.mock('../services/desktopSessionContext',async original=>({...await original<object>(),readDesktopSessionContextSnapshot:()=>state.local?{target_kind:'local_environment',target_route:'local_host',label:'Local Environment'}:null}));
+vi.mock('../services/localApi', async original => ({...await original<object>(), fetchLocalApiJSON: state.picture}));
 vi.mock('../services/hostAccess',async original=>({...await original<object>(),setHostAccess:state.save}));
 vi.mock('../services/remoteDesktopApi',async original=>({...await original<object>(),getRemoteDesktopStatus:async()=>({access_state:state.desktopAccess,permission_app_name:state.permissionApp,capabilities:{backend:'macos',state:state.screen&&state.input?'ready':'host_action_required',screen:state.screen,input:state.input,displays:[]}})}));
 vi.mock('../services/hostApplicationsApi',async original=>({...await original<object>(),
@@ -40,7 +41,7 @@ function HostApplicationsFixture() {
  </SettingsPanelContext.Provider></FloeProvider>;
 }
 let dispose:(()=>void)|undefined;
-beforeEach(()=>{state.screen=false;state.input=false;state.access='unconfigured';state.desktopAccess='unconfigured';state.local=false;state.permissionApp='';state.scope=crypto.randomUUID();state.openSettings.mockReset();state.save.mockReset();state.permission.mockReset();state.launch.mockReset();state.save.mockImplementation(async(feature,value)=>{if(feature==='desktop')state.desktopAccess=value;else state.access=value;return {state:value};});state.permission.mockImplementation(async permission=>{if(permission==='screen_recording')state.screen=true;if(permission==='accessibility')state.input=true;});});
+beforeEach(()=>{state.screen=false;state.input=false;state.access='unconfigured';state.desktopAccess='unconfigured';state.local=false;state.permissionApp='';state.scope=crypto.randomUUID();state.picture.mockReset();state.picture.mockResolvedValue({mode:'auto',max_dimension:0,frame_rate:0});state.openSettings.mockReset();state.save.mockReset();state.permission.mockReset();state.launch.mockReset();state.save.mockImplementation(async(feature,value)=>{if(feature==='desktop')state.desktopAccess=value;else state.access=value;return {state:value};});state.permission.mockImplementation(async permission=>{if(permission==='screen_recording')state.screen=true;if(permission==='accessibility')state.input=true;});});
 afterEach(async()=>{dispose?.();document.body.replaceChildren();writeStoredLanguagePreference('system');document.documentElement.classList.remove('dark');await media.emulateMediaPreferences({forcedColors:'none',reducedMotion:'no-preference'});});
 
 it.each(SUPPORTED_LOCALES)('keeps compact paused and incomplete cards readable at 320px in %s', async locale => {
@@ -334,8 +335,9 @@ it.each(['Redeven Desktop Dev', ''] as const)('identifies the system permission 
  await page.screenshot({ element: dialog, path: `__screenshots__/host-access-permission-owner-${name ? 'known' : 'unknown'}.png` });
  state.screen = false; state.input = false;
  window.dispatchEvent(new Event('focus'));
- await expect.poll(() => [...dialog.querySelectorAll('.host-access-system-row span')].map(node => node.textContent)).toEqual(['待允许', '待允许']);
+ await expect.poll(() => dialog.querySelector('.host-access-system')).toBeNull();
  await expect.poll(() => dialog.querySelector('.host-access-feature-settings .floe-setting-row__label p')?.textContent).toBe('需要完成设置');
+ await page.getByRole('region', {name: '远程应用窗口', exact: true}).getByRole('button', {name: '继续设置', exact: true}).click();
  await userEvent.click(page.getByRole('button', { name: '去允许显示画面', exact: true }));
  expect(state.permission).toHaveBeenLastCalledWith('screen_recording');
  expect(state.access).toBe('enabled');
@@ -435,4 +437,108 @@ it.each(['paused', 'unconfigured'] as const)('rejects hidden compact %s setup ca
  expect(reconfigure).not.toHaveBeenCalled(); expect(setup.disabled).toBe(true);
  session.open({ section: 'applications' });
  expect(reconfigure).not.toHaveBeenCalled();
+});
+
+
+it.each(['unconfigured', 'paused', 'enabled'] as const)('keeps picture tuning out of the incomplete %s access stage', async access => {
+ await page.viewport(1024, 850); writeStoredLanguagePreference('en-US');
+ state.local = true; state.access = access; state.desktopAccess = 'unconfigured';
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
+ await page.getByRole('button', {name: 'Access settings', exact: true}).click();
+ const settings = document.querySelector<HTMLElement>('[role=dialog]')!;
+ expect(settings.querySelectorAll('.host-access-feature-settings')).toHaveLength(2);
+ expect(settings.querySelector('[data-testid=application-picture-settings]')).toBeNull();
+ expect(settings.querySelector('.host-access-system')).toBeNull();
+ expect(settings.querySelector('[data-scene=screen]')).toBeNull();
+ expect(state.permission).not.toHaveBeenCalled(); expect(state.save).not.toHaveBeenCalled();
+ await page.getByRole('region', {name: 'Remote application windows', exact: true}).getByRole('button', {name: access === 'unconfigured' ? 'Set up' : access === 'paused' ? 'Enable again' : 'Continue setup', exact: true}).click();
+ await expect.poll(() => document.querySelectorAll('[role=dialog]').length).toBe(2);
+ expect(document.querySelector('.host-apps-dialog [data-scene=screen]')).not.toBeNull();
+ expect(document.querySelector('.host-apps-dialog [data-scene=input]')).not.toBeNull();
+ expect(state.permission).not.toHaveBeenCalled(); expect(state.save).not.toHaveBeenCalled();
+});
+
+
+it.each(['unconfigured', 'paused'] as const)('does not expose tuning just because system grants exist while %s', async access => {
+ await page.viewport(1024, 850); writeStoredLanguagePreference('en-US');
+ state.screen = true; state.input = true; state.access = access; state.desktopAccess = access;
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
+ await page.getByRole('button', {name: 'Access settings', exact: true}).click();
+ expect(document.querySelector('.host-access-picture:not([hidden])')).toBeNull();
+ expect(document.querySelector('.host-access-system')).toBeNull();
+ expect(state.picture).not.toHaveBeenCalled(); expect(state.save).not.toHaveBeenCalled();
+});
+
+it('keeps application tuning separate from an enabled desktop', async () => {
+ await page.viewport(1024, 850); writeStoredLanguagePreference('en-US');
+ state.screen = true; state.input = true; state.access = 'unconfigured'; state.desktopAccess = 'enabled';
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
+ await page.getByRole('button', {name: 'Access settings', exact: true}).click();
+ expect(document.querySelector('.host-access-picture:not([hidden])')).toBeNull();
+ expect(state.picture).not.toHaveBeenCalled(); expect(state.save).not.toHaveBeenCalled();
+});
+
+it.each(['pause', 'permission loss'] as const)('collapses optional tuning after %s without losing the saved preference or reopening it', async reason => {
+ await page.viewport(1024, 850); writeStoredLanguagePreference('en-US');
+ state.screen = true; state.input = true; state.access = 'enabled'; state.desktopAccess = 'unconfigured';
+ state.picture.mockResolvedValue({mode:'clarity', max_dimension:1920, frame_rate:30});
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
+ await page.getByRole('button', {name: 'Access settings', exact: true}).click();
+ expect(state.picture).not.toHaveBeenCalled();
+ const details = document.querySelector<HTMLDetailsElement>('.host-access-picture')!;
+ expect(details.open).toBe(false);
+ await page.getByText('Application picture settings', {exact: true}).click();
+ await expect.poll(() => state.picture.mock.calls.length).toBe(1);
+ expect(state.picture).toHaveBeenCalledExactlyOnceWith('/_redeven_proxy/api/host-applications/picture', {method:'GET'});
+ await expect.element(page.getByRole('combobox', {name: 'Picture quality', exact:true})).toBeEnabled();
+ const fields = document.querySelector('[data-testid=application-picture-settings]');
+ if (reason === 'pause') {
+   const control = page.getByRole('switch', {name:'Remote application windows',exact:true}).element() as HTMLInputElement;
+   await userEvent.click(control.closest('label')!);
+   await page.getByRole('button', {name:'Pause',exact:true}).click();
+   await expect.poll(() => state.access).toBe('paused');
+ } else { state.screen = false; window.dispatchEvent(new Event('focus')); }
+ await expect.poll(() => details.hidden).toBe(true);
+ await expect.poll(() => details.open).toBe(false);
+ expect(document.querySelector('[data-testid=application-picture-settings]')).toBe(fields);
+ expect(state.picture.mock.calls.every(([, options]) => options.method === 'GET')).toBe(true);
+ if (reason === 'pause') {
+   const control = page.getByRole('switch', {name:'Remote application windows',exact:true}).element() as HTMLInputElement;
+   await userEvent.click(control.closest('label')!);
+ } else { state.screen = true; window.dispatchEvent(new Event('focus')); }
+ await expect.poll(() => details.hidden).toBe(false);
+ expect(details.open).toBe(false);
+ await page.getByText('Application picture settings', {exact:true}).click();
+ expect(document.querySelector('[data-testid=application-picture-settings]')).toBe(fields);
+ await expect.element(page.getByRole('combobox', {name:'Picture quality',exact:true})).toBeEnabled();
+ expect(state.picture).toHaveBeenCalledTimes(1);
+});
+
+it.each(['zh-CN','en-US'] as const)('presents only the relevant settings stage in %s', async locale => {
+ document.documentElement.classList.toggle('dark', locale === 'zh-CN');
+ await page.viewport(1080, 850); await loadEnvAppDictionary(locale); writeStoredLanguagePreference(locale);
+ const dictionary = await loadEnvAppDictionary(locale);
+ state.local = true; state.permissionApp = 'Redeven Desktop Access Dev';
+ const host = document.createElement('main'); document.body.append(host);
+ dispose = render(() => <I18nProvider><HostApplicationsFixture /></I18nProvider>, host);
+ await page.getByRole('button', {name:dictionary.hostAccess.settings,exact:true}).click();
+ const dialog = document.querySelector<HTMLElement>('[role=dialog]')!;
+ await expect.poll(() => getComputedStyle(dialog).opacity).toBe('1');
+ expect((await axe.run(dialog, {runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations).toEqual([]);
+ await page.screenshot({element:dialog,path:`__screenshots__/host-access-stages-initial-${locale}.png`});
+ state.screen = true; state.input = true; state.access = 'enabled'; window.dispatchEvent(new Event('focus'));
+ await expect.poll(() => dialog.querySelector('.host-access-picture:not([hidden])')).not.toBeNull();
+ expect(state.picture).not.toHaveBeenCalled();
+ await page.screenshot({element:dialog,path:`__screenshots__/host-access-stages-ready-${locale}.png`});
+ await page.getByText(dictionary.hostAccess.pictureSettings,{exact:true}).click();
+ await expect.element(page.getByRole('combobox',{name:dictionary.hostApplications.macPicture,exact:true})).toBeEnabled();
+ await page.screenshot({element:dialog,path:`__screenshots__/host-access-stages-picture-${locale}.png`});
+ await page.viewport(320,850);
+ expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth+1);
+ expect((await axe.run(dialog, {runOnly:{type:'tag',values:['wcag2a','wcag2aa']}})).violations).toEqual([]);
+ await page.screenshot({element:dialog,path:`__screenshots__/host-access-stages-narrow-${locale}.png`});
 });

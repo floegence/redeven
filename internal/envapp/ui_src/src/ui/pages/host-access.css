@@ -86,3 +86,13 @@
 @media(max-width:380px){.host-access-recovery-step{grid-template-columns:48px minmax(0,1fr);gap:10px;}.host-access-helper-scene{width:48px;height:38px;}}
 
 .host-access-recovery-step>div{min-width:0;overflow-wrap:anywhere;}
+
+/* Feature prerequisites precede optional tuning; retain the shared row surface. */
+.host-access-settings-intro{font-size:var(--floe-type-control);line-height:1.6;color:var(--muted-foreground);}
+.host-access-feature-row .host-access-feature-mark{width:38px;height:30px;flex:none;}
+.host-access-picture{margin:0 16px 16px;padding-top:12px;border-top:1px solid var(--border);font-size:var(--floe-type-control);}
+.host-access-picture[hidden]{display:none;}
+.host-access-picture>summary{cursor:pointer;color:var(--foreground);}
+.host-access-picture-hint{margin-inline-start:12px;font-size:var(--floe-type-meta);color:var(--muted-foreground);}
+.host-access-picture>[data-testid=application-picture-settings]{margin-top:12px;}
+@media(max-width:480px){.host-access-picture-hint{display:block;margin:4px 0 0 16px;}}

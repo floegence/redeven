@@ -1,11 +1,11 @@
 import { Button, Dropdown, Switch } from '@floegence/floe-webapp-core/ui';
 import { MoreHorizontal } from '@floegence/floe-webapp-core/icons';
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
 import { Dialog } from '../primitives/EnvAppModal';
 import { useSettingsPresentation } from '../../../../../settings_ui/src/SettingsPanelHost';
 import { useI18n } from '../i18n';
 import type { HostAccessState } from '../services/hostAccess';
-import { HostAccessFeatureIllustration, HostAccessHelperIllustration, HostAccessPermissionIllustration, HostAccessStateIllustration } from './HostAccessIllustration';
+import { HostAccessFeatureIllustration, HostAccessFeatureMark, HostAccessHelperIllustration, HostAccessPermissionIllustration, HostAccessStateIllustration } from './HostAccessIllustration';
 import { SettingRow } from './settings/SettingsPrimitives';
 import './host-access.css';
 export function HostAccessWelcome(props: {
@@ -106,6 +106,7 @@ export function HostAccessFeatureSettings(props: {
     allowed: boolean;
     busy: boolean;
     ready?: boolean;
+    children?: JSX.Element;
     error?: string;
     onChange: (state: HostAccessState) => Promise<void>;
     onReconfigure: () => void;
@@ -113,9 +114,10 @@ export function HostAccessFeatureSettings(props: {
     const i18n = useI18n();
     const title = () => i18n.t(props.feature === 'applications' ? 'hostAccess.applicationFeature' : 'remoteDesktop.title');
     return <section class="host-access-feature-settings" aria-label={title()}>
-      <SettingRow class="host-access-feature-row" title={title()}
+      <SettingRow class="host-access-feature-row" title={title()} icon={() => <HostAccessFeatureMark feature={props.feature} />}
         description={i18n.t(props.state === 'paused' ? 'hostAccess.paused' : props.state === 'unconfigured' ? 'hostAccess.unconfigured' : props.ready === false ? 'hostAccess.needsAttention' : 'hostAccess.enabled')}
         control={<HostAccessManagement {...props} compact title={title()} />} />
+      {props.children}
     </section>;
 }
 

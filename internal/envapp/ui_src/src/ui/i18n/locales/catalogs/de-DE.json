@@ -8326,6 +8326,8 @@
     "openSystemSettings": "Systemeinstellungen öffnen",
     "needsAttention": "Einrichtung erforderlich",
     "controlMode": "Maus und Tastatur",
+    "pictureSettings": "Bildqualität für Anwendungen",
+    "pictureOptional": "Optional · standardmäßig automatisch",
     "permissionHelp": "App fehlt oder Berechtigungen greifen nicht?",
     "missingApplication": "Berechtigungs-App finden",
     "addApplicationHint": "Klicken Sie in diesem Bereich auf + und fügen Sie „{app}“ hinzu. Die Schaltfläche wählt die richtige App im Finder aus.",

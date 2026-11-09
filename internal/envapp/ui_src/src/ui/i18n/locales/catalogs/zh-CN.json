@@ -8322,6 +8322,8 @@
     "openSystemSettings": "打开系统设置",
     "needsAttention": "需要完成设置",
     "controlMode": "鼠标和键盘",
+    "pictureSettings": "应用画面设置",
+    "pictureOptional": "可选 · 默认自动调整",
     "permissionHelp": "找不到应用，或权限没有生效？",
     "missingApplication": "找到需要授权的应用",
     "addApplicationHint": "在此权限页面点击“+”，添加“{app}”。下方按钮会在 Finder 中选中准确的应用。",

@@ -8322,6 +8322,8 @@
     "openSystemSettings": "システム設定を開く",
     "needsAttention": "設定の確認が必要",
     "controlMode": "マウスとキーボード",
+    "pictureSettings": "アプリの画質設定",
+    "pictureOptional": "任意 · 初期設定は自動",
     "permissionHelp": "アプリが見つからない、または権限が反映されない場合",
     "missingApplication": "許可するアプリを探す",
     "addApplicationHint": "この権限の画面で「+」をクリックし、「{app}」を追加してください。下のボタンで Finder 内の正しいアプリを選択できます。",

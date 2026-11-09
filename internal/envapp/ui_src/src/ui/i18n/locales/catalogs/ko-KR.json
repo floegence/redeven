@@ -8322,6 +8322,8 @@
     "openSystemSettings": "시스템 설정 열기",
     "needsAttention": "설정을 완료해야 함",
     "controlMode": "마우스와 키보드",
+    "pictureSettings": "앱 화면 설정",
+    "pictureOptional": "선택 사항 · 기본값은 자동",
     "permissionHelp": "앱을 찾을 수 없거나 권한이 적용되지 않나요?",
     "missingApplication": "권한을 부여할 앱 찾기",
     "addApplicationHint": "이 권한 화면에서 +를 클릭하고 “{app}”을 추가하세요. 아래 버튼으로 Finder에서 정확한 앱을 선택할 수 있습니다.",
