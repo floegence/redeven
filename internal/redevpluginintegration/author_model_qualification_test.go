@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -242,7 +243,7 @@ func TestPluginCreationRealModelBuildInstallAndDelete(t *testing.T) {
 	report["installation"] = operation
 	// Continuing an installed draft must execute another model turn, build a new
 	// immutable artifact and offer an update against the same installed instance.
-	followup, err := svc.SendUserTurn(ctx, meta, ai.SendUserTurnRequest{StorageGeneration: svc.StorageGeneration(), ThreadID: response.ThreadID, ClientRequestID: "model-followup-edit", Input: ai.RunInput{Text: "Refine this existing timer: add a compact visible caption Focus session beneath the timer, refine spacing and typography, preserve the 25:00 timer and Start/Pause/Reset behavior, and update source version to 0.1.1. Use plugin_author_get_status, read the existing source, make the change, and plugin_author_build until the real tests pass and a new artifact is returned. Preserve plugin identity and icon. Do not install, grant permissions, start a preview server or delegate."}, Options: ai.RunOptions{NoUserInteraction: true, MaxOutputTokens: 8000, ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, ToolAllowlist: []string{"skill_use", "file_read", "file_read_many", "list_files", "find", "file_write", "file_apply_patch", "terminal_exec", "terminal_read", "plugin_author_get_status", "plugin_author_build", "plugin_author_capture"}}})
+	followup, err := svc.SendUserTurn(ctx, meta, ai.SendUserTurnRequest{StorageGeneration: svc.StorageGeneration(), ThreadID: response.ThreadID, ClientRequestID: "model-followup-edit", Input: ai.RunInput{Text: fmt.Sprintf("Refine this existing timer: add a compact visible caption Focus session beneath the timer, refine spacing and typography, preserve the 25:00 timer and Start/Pause/Reset behavior, and increase the source patch version strictly above the currently installed %s. Use plugin_author_get_status, read the existing source, make the change, and plugin_author_build until the real tests pass and a new artifact is returned. Preserve plugin identity and icon. Do not install, grant permissions, start a preview server or delegate.", artifact.Version)}, Options: ai.RunOptions{NoUserInteraction: true, MaxOutputTokens: 8000, ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, ToolAllowlist: []string{"skill_use", "file_read", "file_read_many", "list_files", "find", "file_write", "file_apply_patch", "terminal_exec", "terminal_read", "plugin_author_get_status", "plugin_author_build", "plugin_author_capture"}}})
 	if err != nil {
 		t.Fatal("follow-up admission:", err)
 	}
@@ -255,6 +256,11 @@ func TestPluginCreationRealModelBuildInstallAndDelete(t *testing.T) {
 		detail, err := svc.GetFlowerThreadDetail(ctx, meta, response.ThreadID)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if len(detail.Current.Interactions) > 0 {
+			raw, _ := json.MarshalIndent(detail, "", "  ")
+			_ = os.WriteFile(filepath.Join(reportRoot, "followup-interaction.json"), raw, 0600)
+			t.Fatal("isolated follow-up requires unexpected user input; inspect followup-interaction.json")
 		}
 		if detail.Current.TurnID.String() == followup.TurnID && detail.Current.Activity == flruntime.ThreadActivityIdle && detail.Current.LastOutcome != nil {
 			if *detail.Current.LastOutcome != flruntime.TurnOutcomeCompleted {
