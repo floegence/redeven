@@ -2354,6 +2354,17 @@
       "worktreeReviewLimit": "연결된 작업 트리가 삭제 전 검토 한도를 초과했거나 안전하게 검사할 수 없습니다. 해당 디렉터리를 변경하는 프로세스를 중지하거나 대용량 빌드 결과물을 작업 트리 밖으로 옮긴 후 다시 검토하세요.",
       "outcomeUnknown": "작업 결과를 확인할 수 없습니다. 다시 시도하기 전에 저장소를 새로 고침하세요.",
       "requestRejected": "Git이 요청을 거부했습니다. 저장소 상태와 선택한 작업을 확인하세요."
+    },
+    "tree": {
+      "horizontalScroll": "파일 트리 가로 스크롤",
+      "collapseAll": "모든 폴더 접기",
+      "loadFailed": "이 폴더를 불러오지 못했습니다."
+    },
+    "review": {
+      "diffLayout": "차이 레이아웃",
+      "unified": "통합",
+      "split": "나란히",
+      "all": "전체"
     }
   },
   "terminal": {

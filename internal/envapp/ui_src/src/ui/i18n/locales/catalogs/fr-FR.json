@@ -2354,6 +2354,17 @@
       "worktreeReviewLimit": "L’arbre de travail lié dépasse les limites de vérification avant suppression ou n’a pas pu être inspecté en toute sécurité. Arrêtez les processus qui le modifient ou déplacez les fichiers de compilation volumineux hors de l’arbre, puis relancez la vérification.",
       "outcomeUnknown": "Le résultat de l’opération n’a pas pu être confirmé. Actualisez le dépôt avant de réessayer.",
       "requestRejected": "Git a refusé cette requête. Vérifiez l’état du dépôt et l’opération sélectionnée."
+    },
+    "tree": {
+      "horizontalScroll": "Faire défiler l’arborescence horizontalement",
+      "collapseAll": "Replier tous les dossiers",
+      "loadFailed": "Impossible de charger ce dossier."
+    },
+    "review": {
+      "diffLayout": "Disposition des différences",
+      "unified": "Unifiée",
+      "split": "Côte à côte",
+      "all": "Tout"
     }
   },
   "terminal": {

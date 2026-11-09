@@ -18,6 +18,8 @@ import type { EnvViewMode } from '../envViewMode';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
 import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
 
+const treeLoaderStore = vi.hoisted(() => ({ current: undefined as undefined | ((section: string, path: string, offset?: number) => Promise<any>) }));
+
 const mobileLayout = vi.hoisted(() => ({ value: false }));
 
 const widgetStateStore = vi.hoisted(() => ({
@@ -502,6 +504,7 @@ vi.mock('../primitives/EnvAppModal', () => ({
 
 vi.mock('./FileBrowserWorkspace', () => ({
   FileBrowserWorkspace: (props: {
+    modeSwitcherMount?: (element: HTMLDivElement) => void;
     mode: string;
     files: FileItem[];
     currentPath: string;
@@ -666,6 +669,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
 
     return (
       <div data-testid="files-workspace" data-initializing={String(props.initializing)}>
+        <div ref={props.modeSwitcherMount} />
         <div>files:{props.mode}:{props.currentPath}:{props.width ?? 0}:{localCount()}:{props.captureTypingFromPage ? 'page' : 'scoped'}</div>
         <div data-testid="mock-path-edit-request-key">{props.pathEditRequestKey ?? 0}</div>
         <div>{props.toolbarEndActions}</div>
@@ -912,6 +916,10 @@ vi.mock('./FileBrowserWorkspace', () => ({
 
 vi.mock('./GitWorkspace', () => ({
   GitWorkspace: (props: {
+    stashContent?: JSX.Element;
+    stashActive?: boolean;
+    onShowStashes?: () => void;
+    modeSwitcherMount?: (element: HTMLDivElement) => void;
     mode: string;
     currentPath: string;
     subview: string;
@@ -924,6 +932,8 @@ vi.mock('./GitWorkspace', () => ({
     shellLoadingMessage?: string;
     onModeChange?: (mode: string) => void;
     onSubviewChange?: (view: 'changes' | 'branches' | 'history' | 'overview') => void;
+    onShowAllWorkspaceSections?: () => void;
+    onRetryWorkspaceSection?: (section: 'changes' | 'staged' | 'conflicted') => void;
     onSelectWorkspaceSection?: (section: 'changes' | 'staged' | 'conflicted') => void;
     onResize?: (delta: number) => void;
     repoInfoLoading?: boolean;
@@ -964,6 +974,7 @@ vi.mock('./GitWorkspace', () => ({
     onOpenStash?: (request?: { tab?: 'save' | 'stashes'; repoRootPath?: string; source?: 'header' | 'changes' | 'branch_status' | 'merge_blocker' }) => void;
     onStageWorkspaceItem?: (item: any) => void;
     onUnstageWorkspaceItem?: (item: any) => void;
+    onLoadWorkspaceDirectory?: (section: string, path: string, offset?: number) => Promise<any>;
     onNavigateWorkspaceDirectory?: (path: string) => void;
     onDiscardWorkspaceSection?: (section: 'changes' | 'staged' | 'conflicted') => void;
     onOpenInTerminal?: (request: { path: string; preferredName?: string }) => void;
@@ -988,6 +999,7 @@ vi.mock('./GitWorkspace', () => ({
     });
 
     createEffect(() => {
+      treeLoaderStore.current = props.onLoadWorkspaceDirectory;
       gitWorkspaceRenderStore.snapshots.push({
         subview: props.subview,
         selectedBranchSubview: props.selectedBranchSubview,
@@ -1017,6 +1029,9 @@ vi.mock('./GitWorkspace', () => ({
 
     return (
       <div data-testid="git-workspace">
+        <div data-testid="embedded-stash-host" hidden={!props.stashActive}>{props.stashContent}</div>
+        <button type="button" onClick={props.onShowStashes}>mock-show-stashes</button>
+        <div ref={props.modeSwitcherMount} />
         <div>git:{props.mode}:{props.subview}:{props.currentPath}:{props.width ?? 0}</div>
         <div>branch-subview:{props.selectedBranchSubview ?? 'status'}</div>
         <div>selected-branch:{props.selectedBranch?.fullName ?? props.selectedBranch?.name ?? ''}</div>
@@ -1026,6 +1041,8 @@ vi.mock('./GitWorkspace', () => ({
         <button type="button" onClick={() => props.onSubviewChange?.('changes')}>mock-to-changes</button>
         <button type="button" onClick={() => props.onSubviewChange?.('branches')}>mock-to-branches</button>
         <button type="button" onClick={() => props.onSubviewChange?.('history')}>mock-to-history</button>
+        <button type="button" onClick={props.onShowAllWorkspaceSections}>mock-show-all</button>
+        <button type="button" onClick={() => props.onRetryWorkspaceSection?.('changes')}>mock-retry-changes</button>
         <button type="button" onClick={() => props.onSelectWorkspaceSection?.('staged')}>mock-select-staged</button>
         <button type="button" onClick={() => props.onSelectWorkspaceSection?.('conflicted')}>mock-select-conflicted</button>
         <button type="button" onClick={() => props.onNavigateWorkspaceDirectory?.('src')}>mock-open-git-directory</button>
@@ -5737,6 +5754,23 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('opens stashes inside the workspace and restores review navigation', async () => {
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}><RemoteFileBrowser widgetId="widget-1" /></EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush();
+      const click = (label: string) => Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === label)!.click();
+      click('mock-show-stashes'); await flush();
+      const embedded = host.querySelector<HTMLElement>('[data-testid="embedded-stash-host"]')!;
+      expect(embedded.hidden).toBe(false);
+      expect(embedded.querySelector('[data-testid="git-stash-window"]')).not.toBeNull();
+      expect(gitStashWindowRenderStore.snapshots.at(-1)?.tab).toBe('stashes');
+      click('mock-to-changes'); await flush();
+      expect(embedded.hidden).toBe(true);
+      expect(gitStashWindowRenderStore.snapshots.at(-1)?.open).toBe(false);
+    } finally { dispose(); }
+  });
+
   it('keeps repository sync actions local while the invalidated workspace refreshes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -5844,6 +5878,53 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it.each(['files', 'git'])('retains one native Files/Git control from cold %s mode', async initialMode => {
+    widgetStateStore.values['widget-1'] = { ...widgetStateStore.values['widget-1'], pageModeByEnv: { 'env-1': initialMode } };
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}><RemoteFileBrowser widgetId="widget-1" /></EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush(); await flush();
+      const group = host.querySelector('[data-browser-mode-switch]')!;
+      const buttons = Array.from(group.querySelectorAll<HTMLButtonElement>('button'));
+      for (const mode of ['files', 'git', 'files', 'git']) {
+        const target = buttons[mode === 'git' ? 1 : 0];
+        target.focus(); target.click(); await flush(); await flush();
+        expect(document.activeElement).toBe(target);
+        expect(host.querySelectorAll('[data-browser-mode-switch]')).toHaveLength(1);
+        expect(host.querySelector('[data-browser-mode-switch]')).toBe(group);
+        expect(Array.from(group.querySelectorAll('button'))).toEqual(buttons);
+        expect(group.closest('[data-browser-mode-panel]')?.getAttribute('data-browser-mode-panel')).toBe(mode);
+      }
+    } finally { dispose(); }
+  });
+
+  it('fences lazy folder reads without replacing the root page', async () => {
+    widgetStateStore.values['widget-1'] = { ...widgetStateStore.values['widget-1'], pageModeByEnv: { 'env-1': 'git' }, gitSubviewByEnv: { 'env-1': 'changes' } };
+    mockRpc.git.getCapabilities.mockResolvedValue({ workspaceRevisionV1: true, workspaceDirectoryScopeV1: true, workspacePathStatusV1: true, stashSectionDiffV1: true });
+    mockRpc.git.getRepoSummary.mockResolvedValue({ repoRootPath: '/workspace/repo', workspaceRevision: 'tree-revision', workspaceSummary: { unstagedCount: 2 } });
+    const root = { repoRootPath: '/workspace/repo', section: 'changes', directoryPath: '', workspaceRevision: 'tree-revision', summary: { unstagedCount: 2 }, items: [{ path: 'src', directoryPath: 'src', entryKind: 'directory', section: 'changes' }] };
+    mockRpc.git.listWorkspacePage.mockResolvedValue(root);
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}><RemoteFileBrowser widgetId="widget-1" /></EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush(); await flush(); await flush();
+      const load = treeLoaderStore.current!;
+      const child = { ...root, directoryPath: 'src', items: [{ path: 'src/file.ts', section: 'unstaged' }] };
+      mockRpc.git.listWorkspacePage.mockResolvedValueOnce(child);
+      expect(await load('changes', 'src', 20)).toEqual(child);
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenLastCalledWith(expect.objectContaining({ section: 'changes', directoryPath: 'src', offset: 20, expectedWorkspaceRevision: 'tree-revision' }));
+      mockRpc.git.listWorkspacePage.mockResolvedValueOnce({ ...child, directoryPath: 'other' });
+      await expect(load('changes', 'src')).rejects.toThrow('scope or revision');
+      const pending = deferred<any>();
+      mockRpc.git.listWorkspacePage.mockReturnValueOnce(pending.promise);
+      const staleRead = load('changes', 'src');
+      Array.from(host.querySelectorAll('button')).find(button => button.textContent === 'mock-refresh')!.click();
+      await flush(); await flush();
+      pending.resolve(child);
+      expect(await staleRead).toBeUndefined();
+    } finally { dispose(); }
+  });
+
   it('resets the main workspace generation when the protocol client identity changes', async () => {
     widgetStateStore.values['widget-1'] = {
       ...(widgetStateStore.values['widget-1'] ?? {}),
@@ -5942,6 +6023,47 @@ describe('RemoteFileBrowser persistence', () => {
       Array.from(host.querySelectorAll('button')).find(node => node.textContent === 'mock-open-git-directory')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
       expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledWith(expect.objectContaining({ section, directoryPath: 'src' }));
+    } finally { dispose(); }
+  });
+
+  it('settles an initial workspace failure until the user retries the same section', async () => {
+    widgetStateStore.values['widget-1'] = { ...widgetStateStore.values['widget-1'], gitSubviewByEnv: { 'env-1': 'changes' } };
+    mockRpc.git.getRepoSummary.mockResolvedValue({ repoRootPath: '/workspace/repo', workspaceSummary: { unstagedCount: 1 } });
+    mockRpc.git.listWorkspacePage.mockRejectedValue(new Error('offline'));
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}><RemoteFileBrowser widgetId="widget-1" /></EnvContext.Provider></LayoutProvider>, host);
+    try {
+      await flush(); await flush();
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledTimes(1);
+      mockRpc.git.listWorkspacePage.mockResolvedValue({ repoRootPath: '/workspace/repo', section: 'changes', summary: { unstagedCount: 1 }, items: [{ section: 'unstaged', path: 'file.ts' }], totalCount: 1, nextOffset: 1, hasMore: false });
+      Array.from(host.querySelectorAll('button')).find(button => button.textContent === 'mock-retry-changes')!.click();
+      await flush();
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenLastCalledWith(expect.objectContaining({ section: 'changes' }));
+    } finally { dispose(); }
+  });
+
+  it('returns All to root scope once without reloading on repository decoration updates', async () => {
+    widgetStateStore.values['widget-1'] = { ...widgetStateStore.values['widget-1'], gitSubviewByEnv: { 'env-1': 'changes' } };
+    const summary = { unstagedCount: 2, stagedCount: 1, conflictedCount: 0 };
+    mockRpc.git.getRepoSummary.mockResolvedValue({ repoRootPath: '/workspace/repo', workspaceSummary: summary });
+    mockRpc.git.listWorkspacePage.mockImplementation(async request => ({
+      repoRootPath: request.repoRootPath, section: request.section, directoryPath: request.directoryPath ?? '',
+      summary, items: [{ section: request.section === 'staged' ? 'staged' : 'unstaged', path: 'src/file.ts', changeType: 'modified' }],
+      totalCount: 1, nextOffset: 1, hasMore: false,
+    }));
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const dispose = render(() => <LayoutProvider><EnvContext.Provider value={createEnvContext()}><RemoteFileBrowser widgetId="widget-1" /></EnvContext.Provider></LayoutProvider>, host);
+    const click = (label: string) => Array.from(host.querySelectorAll('button')).find(button => button.textContent === label)!.click();
+    try {
+      await flush();
+      click('mock-select-staged'); await flush();
+      click('mock-open-git-directory'); await flush();
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenLastCalledWith(expect.objectContaining({ section: 'staged', directoryPath: 'src' }));
+      mockRpc.git.listWorkspacePage.mockClear();
+      click('mock-show-all'); await flush(); await flush();
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenLastCalledWith(expect.objectContaining({ section: 'staged', directoryPath: undefined }));
     } finally { dispose(); }
   });
 

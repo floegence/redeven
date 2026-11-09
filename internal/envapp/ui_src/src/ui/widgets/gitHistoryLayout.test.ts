@@ -65,7 +65,7 @@ describe('browser workspace layout wiring', () => {
   it('pins the mode switch area in the shared browser shell', () => {
     const src = read('./BrowserWorkspaceShell.tsx');
 
-    expect(src).toContain('props.modeSwitcher');
+    expect(src).toContain('createRetainedContent(() => props.modeSwitcher)');
     expect(src).toContain('sticky top-0 z-10 shrink-0 border-b');
     expect(src).not.toContain("i18n.t('uiCopy.shell.mode')");
     expect(src).not.toContain('navigationLabel');
@@ -87,9 +87,9 @@ describe('browser workspace layout wiring', () => {
     expect(workspaceSrc).toContain('sidebarBodyClass="overflow-hidden"');
     expect(workspaceSrc).toContain('data-testid="file-tree-scroll-region"');
     expect(workspaceSrc).toContain('getSidebarScrollContainer: () => treeScrollEl');
-    expect(workspaceSrc).toContain('overflow-auto overflow-x-hidden overscroll-contain');
+    expect(workspaceSrc).toContain('overflow-auto overscroll-contain');
     expect(workspaceSrc).toContain('[-webkit-overflow-scrolling:touch]');
-    expect(workspaceSrc).toContain('[touch-action:pan-y_pinch-zoom]');
+    expect(workspaceSrc).toContain('[touch-action:pan-x_pan-y_pinch-zoom]');
     expect(workspaceSrc).toContain('<FileListView');
     expect(workspaceSrc).not.toContain('redeven-file-list-compact');
     expect(workspaceSrc).toContain("import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
@@ -109,7 +109,9 @@ describe('browser workspace layout wiring', () => {
     expect(treeSrc).not.toContain("from './GitChrome'");
     expect(treeSrc).not.toContain('gitToneBadgeClass');
     expect(treeSrc).not.toContain('gitToneInsetClass');
-    expect(treeSrc).toContain('MAX_VISIBLE_DEPTH = 5');
+    expect(treeSrc).toContain('depth * TREE_ROW_DEPTH_STEP');
+    expect(treeSrc).not.toContain('MAX_VISIBLE_DEPTH');
+    expect(workspaceSrc).toContain('<PersistentHorizontalScrollbar');
     expect(treeSrc).toContain('data-file-browser-touch-target="true"');
     expect(treeSrc).toContain('data-tree-row-path={props.item.path}');
     expect(treeSrc).toContain("scrollIntoView({ block: 'nearest', inline: 'nearest' })");
@@ -155,16 +157,16 @@ describe('browser workspace layout wiring', () => {
 
     expect(navSrc).toContain('role="tablist"');
     expect(navSrc).toContain('data-git-view-nav-label');
-    expect(navSrc).toContain('grid w-full grid-cols-1');
+    expect(navSrc).toContain('git-workspace-views flex min-w-0 items-center');
     expect(navSrc).not.toContain('overflow-x-auto');
     expect(navSrc).toContain("aria-label={i18n.t('uiCopy.git.views')}");
-    expect(navSrc).toContain('aria-orientation="vertical"');
-    expect(navSrc).toContain("resolveRovingTabTargetId(itemIds(), currentId, event.key, 'vertical')");
-    expect(navSrc).toContain('grid-cols-[minmax(0,1fr)_auto]');
-    expect(navSrc).toContain('rounded-md border border-transparent px-2.5 py-2');
-    expect(navSrc).toContain('gitNavigationItemClass(active())');
-    expect(navSrc).toContain('gitSelectedChipClass(true)');
-    expect(navSrc).toContain("typeof item.count === 'number' && item.count > 0");
+    expect(navSrc).toContain('aria-orientation="horizontal"');
+    expect(navSrc).toContain("resolveRovingTabTargetId(itemIds(), currentId, event.key, 'horizontal')");
+    expect(navSrc).toContain('justify-center');
+    expect(navSrc).toContain('git-workspace-view-tab');
+    expect(navSrc).toContain("const active = () => !props.inactive && props.value === item.id");
+    expect(navSrc).not.toContain('gitSelectedChipClass(true)');
+    expect(navSrc).not.toContain("typeof item.count === 'number' && item.count > 0");
     expect(navSrc).not.toContain('gitSubviewTone');
     expect(navSrc).not.toContain('gitToneBadgeClass');
     expect(navSrc).not.toContain('gitToneSelectableCardClass');
@@ -204,7 +206,7 @@ describe('browser workspace layout wiring', () => {
     expect(historySrc).toContain('commitOverviewLayout() === "inline" ? "pl-4" : "pl-0"');
     expect(historySrc).toContain('flex justify-start');
     expect(historySrc).toContain('commitOverviewLayout() === "inline"');
-    expect(historySrc).toContain('data-git-commit-files-list-layout="compact"');
+    expect(historySrc).toContain('<GitWorkspaceTree');
     expect(historySrc).not.toContain('flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between');
     expect(historySrc).not.toContain('flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto');
   });
@@ -226,7 +228,7 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain("i18n.t('uiCopy.git.compareBranches')");
     expect(branchesSrc).toContain("i18n.t('uiCopy.git.changedFiles')");
     expect(branchesSrc).toContain("i18n.t('uiCopy.git.loadMore')");
-    expect(branchesSrc).toContain("i18n.t('files.menuViewDiff')");
+    expect(branchesSrc).toContain('<GitWorkspaceTree');
     expect(branchesSrc).not.toContain('"ml-7 mt-2 space-y-2 rounded-md bg-background/88 p-2.5"');
     expect(branchesSrc).not.toContain('surface\\n                                                  class="min-h-[5rem] px-1 py-2"');
     expect(branchesSrc).toContain("i18n.t('git.common.checkout')");
@@ -274,8 +276,8 @@ describe('browser workspace layout wiring', () => {
     expect(overviewSrc).not.toContain('text-[24px] font-semibold tracking-tight');
 
     expect(changesSrc).toContain("i18n.t('git.changes.commitAction')");
-    expect(changesSrc).toContain('GIT_CHANGED_FILES_TABLE_CLASS');
-    expect(changesSrc).toContain('GitChangeStatusPill');
+    expect(changesSrc).toContain('GitWorkspaceTree');
+    expect(read('./GitWorkspaceTree.tsx')).toContain('GitChangeStatusPill');
     expect(changesSrc).toContain('useI18n');
     expect(changesSrc).toContain('GitCommitDialog');
     expect(changesSrc).toContain('GitDiffPanel');
@@ -286,12 +288,12 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).toContain('MoreHorizontal');
     expect(changesSrc).toContain('data-git-changes-header-density');
     expect(changesSrc).toContain('data-git-changes-header-actions');
-    expect(changesSrc).toContain('line-clamp-1');
-    expect(changesSrc).toContain('GIT_CHANGED_FILES_TABLE_CLASS');
-    expect(changesSrc).toContain('GitChangedFilesActionButton');
-    expect(changesSrc).toContain('grid items-center gap-2 grid-cols-[auto_minmax(0,1fr)_auto]');
+    expect(changesSrc).not.toContain('line-clamp-1');
+    expect(changesSrc).toContain('GitWorkspaceTree');
+    expect(read('./GitWorkspaceTree.tsx')).toContain('git-workspace-tree__actions');
+    expect(changesSrc).toContain('grid items-center gap-2 grid-cols-[minmax(0,1fr)_auto]');
     expect(changesSrc).toContain('git-changes-toolbar-status-row mt-1.5 flex flex-wrap items-center justify-between gap-2');
-    expect(changesSrc).toContain('flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground');
+    expect(changesSrc).toContain('text-[10px] text-muted-foreground');
     expect(changesHeaderLayoutSrc).toContain("export type GitChangesHeaderDensity = 'comfortable' | 'compact' | 'collapsed'");
     expect(changesHeaderLayoutSrc).toContain("export type GitChangesHeaderLayoutMode = 'default' | 'quiet_inline'");
     expect(changesHeaderLayoutSrc).toContain('GIT_CHANGES_HEADER_COMPACT_MIN_WIDTH = 620');
@@ -352,7 +354,8 @@ describe('browser workspace layout wiring', () => {
 
     expect(src).toContain("import { GitViewNav } from './GitViewNav';");
     expect(src).not.toContain('navigationLabel=');
-    expect(src).toContain('sidebarBodyClass="overflow-hidden"');
+    expect(src).not.toContain('BrowserWorkspaceShell');
+    expect(src).toContain('selectorRail=');
     expect(src).toContain("class={['redeven-git-browser', props.class].filter(Boolean).join(' ')}");
     expect(src).toContain('<GitViewNav');
     expect(src).not.toContain('headerActions=');
@@ -425,7 +428,8 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain("i18n.t('common.actions.refresh')");
     expect(src).toContain('showMobileSidebarButton');
     expect(src).toContain('onToggleSidebar');
-    expect(src).toContain("aria-label={i18n.t('files.sidebarToggle')}");
+    expect(src).not.toContain("aria-label={i18n.t('files.sidebarToggle')}");
+    expect(src).toContain('data-git-workspace-navigation');
     expect(src).not.toContain('Compact repo signals and actions for the current view.');
     expect(src).not.toContain('Clean workspace');
     expect(src).toContain('GitMetaPill');
@@ -442,7 +446,7 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain("redevenDividerRoleClass()");
     expect(src).toContain("redevenSurfaceRoleClass('inset')");
     expect(src).not.toContain("gitToneSurfaceClass(subviewTone())");
-    expect(src).not.toContain('variant="outline"');
+    expect(src).toContain("variant={action === 'fetch' ? 'ghost' : 'outline'}");
     expect(src).not.toContain('GitHistoryModeSwitch');
     expect(src).not.toContain('GitSubviewSwitch');
   });

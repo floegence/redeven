@@ -1,6 +1,6 @@
 import { StableText, Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
-import { cn, useLayout } from '@floegence/floe-webapp-core';
+import { cn, createRetainedContent, useLayout } from '@floegence/floe-webapp-core';
 import {
   AlertTriangle,
   Check,
@@ -26,7 +26,6 @@ import type {
   GitWorkspaceSummary,
 } from '../protocol/redeven_v1';
 import {
-  changeDisplayPath,
   changeSecondaryPath,
   exactGitPath,
   gitDiffEntryIdentity,
@@ -43,25 +42,14 @@ import { stashReviewMatchesTarget, type GitStashReviewState } from '../utils/git
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
-import { gitChangePathClass, gitToneSelectableCardClass, gitSelectedSecondaryTextClass } from './GitChrome';
+import { gitToneSelectableCardClass, gitSelectedSecondaryTextClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitStashDeleteConfirmDialog } from './GitStashDeleteConfirmDialog';
-import { GitVirtualTable } from './GitVirtualTable';
+import { GitWorkspaceTree } from './GitWorkspaceTree';
 import {
-  GIT_CHANGED_FILES_CELL_CLASS,
-  GIT_CHANGED_FILES_HEADER_CELL_CLASS,
-  GIT_CHANGED_FILES_HEADER_ROW_CLASS,
-  GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
-  GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
-  GIT_CHANGED_FILES_TABLE_CLASS,
   GitChecklistItem,
-  GitChangedFilesActionButton,
-  GitChangeMetrics,
-  GitChangeStatusPill,
   GitStatePane,
   GitSubtleNote,
-  gitChangedFilesRowClass,
-  gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
 import { PreviewWindow } from './PreviewWindow';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -86,6 +74,7 @@ type StashPatchErrorState = {
 };
 
 export interface GitStashWindowProps {
+  embedded?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tab: GitStashWindowTab;
@@ -697,20 +686,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
     closeDiffDialog();
   });
 
-  return (
-    <>
-      <PreviewWindow
-        open={props.open}
-        onOpenChange={props.onOpenChange}
-        title={`${i18n.t('git.common.stashes')} · ${repoName()}`}
-        stackId="git-stash"
-        persistenceKey="git-stash-window"
-        defaultSize={{ width: 1040, height: 760 }}
-        minSize={{ width: 720, height: 520 }}
-        floatingClass="bg-background"
-        mobileClass="bg-background"
-        surfaceRef={setFloatingSurfaceEl}
-      >
+  const Content = createRetainedContent(() => <>
         <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
           {/* Header */}
           <div class={cn('shrink-0 border-b px-3 py-2', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
@@ -811,70 +787,12 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                             <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-px text-[10px] font-medium tabular-nums text-muted-foreground">{String(detailFiles().length)}</span>
                                           </div>
                                           <Show when={detailFiles().length > 0} fallback={<GitSubtleNote>{i18n.t('uiCopy.git.noStashFiles')}</GitSubtleNote>}>
-                                            <div class="overflow-hidden rounded-md border">
-                                              <GitVirtualTable
-                                                items={detailFiles()}
-                                                tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
-                                                header={(
-                                                  <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.path')}</th>
-                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.status')}</th>
-                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.changes')}</th>
-                                                    <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>{i18n.t('git.common.action')}</th>
-                                                  </tr>
-                                                )}
-                                                renderRow={(file) => {
-                                                  const active = () => (
-                                                    diffDialogOpen()
-                                                    && diffDialogStashId() === String(selectedStash()?.id ?? '').trim()
-                                                    && gitDiffEntryIdentity(diffDialogItem()) === gitDiffEntryIdentity(file)
-                                                  );
-                                                  const primaryPath = changeDisplayPath(file);
-                                                  const secondaryPath = changeSecondaryPath(file);
-                                                  return (
-                                                    <tr
-                                                      data-git-stash-file={file.path}
-                                                      aria-selected={active()}
-                                                      class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
-                                                      onClick={() => openDiffDialog(file)}
-                                                      tabIndex={0}
-                                                      onContextMenu={(event) => openContextMenu(event, fileTarget(detail, file))}
-                                                      onKeyDown={(event) => openKeyboardMenu(event, fileTarget(detail, file))}
-                                                    >
-                                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                                                        <div class="min-w-0">
-                                                          <button
-                                                            type="button"
-                                                            class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
-                                                            title={secondaryPath}
-                                                            onClick={(event) => {
-                                                              event.stopPropagation();
-                                                              openDiffDialog(file);
-                                                            }}
-                                                          >
-                                                            {primaryPath}
-                                                          </button>
-                                                          <Show when={secondaryPath !== primaryPath}>
-                                                            <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={secondaryPath}>{secondaryPath}</div>
-                                                          </Show>
-                                                        </div>
-                                                      </td>
-                                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={file.changeType} /></td>
-                                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={file.additions} deletions={file.deletions} /></td>
-                                                      <td class={gitChangedFilesStickyCellClass(active())}>
-                                                        <GitChangedFilesActionButton
-                                                          onClick={(event) => {
-                                                            event.stopPropagation();
-                                                            openDiffDialog(file);
-                                                          }}
-                                                        >
-                                                          {i18n.t('files.menuViewDiff')}
-                                                        </GitChangedFilesActionButton>
-                                                      </td>
-                                                    </tr>
-                                                  );
-                                                }}
-                                              />
+                                            <div class="flex h-64 min-h-0 flex-col overflow-hidden rounded-md border">
+                                              <GitWorkspaceTree items={detailFiles()} section="changes" directoryPath="" generation={selectedStash()?.id}
+                                                itemKey={gitDiffEntryIdentity} selectedKey={diffDialogOpen() && diffDialogStashId() === selectedStash()?.id ? gitDiffEntryIdentity(diffDialogItem()) : ''}
+                                                onSelect={openDiffDialog}
+                                                onContextMenu={(event, file) => openContextMenu(event, fileTarget(detail, file))}
+                                                onContextMenuKey={(event, file) => openKeyboardMenu(event, fileTarget(detail, file))} />
                                             </div>
                                           </Show>
                                         </div>
@@ -1043,7 +961,25 @@ export function GitStashWindow(props: GitStashWindowProps) {
           stackId="git-stash-diff"
         />
         <GitEntityContextMenu controller={contextMenu} items={contextMenuItems} />
-      </PreviewWindow>
+  </>);
+
+  return (
+    <>
+      <Show when={props.embedded} fallback={      <PreviewWindow
+        open={props.open}
+        onOpenChange={props.onOpenChange}
+        title={`${i18n.t('git.common.stashes')} · ${repoName()}`}
+        stackId="git-stash"
+        persistenceKey="git-stash-window"
+        defaultSize={{ width: 1040, height: 760 }}
+        minSize={{ width: 720, height: 520 }}
+        floatingClass="bg-background"
+        mobileClass="bg-background"
+        surfaceRef={setFloatingSurfaceEl}
+      >
+<Content /></PreviewWindow>}>
+        <div ref={setFloatingSurfaceEl} class="h-full min-h-0" data-git-stash-embedded><Content /></div>
+      </Show>
 
       <GitStashDeleteConfirmDialog
         open={deleteReviewOpen()}

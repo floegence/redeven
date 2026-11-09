@@ -53,11 +53,11 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitBranchTone({ current: false, kind: 'remote' } as any)).toBe('violet');
     expect(gitBranchTone({ current: false, kind: 'local' } as any)).toBe('violet');
 
-    expect(gitChangePathClass('modified')).toBe('text-[var(--redeven-status-info-foreground)]');
+    expect(gitChangePathClass('modified')).toBe('text-[var(--redeven-status-warning-foreground)]');
     expect(gitChangePathClass('conflicted')).toBe('text-[var(--redeven-status-error-foreground)]');
     expect(gitChangePathClass('deleted')).toBe('text-[var(--redeven-status-error-foreground)]');
     expect(gitChangePathClass('added')).toBe('text-[var(--redeven-status-success-foreground)]');
-    expect(gitChangePathClass('renamed')).toBe('text-[var(--redeven-categorical-6)]');
+    expect(gitChangePathClass('renamed')).toBe('text-[var(--redeven-status-info-foreground)]');
     expect(gitChangePathClass('copied')).toBe('text-primary');
   });
 

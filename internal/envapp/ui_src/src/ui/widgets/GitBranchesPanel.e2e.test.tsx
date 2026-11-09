@@ -255,6 +255,14 @@ async function revealTooltipForButton(
   return document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
 }
 
+function expandFileTree(host: ParentNode) {
+  for (let depth = 0; depth < 16; depth++) {
+    const closed = [...host.querySelectorAll<HTMLElement>('[role="treeitem"][aria-expanded="false"]')];
+    if (!closed.length) break;
+    closed.forEach(row => row.querySelector<HTMLButtonElement>('[data-git-tree-select]')?.click());
+  }
+}
+
 describe("GitBranchesPanel interactions", () => {
   it("keeps a branch status failure local without retrying indefinitely", async () => {
     const host = document.createElement("div");
@@ -453,9 +461,7 @@ describe("GitBranchesPanel interactions", () => {
       );
       expect(controlText(host)).toContain("Changes");
       expect(controlText(host)).toContain("Staged");
-      expect(controlText(host)).toContain("Unstaged");
-      expect(controlText(host)).toContain("Untracked");
-      expect(controlText(host)).toContain("View Diff");
+      expect(host.querySelector('[role="tree"]')).toBeTruthy();
       expect(controlText(host)).not.toContain(
         "Select another branch to merge into the current branch.",
       );
@@ -896,7 +902,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(controlText(host)).toContain("src/linked.ts");
       expect(controlText(host)).toContain("scratch.txt");
       expect(controlText(host)).toContain("Changes");
-      expect(controlText(host)).toContain("View Diff");
+      expect(host.querySelector('[role="tree"]')).toBeTruthy();
 
       const changesButton = Array.from(host.querySelectorAll("button")).find(
         (node) => controlText(node)?.includes("Changes"),
@@ -989,10 +995,9 @@ describe("GitBranchesPanel interactions", () => {
       await setBranchHeaderWidth(host, 1040);
 
       expect(controlText(host)).toContain("internal");
-      expect(controlText(host)).toContain("Folder");
-      expect(controlText(host)).toContain("8 files");
-      expect(controlText(host)).toContain("Open Folder");
-      expect(host.querySelectorAll("tbody tr")).toHaveLength(1);
+      expect(host.querySelector('[data-git-tree-path="internal"]')?.getAttribute("aria-expanded")).toBe("false");
+      expect(controlText(host)).not.toContain("8 files");
+      expect(host.querySelectorAll('[role="treeitem"]')).toHaveLength(1);
       expect(controlText(host)).not.toContain(
         "No pending files are available in this worktree.",
       );
@@ -1098,7 +1103,7 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
-  it("renders branch-status rows as a table at narrow measured widths", async () => {
+  it("renders the branch-status tree at narrow measured widths", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -1176,19 +1181,16 @@ describe("GitBranchesPanel interactions", () => {
       const header = await setBranchHeaderWidth(host, 420);
 
       expect(header.dataset.gitBranchHeaderLayout).toBe("compact");
-      expect(host.querySelectorAll("tbody tr").length).toBeGreaterThan(0);
+      expect(host.querySelectorAll('[role="treeitem"]').length).toBeGreaterThan(0);
       expect(controlText(host)).toContain("internal");
-      expect(controlText(host)).toContain("Folder");
-      expect(controlText(host)).toContain("Unstaged");
-      expect(controlText(host)).toContain("Untracked");
-      expect(controlText(host)).toContain("8 files");
-      expect(controlText(host)).toContain("Open Folder");
+      expect(host.querySelector('[data-git-tree-path="internal"]')?.getAttribute("aria-expanded")).toBe("false");
+      expect(controlText(host)).not.toContain("8 files");
     } finally {
       dispose();
     }
   });
 
-  it("drills into branch-status change directories and lets breadcrumbs navigate back out", async () => {
+  it("expands branch-status directories without replacing root scope and reuses loaded pages", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -1331,9 +1333,7 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       await setBranchHeaderWidth(host, 1040);
 
-      const openFolderButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => controlText(node)?.trim() === "Open Folder",
-      ) as HTMLButtonElement | undefined;
+      const openFolderButton = host.querySelector<HTMLButtonElement>('[data-git-tree-select="internal"]');
       expect(openFolderButton).toBeTruthy();
 
       openFolderButton!.dispatchEvent(
@@ -1348,26 +1348,15 @@ describe("GitBranchesPanel interactions", () => {
         offset: 0,
         limit: 200,
       });
+      expandFileTree(host);
       expect(controlText(host)).toContain("EnvWorkbenchPage.tsx");
       expect(controlText(host)).toContain("redeven.css");
 
-      const rootBreadcrumb = Array.from(host.querySelectorAll("button")).find(
-        (node) => controlText(node)?.trim() === "repo-linked",
-      ) as HTMLButtonElement | undefined;
-      expect(rootBreadcrumb).toBeTruthy();
-
-      rootBreadcrumb!.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      await flush();
-
-      expect(mockListWorkspacePage).toHaveBeenNthCalledWith(3, {
-        repoRootPath: "/workspace/repo-linked",
-        section: "changes",
-        offset: 0,
-        limit: 200,
-      });
-      expect(controlText(host)).toContain("Open Folder");
+      openFolderButton!.click();
+      expect(host.querySelector('[data-git-tree-select$="EnvWorkbenchPage.tsx"]')).toBeNull();
+      openFolderButton!.click(); await flush();
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(host.querySelector('[data-git-tree-select$="EnvWorkbenchPage.tsx"]')).not.toBeNull();
     } finally {
       dispose();
     }
@@ -3543,7 +3532,8 @@ describe("GitBranchesPanel interactions", () => {
 
       resolveRefresh(refreshedPage);
       await flush();
-      expect(controlText(host)).toContain("src/config.ts");
+      expandFileTree(host);
+      expect(host.querySelector('[data-git-tree-select="src/config.ts"]')).toBeTruthy();
     } finally {
       dispose();
     }
@@ -3971,7 +3961,7 @@ describe("GitBranchesPanel interactions", () => {
       ) as HTMLElement | null;
       expect(inlineFiles).toBeTruthy();
       expect(inlineFiles?.className).not.toContain("rounded");
-      expect(inlineFiles?.querySelector("table")).toBeTruthy();
+      expect(inlineFiles?.querySelector('[role="tree"]')).toBeTruthy();
       const askFlowerButton = historyPanel!.querySelector(
         'button[aria-label="Ask Flower"]',
       ) as HTMLButtonElement | null;
@@ -4017,9 +4007,8 @@ describe("GitBranchesPanel interactions", () => {
         ],
       });
 
-      const diffButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => controlText(node)?.includes("View Diff"),
-      ) as HTMLButtonElement | undefined;
+      expandFileTree(host);
+      const diffButton = host.querySelector<HTMLButtonElement>('[role="treeitem"]:not([aria-expanded]) [data-git-tree-select]');
       expect(diffButton).toBeTruthy();
       diffButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
@@ -4114,9 +4103,8 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       await setBranchHeaderWidth(host, 1040);
 
-      const diffButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => controlText(node)?.includes("View Diff"),
-      ) as HTMLButtonElement | undefined;
+      expandFileTree(host);
+      const diffButton = host.querySelector<HTMLButtonElement>('[role="treeitem"]:not([aria-expanded]) [data-git-tree-select]');
       expect(diffButton).toBeTruthy();
 
       diffButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -4227,11 +4215,7 @@ describe("GitBranchesPanel interactions", () => {
       );
       expect(closeButton?.className).not.toContain("hover:bg-muted/80");
 
-      const changedFilesScrollRegion = Array.from(
-        dialogRoot?.querySelectorAll("div") ?? [],
-      ).find((node) =>
-        node.className.includes("min-h-0 flex-1 overflow-auto"),
-      ) as HTMLDivElement | undefined;
+      const changedFilesScrollRegion = dialogRoot?.querySelector("[data-git-tree-scroll]");
       expect(changedFilesScrollRegion).toBeTruthy();
     } finally {
       dispose();
@@ -4306,9 +4290,8 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
-      const statusRow = Array.from(host.querySelectorAll("tbody tr")).find((row) =>
-        controlText(row)?.includes("src/app.ts"),
-      ) as HTMLTableRowElement | undefined;
+      expandFileTree(host);
+      const statusRow = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/app.ts"]');
       expect(statusRow).toBeTruthy();
       statusRow!.dispatchEvent(new MouseEvent("contextmenu", {
         bubbles: true,
@@ -4563,8 +4546,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
-      const row = Array.from(host.querySelectorAll<HTMLTableRowElement>('tbody tr'))
-        .find((candidate) => controlText(candidate)?.includes('internal'));
+      const row = host.querySelector<HTMLButtonElement>('[data-git-tree-select="internal"]');
       expect(row).toBeTruthy();
       const openMenu = async () => {
         row!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
@@ -4656,7 +4638,8 @@ describe("GitBranchesPanel interactions", () => {
       const compare = host.querySelector('button[aria-label="Compare"]') as HTMLButtonElement | null;
       compare!.click();
       await flush();
-      const renamedRow = Array.from(document.body.querySelectorAll('tbody tr')).find((row) => controlText(row)?.includes('src/new.ts')) as HTMLTableRowElement | undefined;
+      expandFileTree(document.body);
+      const renamedRow = document.body.querySelector<HTMLButtonElement>('[data-git-tree-select="src/new.ts"]');
       expect(renamedRow).toBeTruthy();
       renamedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
@@ -4680,7 +4663,8 @@ describe("GitBranchesPanel interactions", () => {
         relativePath: 'src/new.ts',
       }));
 
-      const deletedRow = Array.from(document.body.querySelectorAll('tbody tr')).find((row) => controlText(row)?.includes('src/deleted.ts')) as HTMLTableRowElement | undefined;
+      expandFileTree(document.body);
+      const deletedRow = document.body.querySelector<HTMLButtonElement>('[data-git-tree-select="src/deleted.ts"]');
       deletedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
       expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).some((item) => controlText(item)?.includes('Preview Current File'))).toBe(false);
@@ -4742,7 +4726,8 @@ describe("GitBranchesPanel interactions", () => {
         files: [expect.objectContaining({ newPath: 'src/new.ts' }), expect.objectContaining({ path: 'src/deleted.ts' })],
       }), { x: 0, y: 0 });
 
-      const renamedRow = Array.from(host.querySelectorAll('tr[tabindex="0"]')).find((row) => controlText(row)?.includes('src/new.ts')) as HTMLTableRowElement | undefined;
+      expandFileTree(host);
+      const renamedRow = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/new.ts"]');
       expect(renamedRow).toBeTruthy();
       renamedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();
@@ -4750,7 +4735,8 @@ describe("GitBranchesPanel interactions", () => {
       actions.find((item) => controlText(item)?.includes('Preview Current File'))!.click();
       expect(onPreviewCurrentFile).toHaveBeenCalledWith(expect.objectContaining({ absolutePath: '/workspace/repo-linked/src/new.ts' }));
 
-      const deletedRow = Array.from(host.querySelectorAll('tr[tabindex="0"]')).find((row) => controlText(row)?.includes('src/deleted.ts')) as HTMLTableRowElement | undefined;
+      expandFileTree(host);
+      const deletedRow = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/deleted.ts"]');
       expect(deletedRow).toBeTruthy();
       deletedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
       await flush();

@@ -85,7 +85,9 @@ export function createGitEntityContextMenuController<TTarget>(
 
   const openFromContextMenu = (event: MouseEvent, target: TTarget) => {
     event.preventDefault();
-    open({ x: event.clientX, y: event.clientY }, target, triggerElement(event));
+    const element = triggerElement(event);
+    const position = event.type === 'click' && event.detail === 0 ? keyboardMenuPosition(element) : { x: event.clientX, y: event.clientY };
+    open(position, target, element);
   };
 
   const openFromKeyboard = (event: KeyboardEvent, target: TTarget) => {

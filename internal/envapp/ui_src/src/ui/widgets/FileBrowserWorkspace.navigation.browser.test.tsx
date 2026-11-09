@@ -72,11 +72,11 @@ describe('Files Activity navigation continuity', () => {
       await expect.poll(() => host.querySelector('[data-floe-drawer-side="left"]')).toBeTruthy();
     }
     const sidebar = host.querySelector<HTMLElement>('aside')!;
-    const modeSwitch = sidebar.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
-    expect(modeSwitch.getBoundingClientRect().top - sidebar.getBoundingClientRect().top).toBeLessThanOrEqual(10);
+    const modeSwitch = host.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
+    expect(modeSwitch.getBoundingClientRect().top - host.getBoundingClientRect().top).toBeLessThanOrEqual(10);
     expect(Array.from(sidebar.querySelectorAll('span')).filter(element =>
       element.textContent === 'Files' && element.checkVisibility({ visibilityProperty: true }),
-    )).toHaveLength(1);
+    )).toHaveLength(width === 1000 ? 1 : 0);
     expect(host.querySelector('[data-filesystem-root-write-toggle]')).toBeNull();
     for (const [id, mode, path] of [['home', 'RW', '/workspace'], ['computer', 'RW', '/'], ['shared', 'RO', '/shared']]) {
       const row = host.querySelector<HTMLElement>(`[data-filesystem-root-id="${id}"]`)!;
@@ -210,7 +210,7 @@ describe('Files Activity navigation continuity', () => {
 });
 
 
-it('keeps mobile dismissal beside the mode switch without shifting file content', async () => {
+it('keeps the persistent mode switch and mobile dismissal without shifting file content', async () => {
   await page.viewport(390, 850);
   const host = document.createElement('div');
   host.style.cssText = 'width:390px;height:600px';
@@ -223,14 +223,12 @@ it('keeps mobile dismissal beside the mode switch without shifting file content'
   </LayoutProvider></FloeConfigProvider>, host));
   await paint();
   const sidebar = host.querySelector<HTMLElement>('aside')!;
-  const modeSwitch = sidebar.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
+  const modeSwitch = host.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
   const close = sidebar.querySelector<HTMLButtonElement>('button[aria-label="Close sidebar"]')!;
   expect(close).toBeTruthy();
   const switchBounds = modeSwitch.getBoundingClientRect();
-  const closeBounds = close.getBoundingClientRect();
-  expect(switchBounds.top - sidebar.getBoundingClientRect().top).toBeLessThanOrEqual(10);
-  expect(closeBounds.left).toBeGreaterThanOrEqual(switchBounds.right);
-  expect(Math.abs(closeBounds.top + closeBounds.height / 2 - switchBounds.top - switchBounds.height / 2)).toBeLessThan(1);
+  expect(switchBounds.top - host.getBoundingClientRect().top).toBeLessThanOrEqual(10);
+  expect(modeSwitch.closest('[data-browser-persistent-mode]')).not.toBeNull();
   const content = host.querySelector<HTMLElement>('[data-testid="file-browser-content-scroll-region"]')!;
   const before = content.getBoundingClientRect().toJSON();
   await userEvent.click(close);
@@ -284,4 +282,26 @@ describe('Files desktop adaptive navigation', () => {
     expect(filter.value).toBe('retained filter');
     expect(tree.scrollTop).toBe(280);
   });
+});
+
+it('scrolls deep folder names horizontally without moving the Files/Git tabs', async () => {
+  await page.viewport(1280, 850);
+  const host = document.createElement('div'); document.body.append(host);
+  const longName = 'very-long-directory-name-'.repeat(18);
+  const path = `/workspace/${longName}`;
+  const files: FileItem[] = [{ id: '/workspace', name: 'workspace', path: '/workspace', type: 'folder', children: [{ id: path, name: longName, path, type: 'folder' }] }];
+  cleanups.push(render(() => <FloeConfigProvider><LayoutProvider><div style={{ width: '1000px', height: '560px' }}>
+    <FileBrowserWorkspace mode="files" onModeChange={() => {}} files={files} currentPath={path} initialPath={path} instanceId="horizontal-tree" resetKey={0} width={280} open />
+  </div></LayoutProvider></FloeConfigProvider>, host));
+  await paint();
+  const viewport = host.querySelector<HTMLElement>('[data-testid="file-tree-scroll-region"]')!;
+  const tabs = host.querySelector<HTMLElement>('[data-browser-mode-switch]')!;
+  const before = tabs.getBoundingClientRect();
+  expect(viewport.scrollWidth).toBeGreaterThan(viewport.clientWidth);
+  viewport.scrollLeft = 200; await paint();
+  expect(viewport.scrollLeft).toBe(200);
+  expect(tabs.getBoundingClientRect().x).toBe(before.x);
+  expect(tabs.getBoundingClientRect().width).toBe(before.width);
+  expect(host.scrollWidth).toBe(host.clientWidth);
+  expect(host.querySelector('[aria-label="Scroll file tree horizontally"]')).not.toBeNull();
 });

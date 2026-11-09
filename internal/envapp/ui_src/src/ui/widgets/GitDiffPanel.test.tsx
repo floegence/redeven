@@ -267,7 +267,7 @@ describe('GitDiffPanel request ownership', () => {
     await flush();
     expect(requests).toHaveLength(4);
     expect(host.textContent).not.toContain('closedPatch');
-    expect(host.querySelector('button[aria-pressed="true"]')?.textContent).toBe('Full Context');
+    expect(host.querySelector('.git-diff-panel__context button[aria-pressed="true"]')?.textContent).toBe('Full Context');
     disposePanel!(); disposePanel = undefined;
     requests[2].resolve(response('disposedPatch'));
     requests[3].reject(new Error('disposed request'));

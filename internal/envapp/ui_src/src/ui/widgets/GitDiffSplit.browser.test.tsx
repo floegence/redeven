@@ -23,7 +23,7 @@ vi.mock('../protocol/redeven_v1', async () => ({
 }));
 
 const files: GitSeededWorkspaceChange[] = Array.from({ length: 24 }, (_, index) => ({
-  section: 'unstaged', changeType: 'modified', path: `src/feature-${index}.ts`, displayPath: `src/feature-${index}.ts`,
+  section: 'unstaged', changeType: 'modified', path: `src/feature-${String(index).padStart(2, '0')}.ts`, displayPath: `src/feature-${String(index).padStart(2, '0')}.ts`,
   additions: 70, deletions: 1,
   patchText: `@@ -1,1 +1,70 @@\n-old${index}\n` + Array.from({ length: 70 }, (_, line) => `+const file${index}Line${line} = ${line};`).join('\n'),
 }));
@@ -59,16 +59,17 @@ describe('Git inline diff browsing', () => {
     dispose = render(() => <LayoutProvider><NotificationProvider>
       <GitHistoryBrowser currentPath="/workspace/repo" repoInfo={{ available: true, repoRootPath: '/workspace/repo' }} selectedCommitHash="abc123" />
     </NotificationProvider></LayoutProvider>, host);
-    await expect.poll(() => host.querySelectorAll('[role="option"]').length).toBe(24);
-    const rows = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="option"]'));
+    await expect.poll(() => host.querySelector('[data-git-tree-select="src"]')).not.toBeNull();
+    host.querySelector<HTMLButtonElement>('[data-git-tree-select="src"]')!.click();
+    const rows = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="treeitem"]:not([aria-expanded]) [data-git-tree-select]'));
     const before = rows[1].getBoundingClientRect();
-    expect(before.height).toBe(30);
-    expect(rows[0].querySelector('[title="src/feature-0.ts"]')).not.toBeNull();
-    expect(rows[0].textContent).toContain('Modified');
+    expect(before.height).toBeLessThanOrEqual(32);
+    expect(rows[0].title).toBe('src/feature-00.ts');
+    expect(rows[0].closest('[role="treeitem"]')?.textContent).toContain('Modified');
     rows[0].focus();
-    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard('{ArrowDown}{Enter}');
     await expect.poll(() => host.querySelector('[data-git-diff-panel]')?.textContent).toContain('file1Line0');
-    expect(rows[1].getAttribute('aria-selected')).toBe('true');
+    expect(rows[1].closest('[role="treeitem"]')?.getAttribute('aria-selected')).toBe('true');
     expect(rows[1].getBoundingClientRect().top).toBe(before.top);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
@@ -79,14 +80,15 @@ describe('Git inline diff browsing', () => {
     await expect.poll(() => host.querySelector('[data-git-diff-panel]')?.textContent).toContain('file0Line0');
     const rail = host.querySelector<HTMLElement>('.git-diff-split__files')!;
     const detail = host.querySelector<HTMLElement>('.git-diff-split__detail')!;
-    const rows = Array.from(rail.querySelectorAll<HTMLElement>('tr[aria-selected]'));
-    expect(Math.max(...rows.map((row) => row.getBoundingClientRect().height))).toBeLessThanOrEqual(30);
-    expect(rows.filter((row) => row.getBoundingClientRect().bottom <= rail.getBoundingClientRect().bottom).length).toBeGreaterThanOrEqual(15);
+    rail.querySelector<HTMLButtonElement>('[data-git-tree-select="src"]')!.click();
+    const rows = Array.from(rail.querySelectorAll<HTMLElement>('[role="treeitem"]:not([aria-expanded])'));
+    expect(Math.max(...rows.map((row) => row.getBoundingClientRect().height))).toBeLessThanOrEqual(32);
+    expect(rows.filter((row) => row.getBoundingClientRect().bottom <= rail.getBoundingClientRect().bottom).length).toBeGreaterThanOrEqual(8);
     expect(rail.getBoundingClientRect().right).toBeLessThanOrEqual(detail.getBoundingClientRect().left + 1);
     expect(host.scrollWidth).toBe(host.clientWidth);
-    const first = rail.querySelector<HTMLButtonElement>('td:first-child button')!;
+    const first = rows[0].querySelector<HTMLButtonElement>('[data-git-tree-select]')!;
     first.focus();
-    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard('{ArrowDown}{Enter}');
     await expect.poll(() => detail.textContent).toContain('file1Line0');
     expect(detail.textContent).not.toContain('file0Line0');
     expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -95,9 +97,9 @@ describe('Git inline diff browsing', () => {
     expect(scrollers[0].getBoundingClientRect().bottom).toBeLessThanOrEqual(detail.getBoundingClientRect().bottom + 1);
     scrollers[0].scrollTop = 150;
     expect(scrollers[0].scrollTop).toBeGreaterThan(0);
-    setItems(files.filter((file) => file.path !== 'src/feature-1.ts'));
+    setItems(files.filter((file) => file.path !== 'src/feature-01.ts'));
     await expect.poll(() => detail.textContent).toContain('file0Line0');
-    expect(rail.querySelector('[aria-selected="true"]')?.textContent).toContain('feature-0.ts');
+    expect(rail.querySelector('[aria-selected="true"]')?.textContent).toContain('feature-00.ts');
     expect(scrollers[0].scrollTop).toBe(0);
   });
 
@@ -109,9 +111,10 @@ describe('Git inline diff browsing', () => {
     const detail = host.querySelector<HTMLElement>('.git-diff-split__detail')!;
     expect(detail.getBoundingClientRect().height).toBe(0);
     expect(rail.clientHeight).toBeGreaterThan(400);
-    const rows = [...rail.querySelectorAll<HTMLElement>('tr[aria-selected]')];
-    expect(rows[0].getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-    await userEvent.click(rows[1].querySelector('td:first-child button')!);
+    rail.querySelector<HTMLButtonElement>('[data-git-tree-select="src"]')!.click();
+    const rows = [...rail.querySelectorAll<HTMLElement>('[role="treeitem"]:not([aria-expanded])')];
+    expect(rows[0].getBoundingClientRect().height).toBe(24);
+    await userEvent.click(rows[1].querySelector('[data-git-tree-select]')!);
     await expect.poll(() => detail.getBoundingClientRect().height).toBeGreaterThan(400);
     expect(rail.getBoundingClientRect().height).toBe(0);
     expect(detail.textContent).toContain('file1Line0');
@@ -120,8 +123,8 @@ describe('Git inline diff browsing', () => {
     await userEvent.click(back);
     expect(rail.clientHeight).toBeGreaterThan(400);
     expect(host.querySelector('.git-diff-split__detail')).toBe(detail);
-    expect(rows[1].getAttribute('aria-selected')).toBe('true');
-    expect(document.activeElement).toBe(rows[1].querySelector('td:first-child button'));
+    expect(rows[1].closest('[role="treeitem"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(rows[1].querySelector('[data-git-tree-select]'));
     host.style.width = '900px';
     await expect.poll(() => detail.clientHeight).toBeGreaterThan(400);
     expect(rail.getBoundingClientRect().right).toBeLessThanOrEqual(detail.getBoundingClientRect().left + 1);
@@ -137,10 +140,11 @@ describe('Git inline diff browsing', () => {
       <GitHistoryBrowser currentPath="/workspace/repo" repoInfo={{ available: true, repoRootPath: '/workspace/repo' }} selectedCommitHash="abc123"
         onSwitchDetached={() => {}} onAskFlower={() => {}} />
     </NotificationProvider></LayoutProvider>, host);
-    await expect.poll(() => host.querySelectorAll('[role="option"]').length).toBe(24);
+    await expect.poll(() => host.querySelector('[data-git-tree-select="src"]')).not.toBeNull();
+    host.querySelector<HTMLButtonElement>('[data-git-tree-select="src"]')!.click();
     const header = host.querySelector<HTMLElement>('.git-commit-overview')!;
     expect(header.getBoundingClientRect().height).toBeLessThanOrEqual(56);
-    const row = host.querySelectorAll<HTMLButtonElement>('[role="option"]')[1];
+    const row = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/feature-01.ts"]')!;
     await userEvent.click(row, { button: 'right' });
     await userEvent.click(page.getByRole('menuitem', { name: 'View Diff', exact: true }));
     const detail = host.querySelector<HTMLElement>('.git-diff-split__detail')!;
@@ -158,11 +162,12 @@ describe('Git inline diff browsing', () => {
     await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
     const { host } = mount(1100);
     await expect.poll(() => host.querySelector('.git-patch-viewer__viewport')).not.toBeNull();
-    const row = host.querySelector<HTMLElement>('tr[aria-selected]')!;
+    host.querySelector<HTMLButtonElement>('[data-git-tree-select="src"]')!.click();
+    const row = host.querySelector<HTMLElement>('[role="treeitem"]:not([aria-expanded])')!;
     expect(getComputedStyle(row).transitionDuration).toBe('0s');
     expect(getComputedStyle(host.querySelector('.git-patch-viewer__viewport')!).animationName).toBe('none');
     row.querySelector('button')!.focus();
-    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard('{ArrowDown}{Enter}');
     await expect.poll(() => host.querySelector('[data-git-diff-panel]')?.textContent).toContain('file1Line0');
   });
 

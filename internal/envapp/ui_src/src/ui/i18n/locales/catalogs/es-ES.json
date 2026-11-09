@@ -2354,6 +2354,17 @@
       "worktreeReviewLimit": "El árbol de trabajo vinculado supera los límites de revisión para eliminarlo o no se pudo inspeccionar de forma segura. Detén los procesos que lo modifican o mueve los archivos grandes de compilación fuera del árbol y vuelve a revisarlo.",
       "outcomeUnknown": "No se pudo confirmar el resultado de la operación. Actualiza el repositorio antes de volver a intentarlo.",
       "requestRejected": "Git ha rechazado esta solicitud. Revisa el estado del repositorio y la operación seleccionada."
+    },
+    "tree": {
+      "horizontalScroll": "Desplazar el árbol de archivos horizontalmente",
+      "collapseAll": "Contraer todas las carpetas",
+      "loadFailed": "No se pudo cargar esta carpeta."
+    },
+    "review": {
+      "diffLayout": "Diseño de diferencias",
+      "unified": "Unificado",
+      "split": "En paralelo",
+      "all": "Todo"
     }
   },
   "terminal": {

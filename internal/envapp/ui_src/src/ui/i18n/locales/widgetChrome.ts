@@ -207,6 +207,8 @@ export const enUSWidgetChrome = defineDictionary({
     },
   },
   git: {
+    review: { diffLayout: 'Diff layout', unified: 'Unified', split: 'Side by Side', all: 'All' },
+    tree: { horizontalScroll: 'Scroll file tree horizontally', collapseAll: 'Collapse all folders', loadFailed: 'Could not load this folder.' },
     errors: {
       permissionDenied: "You do not have permission to perform this Git operation.",
       scopeChanged: "The repository state changed. Refresh and review the selection again.",

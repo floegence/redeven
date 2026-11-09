@@ -18,7 +18,7 @@ import {
   type ContextMenuItem,
   type FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
-import { Button, SegmentedControl, formatPickerPath, parsePickerPath, type SurfaceFloatingBoundary } from '@floegence/floe-webapp-core/ui';
+import { Button, PersistentHorizontalScrollbar, SegmentedControl, formatPickerPath, parsePickerPath, type SurfaceFloatingBoundary } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { FileBrowserPathControl, type FileBrowserPathControlMode } from './FileBrowserPathControl';
 import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
@@ -46,6 +46,7 @@ export type FileBrowserPathSubmitResult =
   | { status: 'error'; message: string; descriptionId?: string };
 
 export interface FileBrowserWorkspaceProps {
+  modeSwitcherMount?: (element: HTMLDivElement) => void;
   registerPageStateReader?: (read: () => Readonly<Record<string, unknown>>) => () => void;
   mode: GitHistoryMode;
   onModeChange: (mode: GitHistoryMode) => void;
@@ -308,6 +309,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   });
   let contentScrollEl: HTMLDivElement | null = null;
   let treeScrollEl: HTMLDivElement | null = null;
+  const [treeViewport, setTreeViewport] = createSignal<HTMLDivElement>();
   let workspaceRootEl: HTMLDivElement | null = null;
   let filterInputEl: HTMLInputElement | null = null;
   let pathInputEl: HTMLInputElement | null = null;
@@ -457,6 +459,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
 
   return (
     <BrowserWorkspaceShell
+      persistentModeSwitcher
       rootRef={setMenuBoundaryElement}
       title={i18n.t('files.title')}
       width={props.width}
@@ -465,7 +468,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       onResize={props.onResize}
       onClose={props.onClose}
       sidebarBodyClass="overflow-hidden"
-      modeSwitcher={(
+      modeSwitcher={props.modeSwitcherMount ? <div ref={props.modeSwitcherMount} /> : (
         <GitHistoryModeSwitch
           mode={props.mode}
           onChange={props.onModeChange}
@@ -496,11 +499,12 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
           <div
             ref={(el) => {
               treeScrollEl = el;
+              setTreeViewport(el);
             }}
             {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
             data-floe-reload-omit
             data-testid="file-tree-scroll-region"
-            class="min-h-0 flex-1 overflow-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
+            class="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]"
           >
             <Show when={!props.initializing}>
               <FileBrowserSidebarTree
@@ -509,10 +513,11 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
                 sidebarOpen={props.open}
                 scrollContainer={() => treeScrollEl}
                 pendingNavigationPath={props.pendingNavigationPath}
-                class="min-h-full"
+                class="min-h-full min-w-full w-max"
               />
             </Show>
           </div>
+          <PersistentHorizontalScrollbar {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} viewport={treeViewport()} aria-label={i18n.t('git.tree.horizontalScroll')} />
         </div>
       )}
       content={(navigation) => (

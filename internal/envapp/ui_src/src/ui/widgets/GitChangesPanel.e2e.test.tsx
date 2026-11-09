@@ -175,6 +175,14 @@ function findGitTitleDot(container: ParentNode, label: string): HTMLSpanElement 
   return labelNode?.parentElement?.querySelector('span[aria-hidden="true"]') as HTMLSpanElement | null;
 }
 
+function expandTree(host: HTMLElement) {
+  for (let depth = 0; depth < 16; depth++) {
+    const closed = Array.from(host.querySelectorAll<HTMLElement>('[role="treeitem"][aria-expanded="false"]'));
+    if (!closed.length) break;
+    closed.forEach(row => row.querySelector<HTMLButtonElement>('[data-git-tree-select]')?.click());
+  }
+}
+
 describe('GitChangesPanel interactions', () => {
   it('opens file actions without bubbling and preserves the right-click target snapshot', async () => {
     const host = document.createElement('div');
@@ -210,7 +218,8 @@ describe('GitChangesPanel interactions', () => {
     });
 
     try {
-      const row = host.querySelector('tr[data-git-changes-context-target="item"]');
+      expandTree(host);
+      const row = host.querySelector('[data-git-tree-path="src/original.ts"] > [data-git-changes-context-target="item"]');
       expect(row).toBeTruthy();
       const event = openContextMenu(row!);
       expect(event.defaultPrevented).toBe(true);
@@ -290,7 +299,8 @@ describe('GitChangesPanel interactions', () => {
     });
 
     try {
-      const rows = host.querySelectorAll('tr[data-git-changes-context-target="item"]');
+      expandTree(host);
+      const rows = ['src/new.ts', 'src/deleted.ts'].map(path => host.querySelector(`[data-git-tree-path="${path}"] > [data-git-changes-context-target="item"]`));
       expect(rows).toHaveLength(2);
 
       openContextMenu(rows[0]!);
@@ -356,7 +366,8 @@ describe('GitChangesPanel interactions', () => {
     });
 
     try {
-      const row = host.querySelector('tr[data-git-changes-context-target="item"]');
+      expandTree(host);
+      const row = host.querySelector('[data-git-tree-path="src/ui"] > [data-git-changes-context-target="item"]');
       expect(row).toBeTruthy();
 
       openContextMenu(row!);
@@ -497,7 +508,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('renders only the selected section as a compact file table', () => {
+  it('renders the selected section as a collapsed tree with status and exact paths', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -530,11 +541,12 @@ describe('GitChangesPanel interactions', () => {
 
     try {
       expect(host.textContent).toContain('Changes');
-      expect(host.textContent).toContain('Path');
-      expect(host.textContent).toContain('Status');
-      expect(host.textContent).toContain('Modified');
+      expect(host.querySelector('[data-git-tree-path="src"]')?.getAttribute('aria-expanded')).toBe('false');
+      expect(host.querySelector('[data-git-tree-select="src/next.ts"]')).toBeNull();
+      expandTree(host);
+      expect(host.querySelector('[data-git-tree-select="src/next.ts"]')?.getAttribute('title')).toBe('src/next.ts');
       expect(host.textContent).toContain('src/next.ts');
-      expect(host.textContent).toContain('+ Stage');
+      expect(host.querySelector('[aria-label="+ Stage"]')).toBeTruthy();
       expect(host.querySelector('[data-git-diff-panel]')).toBeTruthy();
       expect(host.textContent).not.toContain('Ready to Commit');
       expect(host.querySelector('tbody tr td:nth-child(2) .rounded-full')).toBeNull();
@@ -599,8 +611,8 @@ describe('GitChangesPanel interactions', () => {
       expect(host.querySelector('button[aria-label="Ask Flower"]')).toBeTruthy();
       expect(host.querySelector('button[aria-label="Terminal"]')).toBeTruthy();
       expect(host.querySelector('button[aria-label="Files"]')).toBeTruthy();
-      expect(host.querySelector('button[aria-label="More actions"]')).toBeNull();
-      expect(host.textContent).toContain('Stage what you want to keep, then commit.');
+      expect(host.querySelector('[data-git-changes-header-density] button[aria-label="More actions"]')).toBeNull();
+      expect(host.textContent).not.toContain('Stage what you want to keep, then commit.');
     } finally {
       dispose();
     }
@@ -1122,7 +1134,8 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      const discardButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard...');
+      expandTree(host);
+      const discardButton = host.querySelector<HTMLButtonElement>('[data-git-tree-path="src/next.ts"] button[aria-label="Discard..."]');
       expect(discardButton).toBeTruthy();
       discardButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1655,10 +1668,10 @@ describe('GitChangesPanel interactions', () => {
     try {
       await setHeaderWidth(host, 960);
 
-      expect(host.textContent).toContain('Clean');
+      expect(host.querySelector('[data-git-changes-empty-section="changes"]')).toBeTruthy();
       expect(host.textContent).toContain('No pending changes');
       expect(Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stage All'))).toBeFalsy();
-      expect(Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Commit...'))).toBeFalsy();
+      expect(host.querySelector<HTMLButtonElement>('[data-git-commit-draft] button')?.disabled).toBe(true);
       expect(Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Discard All...'))).toBeFalsy();
       expect(host.querySelector('button[aria-label="Ask Flower"]')).toBeNull();
       expect(host.querySelector('button[aria-label="Terminal"]')).toBeTruthy();
@@ -1802,7 +1815,8 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('src/next.ts'));
+      expandTree(host);
+      const fileButton = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/next.ts"]');
       expect(fileButton).toBeTruthy();
       fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
@@ -1860,7 +1874,8 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('global-control-plane.md'));
+      expandTree(host);
+      const fileButton = host.querySelector<HTMLButtonElement>('[data-git-tree-select="spec/architecture/global-control-plane.md"]');
       expect(fileButton).toBeTruthy();
       fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();

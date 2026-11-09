@@ -146,6 +146,14 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+function expandFileTree(host: ParentNode) {
+  for (let depth = 0; depth < 16; depth++) {
+    const closed = [...host.querySelectorAll<HTMLElement>('[role="treeitem"][aria-expanded="false"]')];
+    if (!closed.length) break;
+    closed.forEach(row => row.querySelector<HTMLButtonElement>('[data-git-tree-select]')?.click());
+  }
+}
+
 describe('GitStashWindow', () => {
   it('exposes stable, path-aware context actions for stash entries, details, and files', async () => {
     const host = document.createElement('div');
@@ -256,7 +264,8 @@ describe('GitStashWindow', () => {
         files: expect.arrayContaining([expect.objectContaining({ path: 'src/old.ts' })]),
       }), { x: 0, y: 0 });
 
-      const renamedRow = host.querySelector<HTMLElement>('[data-git-stash-file="src/old.ts"]');
+      expandFileTree(host);
+      const renamedRow = host.querySelector<HTMLElement>('[data-git-tree-select="src/new.ts"]');
       await openKeyboardContextMenu(renamedRow, true);
       findContextMenuItem('Preview Current File', 'git.contextMenu.previewCurrentFile')!.click();
       await flush();
@@ -307,12 +316,12 @@ describe('GitStashWindow', () => {
         stashId: 'stash-1',
       });
 
-      const deletedRow = host.querySelector<HTMLElement>('[data-git-stash-file="src/deleted.ts"]');
+      const deletedRow = host.querySelector<HTMLElement>('[data-git-tree-select="src/deleted.ts"]');
       await openMouseContextMenu(deletedRow);
       expect(findContextMenuItem('Preview Current File', 'git.contextMenu.previewCurrentFile')).toBeUndefined();
       await closeContextMenu();
 
-      const inaccessibleRow = host.querySelector<HTMLElement>('[data-git-stash-file="../outside.ts"]');
+      const inaccessibleRow = host.querySelector<HTMLElement>('[data-git-tree-select="../outside.ts"]');
       await openMouseContextMenu(inaccessibleRow);
       const disabledPreview = findContextMenuItem('Preview Current File', 'git.contextMenu.previewCurrentFile');
       expect(disabledPreview?.getAttribute('aria-disabled')).toBe('true');
@@ -418,7 +427,8 @@ describe('GitStashWindow', () => {
       expect(controlText((await revealTooltipForButton(applyRemoveButton)))).toContain('Review and apply this stash, then remove it after confirmation.');
       expect(controlText((await revealTooltipForButton(deleteButton)))).toContain('Review permanent deletion without applying the stash changes.');
 
-      const selectedFileButton = Array.from(host.querySelectorAll('button')).find((node) => controlText(node)?.trim() === 'src/app.ts') as HTMLButtonElement | undefined;
+      expandFileTree(host);
+      const selectedFileButton = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/app.ts"]');
       expect(selectedFileButton).toBeTruthy();
       selectedFileButton!.click();
       await flush();
@@ -733,7 +743,8 @@ describe('GitStashWindow', () => {
       expect(mockGetDiffContent).not.toHaveBeenCalled();
       expect(controlText(host)).not.toContain('Select a stash file to inspect its patch.');
 
-      const viewDiffButton = Array.from(host.querySelectorAll('button')).find((node) => controlText(node)?.trim() === 'View Diff') as HTMLButtonElement | undefined;
+      expandFileTree(host);
+      const viewDiffButton = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/app.ts"]');
       expect(viewDiffButton).toBeTruthy();
       viewDiffButton!.click();
       await flush();

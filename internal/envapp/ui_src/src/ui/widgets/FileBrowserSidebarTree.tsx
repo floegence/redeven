@@ -6,15 +6,12 @@ import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/wor
 import { useI18n } from '../i18n';
 import { showDirectoryMenu, isMenuKey } from './fileBrowserDirectoryMenu';
 
-const MAX_VISIBLE_DEPTH = 5;
 const TREE_ROW_BASE_PADDING = 8;
 const TREE_ROW_DEPTH_STEP = 12;
 const FILE_TREE_ROW_CLASS = 'group flex items-center rounded-md py-0.5 text-xs font-normal';
 const FILE_TREE_ITEM_CLASS = 'flex min-w-0 flex-1 items-center gap-1 rounded py-0.5 pl-1 pr-1.5 text-left text-xs';
-const treeRowPadding = (depth: number) => `${TREE_ROW_BASE_PADDING + Math.min(depth, MAX_VISIBLE_DEPTH) * TREE_ROW_DEPTH_STEP}px`;
+const treeRowPadding = (depth: number) => `${TREE_ROW_BASE_PADDING + depth * TREE_ROW_DEPTH_STEP}px`;
 
-const FILE_TREE_TINY_BADGE_CLASS = 'rounded-full border border-border/40 bg-background/80 px-1 py-0 text-[8px] font-medium leading-4 text-muted-foreground';
-const FILE_TREE_TINY_ACCENT_BADGE_CLASS = 'rounded-full border border-primary/20 bg-primary/[0.05] px-1 py-0 text-[8px] font-medium leading-4 text-primary/80';
 function getPathSegments(path: string): string[] {
   return path.split('/').filter(Boolean);
 }
@@ -64,7 +61,6 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
   const hasChildren = createMemo(() => childFolders().length > 0);
   const isExpanded = createMemo(() => browser.isExpanded(props.item.path));
   const isCurrent = createMemo(() => browser.currentPath() === props.item.path);
-  const compactDepthOverflow = createMemo(() => Math.max(0, props.depth - MAX_VISIBLE_DEPTH));
   const rowPaddingLeft = createMemo(() => treeRowPadding(props.depth));
   const canAcceptDrop = createMemo(() => {
     if (!props.enableDragDrop || !drag) return false;
@@ -169,12 +165,8 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
               <FileItemIcon size={14} item={props.item} open class="h-3.5 w-3.5" />
             </Show>
           </span>
-          <span class="min-w-0 flex-1 truncate">{props.item.name}</span>
-          <Show when={compactDepthOverflow() > 0}>
-            <span class={compactDepthOverflow() > 0 ? FILE_TREE_TINY_ACCENT_BADGE_CLASS : FILE_TREE_TINY_BADGE_CLASS}>
-              +{compactDepthOverflow()}
-            </span>
-          </Show>
+          <span class="flex-1 whitespace-nowrap">{props.item.name}</span>
+
         </button>
       </div>
 

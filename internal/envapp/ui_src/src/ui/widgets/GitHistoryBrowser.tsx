@@ -1,6 +1,5 @@
 import { useGitDirectoryFavorites } from './gitDirectoryFavorites';
 import {
-  For,
   Show,
   createEffect,
   createMemo,
@@ -8,7 +7,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
-import { GitFileLabel } from "./GitFileLabel";
+import { GitWorkspaceTree } from "./GitWorkspaceTree";
 import { Calendar, Copy, Eye, FileText, Folder, GitBranch, Hash, Terminal, User } from "@floegence/floe-webapp-core/icons";
 import { Button } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
@@ -23,7 +22,6 @@ import {
 } from "../protocol/redeven_v1";
 import { FlowerIcon } from "../icons/FlowerIcon";
 import {
-  changeSecondaryPath,
   describeGitHead,
   exactGitPath,
   gitDiffEntryIdentity,
@@ -45,8 +43,6 @@ import { GitDiffPanel } from "./GitDiffPanel";
 import { GitDiffSplit, type GitDiffNavigation } from "./GitDiffSplit";
 import { GitCommitMessageDialog, normalizedGitCommitBody } from './GitCommitMessageDialog';
 import {
-  GitChangeMetrics,
-  GitChangeStatusPill,
   GitContentSkeleton,
   GitMetaPill,
   GitSkeletonBlock,
@@ -105,43 +101,9 @@ interface CommitFilesCompactListProps {
 }
 
 function CommitFilesCompactList(props: CommitFilesCompactListProps) {
-  const i18n = useI18n();
-  return (
-    <div
-      {...GIT_WORKBENCH_SCROLL_REGION_PROPS}
-      role="listbox"
-      aria-label={i18n.t('uiCopy.git.filesInCommit')}
-      class="git-table-frame min-h-0 flex-1 overflow-auto"
-      data-git-commit-files-list-layout="compact"
-    >
-      <For each={props.items}>
-        {(file) => {
-          const active = () => props.selectedKey === selectedFileIdentity(file);
-          const path = () => changeSecondaryPath(file);
-          const displayPath = () => file.newPath || file.path || file.displayPath || file.oldPath || '';
-          return (
-            <button
-              type="button"
-              role="option"
-              tabIndex={active() ? 0 : -1}
-              aria-selected={active()}
-              class={cn(
-                "git-browser-interactive git-file-row w-full cursor-pointer text-left focus-visible:outline-none",
-                active() && "git-browser-selection-row",
-              )}
-              onClick={() => props.onOpenDiff?.(file)}
-              onContextMenu={(event) => props.onContextMenu?.(event, file)}
-              onKeyDown={(event) => props.onKeyDown?.(event, file)}
-            >
-              <GitFileLabel path={displayPath()} secondaryPath={path()} />
-              <GitChangeStatusPill compact change={file.changeType} />
-              <GitChangeMetrics compact additions={file.additions} deletions={file.deletions} />
-            </button>
-          );
-        }}
-      </For>
-    </div>
-  );
+  return <GitWorkspaceTree items={props.items} section="changes" directoryPath="" generation={props.items}
+    selectedKey={props.selectedKey} itemKey={gitDiffEntryIdentity} onSelect={props.onOpenDiff}
+    onContextMenu={props.onContextMenu} onContextMenuKey={props.onKeyDown} />;
 }
 
 export function GitHistoryBrowser(props: GitHistoryBrowserProps) {

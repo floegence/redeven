@@ -15,6 +15,7 @@ import { useI18n } from '../i18n';
 const MOBILE_SIDEBAR_WIDTH = 288;
 
 export interface BrowserWorkspaceShellProps {
+  persistentModeSwitcher?: boolean;
   title?: JSX.Element;
   width?: number;
   open?: boolean;
@@ -42,6 +43,8 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
   const desktopOverlay = () => !isMobile() && presentation() === 'overlay';
   createEffect(() => { if (!desktopOverlay()) setDesktopOpen(false); });
 
+  const modeAboveContent = () => Boolean(props.persistentModeSwitcher && (isMobile() || desktopOverlay()));
+  const ModeContent = createRetainedContent(() => props.modeSwitcher);
   const SidebarContent = createRetainedContent(() => (
     <Sidebar
       ariaLabel={i18n.t('files.title')}
@@ -65,7 +68,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
       >
         <div class="sticky top-0 z-10 shrink-0 border-b border-sidebar-border bg-sidebar/95 px-2.5 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-sidebar/90">
           <div class="flex items-center gap-1.5">
-            <div class="min-w-0 flex-1">{props.modeSwitcher}</div>
+            <Show when={!modeAboveContent()}><div class="min-w-0 flex-1"><ModeContent /></div></Show>
             <Show when={isMobile() && props.onClose}>
               <Button
                 variant="ghost"
@@ -98,7 +101,9 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
     <div ref={el => { setRoot(el); props.rootRef?.(el); }} data-browser-workspace
       style={{ '--redeven-sidebar-width': `${props.width ?? 240}px` }}
       data-browser-sidebar-presentation={desktopOverlay() ? 'overlay' : 'inline'}
-      class={cn('relative flex h-full min-h-0 min-w-0 overflow-hidden bg-background', props.class)}>
+      class={cn('relative flex h-full min-h-0 min-w-0 overflow-hidden bg-background', modeAboveContent() && 'flex-col', props.class)}>
+      <Show when={modeAboveContent()}><div class="relative z-40 shrink-0 border-b bg-background px-2.5 py-1.5" data-browser-persistent-mode><ModeContent /></div></Show>
+      <div class="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <Show when={isMobile() && props.open}>
         <div class="absolute inset-0 z-20 cursor-pointer bg-[var(--redeven-overlay-scrim)]" onClick={() => props.onClose?.()} />
       </Show>
@@ -115,6 +120,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
       </Show>
       <div inert={desktopPresent()} class={cn('min-w-0 min-h-0 flex-1', redevenSurfaceRoleClass('main'))}>
         {props.content({ overlay: desktopOverlay, open: desktopOpen, toggle: () => setDesktopOpen(value => !value) })}
+      </div>
       </div>
     </div>
   );

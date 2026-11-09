@@ -205,6 +205,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function expandFileTree(host: ParentNode) {
+  for (let depth = 0; depth < 16; depth++) {
+    const closed = [...host.querySelectorAll<HTMLElement>('[role="treeitem"][aria-expanded="false"]')];
+    if (!closed.length) break;
+    closed.forEach(row => row.querySelector<HTMLButtonElement>('[data-git-tree-select]')?.click());
+  }
+}
+
 describe("GitHistoryBrowser interactions", () => {
   it("keeps the file and diff frames while graph commit details are loading", async () => {
     mockGetCommitDetail.mockImplementationOnce(() => new Promise(() => {}));
@@ -359,9 +367,8 @@ describe("GitHistoryBrowser interactions", () => {
       );
       const mergeBadge = Array.from(host.querySelectorAll('span')).find((node) => node.textContent?.trim() === 'Merge Commit');
       expect(mergeBadge).toBeTruthy();
-      const fileButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("src/app.ts"),
-      );
+      expandFileTree(host);
+      const fileButton = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/app.ts"]');
       expect(fileButton).toBeTruthy();
       fileButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();
@@ -436,9 +443,8 @@ describe("GitHistoryBrowser interactions", () => {
 
     try {
       await flush();
-      const fileButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("src/app.ts"),
-      );
+      expandFileTree(host);
+      const fileButton = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/app.ts"]');
       expect(fileButton).toBeTruthy();
 
       fileButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -551,9 +557,8 @@ describe("GitHistoryBrowser interactions", () => {
 
     try {
       await flush();
-      const fileButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("src/app.ts"),
-      );
+      expandFileTree(host);
+      const fileButton = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/app.ts"]');
       expect(fileButton).toBeTruthy();
 
       fileButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -952,7 +957,7 @@ describe("GitHistoryBrowser interactions", () => {
         "justify-start",
       );
       expect(
-        host.querySelector('[data-git-commit-files-list-layout="compact"]'),
+        host.querySelector('[role="tree"]'),
       ).toBeTruthy();
 
       const stackedOverview = await setCommitOverviewWidth(host, 720);
@@ -963,9 +968,10 @@ describe("GitHistoryBrowser interactions", () => {
       expect(stackedOverview.dataset.gitCommitOverviewLayout).toBe("stacked");
       expect(stackedBodyGroup?.className).toContain("pl-0");
       expect(
-        host.querySelector('[data-git-commit-files-list-layout="compact"]'),
+        host.querySelector('[role="tree"]'),
       ).toBeTruthy();
-      expect(host.querySelectorAll('[data-git-commit-files-list-layout] button')).toHaveLength(2);
+      expandFileTree(host);
+      expect(host.querySelectorAll('[role="treeitem"]:not([aria-expanded])')).toHaveLength(2);
       expect(host.querySelector('[data-git-diff-panel]')).toBeTruthy();
 
       const inlineOverview = await setCommitOverviewWidth(host, 1040);
@@ -976,9 +982,10 @@ describe("GitHistoryBrowser interactions", () => {
       expect(inlineOverview.dataset.gitCommitOverviewLayout).toBe("inline");
       expect(inlineBodyGroup?.className).toContain("pl-4");
       expect(
-        host.querySelector('[data-git-commit-files-list-layout="compact"]'),
+        host.querySelector('[role="tree"]'),
       ).toBeTruthy();
-      expect(host.querySelectorAll('[data-git-commit-files-list-layout] button')).toHaveLength(2);
+      expandFileTree(host);
+      expect(host.querySelectorAll('[role="treeitem"]:not([aria-expanded])')).toHaveLength(2);
       expect(host.querySelector('[data-git-diff-panel]')).toBeTruthy();
     } finally {
       dispose();
@@ -1073,8 +1080,8 @@ describe("GitHistoryBrowser interactions", () => {
 
     try {
       await flush();
-      const fileButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
-        .find((button) => button.textContent?.includes('src/context.ts'))!;
+      expandFileTree(host);
+      const fileButton = host.querySelector<HTMLButtonElement>('[data-git-tree-select="src/context.ts"]')!;
       const openMenu = async () => {
         fileButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
         await flush();

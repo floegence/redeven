@@ -1819,10 +1819,10 @@ describe('FileBrowserWorkspace interactions', () => {
       expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
       expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
       expect(scrollRegion?.className).toContain('overflow-auto');
-      expect(scrollRegion?.className).toContain('overflow-x-hidden');
+      expect(scrollRegion?.className).not.toContain('overflow-x-hidden');
       expect(scrollRegion?.className).toContain('overscroll-contain');
       expect(scrollRegion?.className).toContain('[-webkit-overflow-scrolling:touch]');
-      expect(scrollRegion?.className).toContain('[touch-action:pan-y_pinch-zoom]');
+      expect(scrollRegion?.className).toContain('[touch-action:pan-x_pan-y_pinch-zoom]');
       expect(scrollRegion?.textContent).toContain('folder-0');
       expect(scrollRegion?.textContent).toContain('folder-23');
     } finally {
@@ -2542,7 +2542,8 @@ describe('FileBrowserWorkspace interactions', () => {
       const activeRow = host.querySelector('[data-tree-row-path="/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets/icons"]');
       expect(activeRow).toBeTruthy();
       expect(activeRow?.textContent).toContain('icons');
-      expect(host.textContent).toContain('+2');
+      expect(host.textContent).not.toContain('+2');
+      expect((activeRow?.parentElement as HTMLElement).style.paddingLeft).toBe('92px');
       expect(scrollIntoView).toHaveBeenCalled();
     } finally {
       dispose();

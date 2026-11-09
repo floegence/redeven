@@ -9,6 +9,7 @@ import {
   createSignal,
   on,
   onCleanup,
+  type JSX,
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
@@ -34,7 +35,7 @@ import {
   redevenSurfaceRoleClass,
 } from "../utils/redevenSurfaceRoles";
 import { GitPatchViewer } from "./GitPatchViewer";
-import { GitMetaPill, GitSkeletonBlock, GitStatePane } from "./GitWorkbenchPrimitives";
+import { GitChangeMetrics, GitMetaPill, GitSkeletonBlock, GitStatePane } from "./GitWorkbenchPrimitives";
 import { useI18n } from "../i18n";
 
 export type GitDiffDialogItem =
@@ -136,6 +137,7 @@ const gitDiffModeButtonClass =
 
 export interface GitDiffPanelProps {
   open: boolean;
+  actions?: JSX.Element;
   loading?: boolean;
   refreshKey?: number;
   item: GitDiffDialogItem | null | undefined;
@@ -343,6 +345,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
   // The mode is a browsing preference for this inspection surface. Keep it
   // while the selected file changes so a reviewer can scan every file in the
   // same context without repeating the control selection.
+  const [diffLayout, setDiffLayout] = createSignal<'unified' | 'split'>('unified');
   const [selectedMode, setSelectedMode] = createSignal<GitDiffDialogMode>("patch");
   const [previewSlot, setPreviewSlot] = createSignal<GitDiffDialogLoadSlot>(
     createGitDiffDialogLoadSlot(),
@@ -641,7 +644,7 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
 
   const dialogContent = () => (
     <div data-git-diff-panel class={cn("git-diff-panel flex h-full min-h-0 min-w-0 flex-col", props.class)}>
-      <div class="git-diff-panel__toolbar">
+      <div class="git-diff-panel__heading">
         <Show when={navigation}>
           <button type="button" data-git-diff-back class="git-diff-panel__back" onClick={() => navigation?.showFiles()}
             title={i18n.t('uiCopy.git.changedFiles')} aria-label={i18n.t('uiCopy.git.changedFiles')}>
@@ -651,14 +654,22 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
         <div class="git-diff-panel__identity">
           <Show when={!props.loading} fallback={<GitSkeletonBlock class="h-3 w-40 max-w-full" />}>
             <Show when={props.item} fallback={<span class="text-[11px] font-medium text-muted-foreground">{i18n.t('gitDiff.title')}</span>}>
-              <GitFileLabel path={props.item?.newPath || props.item?.path || props.item?.oldPath || ''} />
+              <div class="git-diff-panel__file"><GitFileLabel path={props.item?.newPath || props.item?.path || props.item?.oldPath || ''} /><span class="git-diff-panel__path" title={props.item?.oldPath && props.item?.newPath ? `${props.item.oldPath} → ${props.item.newPath}` : undefined}>{(props.item?.newPath || props.item?.path || props.item?.oldPath || '').split('/').slice(0, -1).join('/')}</span></div>
+              <GitChangeMetrics compact additions={props.item?.additions} deletions={props.item?.deletions} />
             </Show>
           </Show>
         </div>
+        <div class="git-diff-panel__actions">{props.actions}</div>
+      </div>
+      <div class="git-diff-panel__toolbar">
+        <Show when={props.item}><div class={cn('git-diff-panel__modes', redevenSurfaceRoleClass('segmented'))} role="group" aria-label={i18n.t('git.review.diffLayout')}>
+          <button type="button" class={cn(gitDiffModeButtonClass, redevenSegmentedItemClass(diffLayout() === 'unified'))} aria-pressed={diffLayout() === 'unified'} onClick={() => setDiffLayout('unified')}>{i18n.t('git.review.unified')}</button>
+          <button type="button" class={cn(gitDiffModeButtonClass, redevenSegmentedItemClass(diffLayout() === 'split'))} aria-pressed={diffLayout() === 'split'} onClick={() => setDiffLayout('split')}>{i18n.t('git.review.split')}</button>
+        </div></Show>
         <Show when={props.item}>
           <div
             class={cn(
-              "git-diff-panel__modes",
+              "git-diff-panel__modes git-diff-panel__context",
               redevenSurfaceRoleClass("segmented"),
             )}
           >
@@ -727,6 +738,8 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
           <Match when={activeUnavailableState()}>
             <GitPatchViewer
               class="h-full min-h-0 flex-1"
+              showMetrics={false}
+              layout={diffLayout()}
               fillViewport
               showMobileHint={false}
               item={activeUnavailableState()?.item}
@@ -738,6 +751,8 @@ export function GitDiffPanel(props: GitDiffPanelProps) {
           <Match when={activeReadyItem()}>
             <GitPatchViewer
               class="h-full min-h-0 flex-1"
+              showMetrics={false}
+              layout={diffLayout()}
               fillViewport
               showMobileHint={false}
               item={activeReadyItem()}

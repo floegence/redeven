@@ -79,12 +79,12 @@ export function gitChangePathClass(change: string | undefined): string {
     case 'deleted':
       return 'text-[var(--redeven-status-error-foreground)]';
     case 'renamed':
-      return 'text-[var(--redeven-categorical-6)]';
+      return 'text-[var(--redeven-status-info-foreground)]';
     case 'copied':
       return 'text-primary';
     case 'modified':
     default:
-      return 'text-[var(--redeven-status-info-foreground)]';
+      return 'text-[var(--redeven-status-warning-foreground)]';
   }
 }
 

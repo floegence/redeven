@@ -6,6 +6,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  on,
   onCleanup,
   type Component,
 } from "solid-js";
@@ -49,7 +50,6 @@ import {
   type GitPreviewMergeBranchResponse,
   type GitRepoSummaryResponse,
   type GitWorkspaceChange,
-  type GitWorkspaceSection,
 } from "../protocol/redeven_v1";
 import {
   WORKSPACE_VIEW_SECTIONS,
@@ -57,7 +57,6 @@ import {
   allGitBranches,
   branchDisplayName,
   branchIdentity,
-  changeSecondaryPath,
   createEmptyWorkspaceViewPageStateRecord,
   describeGitHead,
   exactGitPath,
@@ -69,7 +68,6 @@ import {
   workspaceEntryKey,
   workspaceDirectoryPath,
   workspacePageItems,
-  workspaceSectionLabel,
   type GitBranchDetailPresentationState,
   type GitWorkspaceViewPageState,
   workspaceViewSectionCount,
@@ -113,23 +111,14 @@ import {
 import { GitChangesBreadcrumb } from "./GitChangesBreadcrumb";
 import { GitDiffPanel } from "./GitDiffPanel";
 import { GitDiffSplit, useGitDiffNavigation } from "./GitDiffSplit";
-import { GitFileLabel } from "./GitFileLabel";
+import { GitWorkspaceTree } from "./GitWorkspaceTree";
+import type { GitWorkspaceDirectoryLoader } from "./gitWorkspaceTreeModel";
 import { GitCommitGraph } from './GitCommitGraph';
 import { GitCommitMessageDialog } from './GitCommitMessageDialog';
-import { GitVirtualTable } from "./GitVirtualTable";
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from "./gitWorkbenchScrollRegion";
 import { Tooltip } from "../primitives/Tooltip";
 import {
-  GIT_CHANGED_FILES_CELL_CLASS,
-  GIT_CHANGED_FILES_CELL_MIDDLE_CLASS,
-  GIT_CHANGED_FILES_HEADER_CELL_CLASS,
-  GIT_CHANGED_FILES_HEADER_ROW_CLASS,
-  GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
-  GIT_CHANGED_FILES_TABLE_CLASS,
-  GitChangedFilesActionButton,
   GitChangeMetrics,
-  GitChangeStatusPill,
-  GitDirectoryStatus,
   GitContentSkeleton,
   GitSkeletonBlock,
   GitLabelBlock,
@@ -143,8 +132,6 @@ import {
   GitSubtleNote,
   GitTableFrame,
   type GitShortcutOrbTone,
-  gitChangedFilesRowClass,
-  gitChangedFilesStickyCellClass,
 } from "./GitWorkbenchPrimitives";
 import {
   GitDeleteBranchDialog,
@@ -177,13 +164,7 @@ export function gitBranchPanelIdentityKey(
   return JSON.stringify(parts);
 }
 
-const BRANCH_STATUS_TABLE_COLUMN_KEYS = [
-  "git.common.path",
-  "uiCopy.git.section",
-  "git.common.status",
-  "git.common.changes",
-  "git.common.action",
-] as const;
+
 
 export interface GitBranchesPanelProps {
   repoRootPath?: string;
@@ -273,22 +254,7 @@ function formatAbsoluteTime(ms?: number): string {
   return new Date(ms).toLocaleString();
 }
 
-function compareFilePath(item: GitCommitFileSummary, unknownPath: string): string {
-  return exactGitPath(
-    item.displayPath || item.path || item.newPath || item.oldPath,
-  ) || unknownPath;
-}
 
-function worktreeFilePath(item: GitWorkspaceChange, unknownPath: string): string {
-  return exactGitPath(
-    item.displayPath || item.path || item.newPath || item.oldPath,
-  ) || unknownPath;
-}
-
-function branchStatusDirectorySummary(item: GitWorkspaceChange, i18n: ReturnType<typeof useI18n>): string {
-  const count = Number(item.descendantFileCount ?? 0);
-  return i18n.tn('git.common.fileCount', count);
-}
 
 function branchStatusEmptyPresentation(
   section: GitWorkspaceViewSection,
@@ -668,73 +634,10 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
           </div>
         }
       >
-        <GitVirtualTable
-          items={props.items}
-          viewportClass={props.surface === "inline" ? "git-branch-history-files__viewport" : undefined}
-          tableClass={cn(
-            GIT_CHANGED_FILES_TABLE_CLASS,
-            "git-diff-file-table",
-            props.surface === "inline" && "git-branch-history-files__table",
-          )}
-          header={
-            <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.path')}</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.status')}</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.changes')}</th>
-              <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>{i18n.t('git.common.action')}</th>
-            </tr>
-          }
-          renderRow={(item) => {
-            const active = () =>
-              props.selectedKey === gitDiffEntryIdentity(item);
-            return (
-              <tr
-                aria-selected={active()}
-                class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
-                onClick={() => openDiff(item, props.context)}
-                tabIndex={0}
-                onContextMenu={(event) => {
-                  event.stopPropagation();
-                  contextMenu.openFromContextMenu(event, contextTarget(item));
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
-                  event.stopPropagation();
-                  contextMenu.openFromKeyboard(event, contextTarget(item));
-                }}
-              >
-                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <div class="min-w-0">
-                    <button
-                      type="button"
-                      class="git-file-open"
-                      title={changeSecondaryPath(item)}
-                      onClick={(event) => { event.stopPropagation(); openDiff(item, props.context); }}
-                    >
-                      <GitFileLabel path={compareFilePath(item, i18n.t('filePreview.unknownPath'))} secondaryPath={changeSecondaryPath(item)} />
-                    </button>
-                  </div>
-                </td>
-                <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
-                  <GitChangeStatusPill compact change={item.changeType} />
-                </td>
-                <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
-                  <GitChangeMetrics compact
-                    additions={item.additions}
-                    deletions={item.deletions}
-                  />
-                </td>
-                <td class={gitChangedFilesStickyCellClass(active())}>
-                  <GitChangedFilesActionButton
-                    onClick={() => openDiff(item, props.context)}
-                  >
-                    {i18n.t('files.menuViewDiff')}
-                  </GitChangedFilesActionButton>
-                </td>
-              </tr>
-            );
-          }}
-        />
+        <GitWorkspaceTree items={props.items} section="changes" directoryPath="" generation={props.context}
+          selectedKey={props.selectedKey} itemKey={gitDiffEntryIdentity} onSelect={item => openDiff(item, props.context)}
+          onContextMenu={(event, item) => contextMenu.openFromContextMenu(event, contextTarget(item))}
+          onContextMenuKey={(event, item) => contextMenu.openFromKeyboard(event, contextTarget(item))} />
       </Show>
   );
 
@@ -759,6 +662,8 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
 }
 
 interface BranchStatusTableProps {
+  generation: number;
+  loadDirectory: GitWorkspaceDirectoryLoader;
   canonicalRepoRootPath: string;
   repoRootPath: string;
   branch: GitBranchSummary;
@@ -1048,142 +953,11 @@ function BranchStatusTable(props: BranchStatusTableProps) {
   return (
     <GitTableFrame class="flex min-h-0 flex-1 flex-col">
       <directoryFavorites.Feedback />
-      <GitVirtualTable
-        items={props.items}
-        tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} git-diff-file-table git-diff-file-table--status`}
-        header={
-          <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-            <For each={BRANCH_STATUS_TABLE_COLUMN_KEYS}>
-              {(key) => (
-                <th
-                  class={
-                    key === "git.common.action"
-                      ? GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS
-                      : GIT_CHANGED_FILES_HEADER_CELL_CLASS
-                  }
-                >
-                  {i18n.t(key)}
-                </th>
-              )}
-            </For>
-          </tr>
-        }
-        renderRow={(item) => {
-          const active = () => props.selectedKey === workspaceEntryKey(item);
-          return (
-            <tr
-              aria-selected={active()}
-              class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
-              tabIndex={0}
-              onContextMenu={(event) => {
-                event.stopPropagation();
-                contextMenu.openFromContextMenu(event, menuTarget(item));
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
-                event.stopPropagation();
-                contextMenu.openFromKeyboard(event, menuTarget(item));
-              }}
-              onClick={() => {
-                if (isGitWorkspaceDirectoryEntry(item)) {
-                  const nextDirectoryPath = workspaceDirectoryPath(item);
-                  if (nextDirectoryPath) {
-                    props.onOpenDirectory?.(nextDirectoryPath);
-                  }
-                  return;
-                }
-                openDiff(item, menuTarget(item));
-              }}
-            >
-              <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                <div class="min-w-0">
-                  <button
-                    type="button"
-                    class="git-file-open"
-                    title={
-                      isGitWorkspaceDirectoryEntry(item)
-                        ? workspaceDirectoryPath(item)
-                        : changeSecondaryPath(item)
-                    }
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (isGitWorkspaceDirectoryEntry(item)) {
-                        const nextDirectoryPath = workspaceDirectoryPath(item);
-                        if (nextDirectoryPath) {
-                          props.onOpenDirectory?.(nextDirectoryPath);
-                        }
-                        return;
-                      }
-                      openDiff(item, menuTarget(item));
-                    }}
-                  >
-                    <GitFileLabel
-                      path={isGitWorkspaceDirectoryEntry(item) ? workspaceDirectoryPath(item) : worktreeFilePath(item, i18n.t('filePreview.unknownPath'))}
-                      secondaryPath={changeSecondaryPath(item)}
-                      directory={isGitWorkspaceDirectoryEntry(item)}
-                    />
-                  </button>
-                </div>
-              </td>
-              <td class={`${GIT_CHANGED_FILES_CELL_MIDDLE_CLASS} text-muted-foreground`}>
-                <Show
-                  when={isGitWorkspaceDirectoryEntry(item)}
-                  fallback={workspaceSectionLabel(
-                    (item.section as GitWorkspaceSection | undefined) ??
-                      "unstaged",
-                  )}
-                >
-                  {localizedWorkspaceViewSectionLabel(props.section, i18n)}
-                </Show>
-              </td>
-              <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
-                <Show
-                  when={isGitWorkspaceDirectoryEntry(item)}
-                  fallback={
-                    <GitChangeStatusPill compact change={item.changeType} />
-                  }
-                >
-                  <GitDirectoryStatus unstaged={item.containsUnstaged} untracked={item.containsUntracked} />
-                </Show>
-              </td>
-              <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
-                <Show
-                  when={isGitWorkspaceDirectoryEntry(item)}
-                  fallback={
-                    <GitChangeMetrics compact
-                      additions={item.additions}
-                      deletions={item.deletions}
-                    />
-                  }
-                >
-                  <div class="text-[11px] font-medium text-muted-foreground">
-                    {branchStatusDirectorySummary(item, i18n)}
-                  </div>
-                </Show>
-              </td>
-              <td class={gitChangedFilesStickyCellClass(active())}>
-                <GitChangedFilesActionButton
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    if (isGitWorkspaceDirectoryEntry(item)) {
-                      const nextDirectoryPath = workspaceDirectoryPath(item);
-                      if (nextDirectoryPath) {
-                        props.onOpenDirectory?.(nextDirectoryPath);
-                      }
-                      return;
-                    }
-                    openDiff(item, menuTarget(item));
-                  }}
-                >
-                  {isGitWorkspaceDirectoryEntry(item)
-                    ? i18n.t('uiCopy.git.openFolder')
-                    : i18n.t('uiCopy.git.viewDiff')}
-                </GitChangedFilesActionButton>
-              </td>
-            </tr>
-          );
-        }}
-      />
+      <GitWorkspaceTree items={props.items} section={props.section} directoryPath={props.directoryPath ?? ''} generation={props.generation}
+        loadDirectory={props.loadDirectory} selectedKey={props.selectedKey} onSelect={item => openDiff(item, menuTarget(item))}
+        onOpenDirectory={props.onOpenDirectory}
+        onContextMenu={(event, item) => contextMenu.openFromContextMenu(event, menuTarget(item))}
+        onContextMenuKey={(event, item) => contextMenu.openFromKeyboard(event, menuTarget(item))} />
       <Show
         when={(props.hasMore || props.loadingMore) && props.items.length > 0}
       >
@@ -2005,7 +1779,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const [selectedStatusSection, setSelectedStatusSection] =
     createSignal<GitWorkspaceViewSection>("changes");
   const [statusSectionPinned, setStatusSectionPinned] = createSignal(false);
-  const [selectedStatusFileKey, setSelectedStatusFileKey] = createSignal('');
+  const [selectedStatusFile, setSelectedStatusFile] = createSignal<GitWorkspaceChange | null>(null);
+  const [statusTreeGeneration, setStatusTreeGeneration] = createSignal(0);
   const [compareDialogOpen, setCompareDialogOpen] = createSignal(false);
   const [compareDialogBranch, setCompareDialogBranch] = createSignal<GitBranchSummary | null>(null);
   const branchContextMenu = createGitEntityContextMenuController<BranchHeaderContextTarget>({
@@ -2075,6 +1850,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       directoryPath,
     });
   const resetStatusWorkspace = () => {
+    setStatusTreeGeneration(value => value + 1);
+    setSelectedStatusFile(null);
     for (const section of WORKSPACE_VIEW_SECTIONS) statusReqSeqBySection[section] += 1;
     setStatusWorkspace(null);
     setStatusPages(createEmptyWorkspaceViewPageStateRecord());
@@ -2104,6 +1881,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     options: { append?: boolean } = {},
   ) => {
     if (!page) return;
+    if (!options.append) setStatusTreeGeneration(value => value + 1);
     const section = page.section ?? "changes";
     setStatusWorkspace((prev) =>
       applyWorkspaceViewPageSnapshot(prev, page, options),
@@ -2190,8 +1968,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     && Boolean(activeStatusDirectoryPath())
     && statusBreadcrumbSegments().length > 0;
   const navigateStatusDirectory = (directoryPath: string) => {
-    selectStatusSection("changes");
-    void loadStatusSection("changes", {
+    void loadStatusSection(selectedStatusSection(), {
       directoryPath,
       force: true,
       background: Boolean(statusWorkspace()),
@@ -2207,8 +1984,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   };
   const diffItem = createMemo(() => {
     const files = visibleStatusItems().filter((item) => !isGitWorkspaceDirectoryEntry(item));
-    return files.find((item) => workspaceEntryKey(item) === selectedStatusFileKey()) ?? files[0] ?? null;
+    return selectedStatusFile() ?? files[0] ?? null;
   });
+  createEffect(on(selectedStatusSection, () => setSelectedStatusFile(null), { defer: true }));
   const visibleStatusKey = () => workspaceEntryKey(diffItem());
   const statusEmptyState = () =>
     branchStatusEmptyState(selectedBranch(), statusRepoRootPath(), i18n);
@@ -3006,6 +2784,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       }
     }
 
+    if (!append) { setStatusTreeGeneration(value => value + 1); setSelectedStatusFile(null); }
     const seq = (statusReqSeqBySection[section] ?? 0) + 1;
     statusReqSeqBySection[section] = seq;
     const clientIdentity = props.protocolClientIdentity;
@@ -3086,6 +2865,29 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       ) {
         setStatusLoading(false);
       }
+    }
+  };
+
+  const loadStatusDirectory: GitWorkspaceDirectoryLoader = async (section, directoryPath, offset = 0) => {
+    const repoRootPath = statusRepoRootPath();
+    const generation = statusTreeGeneration();
+    const client = props.protocolClientIdentity;
+    const capability = props.capabilityMode;
+    const refreshToken = props.statusRefreshToken;
+    const revision = capability === 'capable' ? statusWorkspaceRevision : '';
+    if (!repoRootPath || (capability === 'capable' && !revision)) return;
+    const current = () => generation === statusTreeGeneration() && props.protocolClientIdentity === client
+      && props.capabilityMode === capability && props.statusRefreshToken === refreshToken && statusRepoRootPath() === repoRootPath;
+    try {
+      const response = await rpc.git.listWorkspacePage({ repoRootPath, section, directoryPath, offset, limit: BRANCH_STATUS_PAGE_SIZE, expectedWorkspaceRevision: revision || undefined });
+      if (!current()) return;
+      if (response.repoRootPath !== repoRootPath || (response.section ?? 'changes') !== section || (response.directoryPath ?? '') !== directoryPath
+        || (revision && response.workspaceRevision !== revision)) throw new Error('Git directory response changed its requested scope or revision');
+      return response;
+    } catch (error) {
+      if (!current()) return;
+      if (capability === 'capable' && isGitWorkspaceSnapshotStale(error)) { resetStatusWorkspace(); await loadStatusSection(section, { force: true }); return; }
+      throw error;
     }
   };
 
@@ -3433,6 +3235,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     />
                   }>
                     <BranchStatusTable
+                      generation={statusTreeGeneration()}
+                      loadDirectory={loadStatusDirectory}
                       canonicalRepoRootPath={activeRepoRootPath()}
                       repoRootPath={statusRepoRootPath()}
                       branch={interactiveBranch() as GitBranchSummary}
@@ -3444,7 +3248,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       hasMore={visibleStatusPageState().hasMore}
                       loadingMore={visibleStatusLoadingMore()}
                       selectedKey={visibleStatusKey()}
-                      onOpenDiff={(item) => setSelectedStatusFileKey(workspaceEntryKey(item))}
+                      onOpenDiff={setSelectedStatusFile}
                       onOpenDirectory={navigateStatusDirectory}
                       onAskFlower={props.onAskFlower}
                       onOpenInTerminal={props.onOpenInTerminal}

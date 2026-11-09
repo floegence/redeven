@@ -2354,6 +2354,17 @@
       "worktreeReviewLimit": "關聯工作樹超出刪除檢查限制，或無法安全檢查。請停止修改該目錄的程序，或將大型建置產物移至工作樹之外，再重新檢查。",
       "outcomeUnknown": "無法確認操作結果，請先重新整理儲存庫，再決定是否重試。",
       "requestRejected": "Git 拒絕了此請求，請檢查儲存庫狀態和選取的操作。"
+    },
+    "tree": {
+      "horizontalScroll": "水平捲動檔案樹",
+      "collapseAll": "收合所有資料夾",
+      "loadFailed": "無法載入此資料夾。"
+    },
+    "review": {
+      "diffLayout": "差異版面",
+      "unified": "統一",
+      "split": "並排",
+      "all": "全部"
     }
   },
   "terminal": {

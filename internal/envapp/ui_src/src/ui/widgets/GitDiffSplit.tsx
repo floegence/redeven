@@ -10,7 +10,7 @@ const GitDiffNavigationContext = createContext<GitDiffNavigation>();
 export const useGitDiffNavigation = () => useContext(GitDiffNavigationContext);
 
 /** Retain both views while narrow surfaces show one navigation step at a time. */
-export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element; filesHeader?: JSX.Element; loading?: boolean; resetKey?: string; ref?: (navigation: GitDiffNavigation) => void; class?: string }) {
+export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element; filesHeader?: JSX.Element; hideFilesHeader?: boolean; loading?: boolean; resetKey?: string; ref?: (navigation: GitDiffNavigation) => void; class?: string }) {
   const i18n = useI18n();
   const [pane, setPane] = createSignal<'files' | 'detail'>('files');
   let root: HTMLDivElement | undefined;
@@ -27,7 +27,7 @@ export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element
       setPane('files');
       queueMicrotask(() => {
         const row = root?.querySelector<HTMLElement>('[aria-selected="true"]');
-        const target = row?.matches('button') ? row : row?.querySelector<HTMLButtonElement>('td:first-child button');
+        const target = row?.matches('button') ? row : row?.querySelector<HTMLButtonElement>('[data-git-tree-select], td:first-child button');
         target?.focus({ preventScroll: true });
       });
     },
@@ -38,7 +38,7 @@ export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element
     const target = event.target as HTMLElement;
     const row = target.closest<HTMLElement>('[aria-selected]');
     if (!row || !event.currentTarget.contains(row)) return;
-    const fileButton = row.matches('button') ? row : row.querySelector<HTMLButtonElement>('td:first-child button');
+    const fileButton = row.matches('button') ? row : row.querySelector<HTMLButtonElement>('[data-git-tree-select], td:first-child button');
     if (target !== row && target !== fileButton) return;
     const rows = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[aria-selected]'));
     const index = rows.indexOf(row);
@@ -53,17 +53,17 @@ export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element
     event.preventDefault();
     event.stopPropagation();
     const nextRow = rows[next];
-    const nextButton = nextRow?.matches('button') ? nextRow : nextRow?.querySelector<HTMLButtonElement>('td:first-child button');
+    const nextButton = nextRow?.matches('button') ? nextRow : nextRow?.querySelector<HTMLButtonElement>('[data-git-tree-select], td:first-child button');
     nextButton?.focus({ preventScroll: true });
     nextButton?.click();
     nextRow?.scrollIntoView?.({ block: 'nearest' });
   };
-  return (
-    <GitDiffNavigationContext.Provider value={navigation}>
+  const Content = () => {
+    return (
       <div ref={root} data-git-diff-split class={cn('git-diff-split rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass(), props.class)}>
         <div class="git-diff-split__layout" data-mobile-pane={pane()}>
           <div class="git-diff-split__files" onKeyDown={navigateFiles}>
-            <div class="git-diff-split__files-header">{props.filesHeader ?? i18n.t('uiCopy.git.changedFiles')}</div>
+            <Show when={!props.hideFilesHeader}><div class="git-diff-split__files-header">{props.filesHeader ?? i18n.t('uiCopy.git.changedFiles')}</div></Show>
             <Show when={!props.loading} fallback={<GitContentSkeleton variant="file-rail" rows={8} label={i18n.t('uiCopy.git.loadingChangedFiles')} />}>
               {props.children}
             </Show>
@@ -71,6 +71,7 @@ export function GitDiffSplit(props: { children: JSX.Element; detail: JSX.Element
           <div class="git-diff-split__detail">{props.detail}</div>
         </div>
       </div>
-    </GitDiffNavigationContext.Provider>
-  );
+    );
+  };
+  return <GitDiffNavigationContext.Provider value={navigation}><Content /></GitDiffNavigationContext.Provider>;
 }

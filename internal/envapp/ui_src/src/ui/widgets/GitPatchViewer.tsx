@@ -28,6 +28,8 @@ export interface GitPatchViewerProps {
   class?: string;
   fillViewport?: boolean;
   showCopyButton?: boolean;
+  showMetrics?: boolean;
+  layout?: 'unified' | 'split';
   showMobileHint?: boolean;
   desktopPatchViewportClass?: string;
   mobilePatchViewportClass?: string;
@@ -46,6 +48,20 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
   const patchSnapshot = createMemo(() => getGitPatchRenderSnapshot(patchText()));
   const renderedPatchLines = createMemo(() => patchSnapshot().renderedLines);
   const visiblePatchLines = createMemo(() => patchExpanded() ? renderedPatchLines() : renderedPatchLines().slice(0, GIT_PATCH_PREVIEW_LINES));
+  const splitRows = createMemo(() => {
+    const lines = visiblePatchLines();
+    const rows: { left?: typeof lines[number]; right?: typeof lines[number] }[] = [];
+    for (let index = 0; index < lines.length;) {
+      const line = lines[index];
+      if (line.kind === 'context' || line.kind === 'meta') { rows.push({ left: line, right: line }); index++; continue; }
+      const removed: typeof lines = [], added: typeof lines = [];
+      while (index < lines.length && ['add', 'del'].includes(lines[index].kind)) {
+        const changed = lines[index++]; (changed.kind === 'del' ? removed : added).push(changed);
+      }
+      for (let row = 0; row < Math.max(removed.length, added.length); row++) rows.push({ left: removed[row], right: added[row] });
+    }
+    return rows;
+  });
   const hasMorePatchLines = createMemo(() => renderedPatchLines().length > GIT_PATCH_PREVIEW_LINES);
   const canCopyPatch = createMemo(() => hasMeaningfulGitPatchText(patchText()));
   const showCopyButton = createMemo(() => props.showCopyButton !== false);
@@ -98,9 +114,9 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                 <div class="min-w-0 flex-1 space-y-1">
                   <div class="flex min-w-0 flex-wrap items-center gap-1.5">
                     <GitChangeStatusPill change={file().changeType} />
-                    <Show when={props.fillViewport} fallback={<GitMetaPill tone="neutral">{changeMetricsText(file())}</GitMetaPill>}>
+                    <Show when={props.showMetrics !== false}><Show when={props.fillViewport} fallback={<GitMetaPill tone="neutral">{changeMetricsText(file())}</GitMetaPill>}>
                       <GitChangeMetrics compact additions={file().additions} deletions={file().deletions} />
-                    </Show>
+                    </Show></Show>
                     <Show when={!props.fillViewport}>
                       <span class="min-w-0 max-w-full truncate font-mono text-[11px] text-foreground/90" title={changeDisplayPath(file())}>
                         {changeDisplayPath(file())}
@@ -146,6 +162,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                     )}
                   >
                     <div class="inline-block min-w-full bg-muted/[0.20] p-px align-top">
+                      <Show when={props.layout === 'split'} fallback={(
                       <For each={visiblePatchLines()}>
                         {(line) => (
                           <div class={cn('grid w-max min-w-full grid-cols-[2.25rem_2.25rem_minmax(max-content,1fr)] items-stretch sm:grid-cols-[2.5rem_2.5rem_minmax(max-content,1fr)]', gitPatchRenderedLineClass(line))}>
@@ -155,6 +172,19 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                           </div>
                         )}
                       </For>
+                      )}>
+                        <div class="git-patch-split" data-git-patch-layout="split">
+                          <For each={splitRows()}>{row => <>
+                            <For each={['left', 'right'] as const}>{side => {
+                              const line = row[side];
+                              return <div class={cn('git-patch-split__cell', line && gitPatchRenderedLineClass(line))} data-diff-side={side}>
+                                <span class="git-patch-split__number">{formatGitPatchLineNumber(side === 'left' ? line?.oldLine ?? null : line?.newLine ?? null)}</span>
+                                <code>{line?.text ?? ' '}</code>
+                              </div>;
+                            }}</For>
+                          </>}</For>
+                        </div>
+                      </Show>
                     </div>
                   </div>
                   <PersistentHorizontalScrollbar

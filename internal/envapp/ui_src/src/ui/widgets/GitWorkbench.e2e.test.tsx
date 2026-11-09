@@ -182,7 +182,8 @@ describe('GitWorkbench interactions', () => {
       expect(pushButton).toBeTruthy();
       expect(header).toBeTruthy();
       expect(pushButton?.parentElement?.className).toContain('items-center');
-      expect(pushButton?.parentElement?.parentElement?.className).toContain('justify-between');
+      expect(header?.contains(pushButton!)).toBe(true);
+      expect(header?.querySelector('.git-repository-sync')).toBeTruthy();
     } finally {
       dispose();
     }

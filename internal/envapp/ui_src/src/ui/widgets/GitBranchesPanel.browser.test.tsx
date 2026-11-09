@@ -322,12 +322,12 @@ describe('GitBranchesPanel rendered branch verification stability', () => {
     dispose = render(() => <LayoutProvider><NotificationProvider><ProtocolProvider contract={redevenV1Contract}>
       <GitBranchesPanel repoRootPath="/workspace/repo" selectedBranch={branch} />
     </ProtocolProvider></NotificationProvider></LayoutProvider>, host!);
-    await waitForCondition(() => !!host!.querySelector('tr[aria-selected]'), 'directory inventory loads');
+    await waitForCondition(() => !!host!.querySelector('[role="treeitem"]'), 'directory inventory loads');
     const frame = host!.querySelector<HTMLElement>('[data-git-diff-split]')!;
     const rail = frame.querySelector<HTMLElement>('.git-diff-split__files')!;
     const detail = frame.querySelector<HTMLElement>('.git-diff-split__detail')!;
     const railHeader = rail.querySelector<HTMLElement>('.git-diff-split__files-header');
-    const detailHeader = detail.querySelector<HTMLElement>('.git-diff-panel__toolbar')!;
+    const detailHeader = detail.querySelector<HTMLElement>('.git-diff-panel__heading')!;
     expect(railHeader, 'file navigation has a matching header').not.toBeNull();
     expect(railHeader!.getBoundingClientRect().top).toBe(detailHeader.getBoundingClientRect().top);
     expect(railHeader!.getBoundingClientRect().bottom).toBe(detailHeader.getBoundingClientRect().bottom);
@@ -338,13 +338,14 @@ describe('GitBranchesPanel rendered branch verification stability', () => {
     expect(empty).not.toBeNull();
     expect(empty.clientHeight).toBeGreaterThan(detail.clientHeight * 0.8);
     expect(frame.scrollWidth).toBe(frame.clientWidth);
-    rail.querySelector<HTMLButtonElement>('tr button')!.click();
+    rail.querySelector<HTMLButtonElement>('[data-git-tree-select="src"]')!.click();
+    await waitForCondition(() => !!rail.querySelector('[data-git-tree-select="src/app.ts"]'), 'child inventory loads');
+    rail.querySelector<HTMLButtonElement>('[data-git-tree-select="src/app.ts"]')!.click();
     await waitForCondition(() => !!detail.querySelector('.git-patch-viewer__viewport'), 'directory opens into file inspection');
     expect(detail.querySelector('.git-diff-panel__modes')).not.toBeNull();
     expect(railHeader!.getBoundingClientRect().bottom).toBe(detailHeader.getBoundingClientRect().bottom);
-    expect(rail.querySelector('tbody tr')!.getBoundingClientRect().top).toBe(railHeader!.getBoundingClientRect().bottom);
-    // File rows follow the published 30px desktop row contract.
-    expect(rail.querySelector('tbody tr')!.getBoundingClientRect().height).toBe(30);
+    expect(rail.querySelector('[data-git-tree-select="src/app.ts"]')!.getBoundingClientRect().top).toBeGreaterThan(railHeader!.getBoundingClientRect().bottom);
+    expect(rail.querySelector('[data-git-tree-path="src/app.ts"]')!.getBoundingClientRect().height).toBeLessThanOrEqual(32);
   });
 
 });

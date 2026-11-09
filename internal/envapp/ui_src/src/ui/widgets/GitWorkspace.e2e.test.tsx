@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe('GitWorkspace interactions', () => {
-  it('keeps mode switching and git view switching pinned inside the shared sidebar shell', () => {
+  it('keeps mode switching above full-width Git navigation', () => {
     let nextMode = '';
     let nextSubview = '';
     const host = document.createElement('div');
@@ -100,7 +100,7 @@ describe('GitWorkspace interactions', () => {
       expect(host.querySelector('.redeven-git-browser')).toBeTruthy();
       expect(host.querySelectorAll('[role="radiogroup"][aria-label="Browser mode"]').length).toBe(1);
       expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
-      const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]');
+      const scrollRegion = host.querySelector('.git-diff-split__files');
       expect(scrollRegion).toBeTruthy();
       expect(scrollRegion?.querySelector('[role="tablist"][aria-label="Git views"]')).toBeNull();
 
@@ -212,7 +212,7 @@ describe('GitWorkspace interactions', () => {
     }
   });
 
-  it('supports vertical keyboard navigation across the persistent git view rail', () => {
+  it('supports horizontal keyboard navigation across the persistent git view rail', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -269,9 +269,9 @@ describe('GitWorkspace interactions', () => {
       expect(activeTab?.id).toBe('git-workbench-subview-tab-changes');
       expect(activeTab?.getAttribute('aria-controls')).toBe('git-workbench-subview-panel-changes');
       expect(activeTab?.getAttribute('tabindex')).toBe('0');
-      expect(activeTab?.closest('[role="tablist"]')?.getAttribute('aria-orientation')).toBe('vertical');
+      expect(activeTab?.closest('[role="tablist"]')?.getAttribute('aria-orientation')).toBe('horizontal');
       expect(host.querySelector('#git-workbench-subview-panel-changes')).toBeTruthy();
-      activeTab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      activeTab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
       expect(host.querySelector('#git-workbench-subview-tab-branches')?.getAttribute('aria-selected')).toBe('true');
       expect(host.querySelector('#git-workbench-subview-panel-branches')).toBeTruthy();
     } finally {
@@ -279,7 +279,7 @@ describe('GitWorkspace interactions', () => {
     }
   });
 
-  it('uses the content header button to reopen the git sidebar on mobile widgets', () => {
+  it('keeps inline navigation available without a mobile Git sidebar', () => {
     mockMatchMedia(true);
     let toggleSidebarCount = 0;
     const host = document.createElement('div');
@@ -335,10 +335,9 @@ describe('GitWorkspace interactions', () => {
 
     try {
       const sidebarButton = host.querySelector('button[aria-label="Toggle browser sidebar"]');
-      expect(sidebarButton).toBeTruthy();
-      expect(sidebarButton?.textContent).toContain('Sidebar');
-      sidebarButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(toggleSidebarCount).toBe(1);
+      expect(sidebarButton).toBeNull();
+      expect(host.querySelector('[data-git-workspace-navigation]')).toBeTruthy();
+      expect(toggleSidebarCount).toBe(0);
     } finally {
       dispose();
     }

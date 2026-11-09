@@ -29,6 +29,20 @@ beforeEach(() => {
 });
 
 describe('GitPatchViewer', () => {
+  it('aligns replacement runs and context in side-by-side mode', () => {
+    const host = document.createElement('div'); document.body.append(host);
+    const dispose = render(() => <LayoutProvider><NotificationProvider><GitPatchViewer layout="split" item={{ path: 'app.ts', patchText: '@@ -1,3 +1,4 @@\n context\n-before\n+after\n+extra\n tail' }} emptyMessage="No patch" /></NotificationProvider></LayoutProvider>, host);
+    try {
+      const cells = Array.from(host.querySelectorAll('.git-patch-split__cell'));
+      expect(cells).toHaveLength(10);
+      expect(cells[4].textContent).toContain('-before');
+      expect(cells[5].textContent).toContain('+after');
+      expect(cells[6].textContent?.trim()).toBe('');
+      expect(cells[7].textContent).toContain('+extra');
+      expect(cells[8].textContent).toContain('tail');
+      expect(cells[9].textContent).toContain('tail');
+    } finally { dispose(); }
+  });
   it('supports embedded reuse without the copy action and with custom viewport sizing', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

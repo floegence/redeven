@@ -2354,6 +2354,17 @@
       "worktreeReviewLimit": "关联工作树超出删除检查限制，或无法安全检查。请停止修改该目录的进程，或将大型构建产物移到工作树之外，然后重新检查。",
       "outcomeUnknown": "无法确认操作结果，请先刷新仓库，再决定是否重试。",
       "requestRejected": "Git 拒绝了此请求，请检查仓库状态和所选操作。"
+    },
+    "tree": {
+      "horizontalScroll": "横向滚动文件树",
+      "collapseAll": "折叠所有目录",
+      "loadFailed": "无法加载此目录。"
+    },
+    "review": {
+      "diffLayout": "差异布局",
+      "unified": "统一",
+      "split": "并排",
+      "all": "全部"
     }
   },
   "terminal": {

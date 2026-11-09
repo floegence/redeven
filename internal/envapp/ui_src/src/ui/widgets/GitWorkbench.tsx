@@ -1,7 +1,9 @@
+import { ResizeHandle } from '@floegence/floe-webapp-core/layout';
+import type { GitWorkspaceDirectoryLoader } from './gitWorkspaceTreeModel';
 import { StableText, Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
-import { Show, createMemo } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
-import { Copy, Folder, History, MoreHorizontal, Refresh, Terminal } from '@floegence/floe-webapp-core/icons';
+import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
+import { cn, createAdaptiveSidebar, useLayout } from '@floegence/floe-webapp-core';
+import { ArrowDown, ArrowUp, Copy, Download, Folder, GitBranch, History, MoreHorizontal, Refresh, Terminal } from '@floegence/floe-webapp-core/icons';
 import type {
   GitBranchSummary,
   GitCommitSummary,
@@ -37,7 +39,7 @@ import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 import { gitToneHeaderActionButtonClass } from './GitChrome';
-import { GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
+import { GitMetaPill, GitPrimaryTitle, GitStatePane } from './GitWorkbenchPrimitives';
 import { GitDeleteBranchDialog, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigation';
@@ -50,8 +52,23 @@ import { GitEntityContextMenu, createGitEntityContextMenuController, type GitCon
 import type { GitCapabilityMode } from '../services/gitWorkspaceRuntime';
 
 export interface GitWorkbenchProps {
+  modeSwitcher?: JSX.Element;
+  navigation?: JSX.Element;
+  selectorRail?: JSX.Element;
+  railWidth?: number;
+  onResizeRail?: (delta: number) => void;
+  stashContent?: JSX.Element;
+  stashActive?: boolean;
+  onShowStashes?: () => void;
+  workspaceGeneration?: number;
+  showAllWorkspaceSections?: boolean;
+  onShowAllWorkspaceSections?: () => void;
+  onRetryWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
+  onLoadWorkspaceDirectory?: GitWorkspaceDirectoryLoader;
   repoInfo?: GitResolveRepoResponse | null;
   repoInfoLoading?: boolean;
+  repoInfoError?: string;
+  repoUnavailableReason?: string;
   currentPath: string;
   subview: GitWorkbenchSubview;
   repoSummary?: GitRepoSummaryResponse | null;
@@ -156,6 +173,9 @@ const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 type RepositoryHeaderActionId = 'stashes' | 'fetch' | 'pull' | 'push' | 'terminal' | 'files';
 
 export function GitWorkbench(props: GitWorkbenchProps) {
+  const [workspaceElement, setWorkspaceElement] = createSignal<HTMLDivElement>();
+  const layout = useLayout();
+  const topPresentation = createAdaptiveSidebar({ container: workspaceElement, sidebarWidth: () => props.railWidth ?? 280, minContentWidth: () => 480 });
   const i18n = useI18n();
   const repoLabel = () => repoDisplayName(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath);
   const repoPath = () => exactGitPath(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath) || '/';
@@ -349,7 +369,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   });
 
   return (
-    <div class={cn('git-workbench relative flex h-full min-h-0 flex-col', redevenSurfaceRoleClass('main'), props.class)}>
+    <div ref={setWorkspaceElement} data-git-workspace data-compact-mode={layout.isMobile() || topPresentation() === 'overlay'} class={cn('git-workbench relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden', redevenSurfaceRoleClass('main'), props.class)} style={{ '--git-review-rail-width': `${props.railWidth ?? 280}px` }}>
+      <div class="git-workspace-top" data-with-mode={Boolean(props.modeSwitcher)}>
+        <Show when={props.modeSwitcher}><div class="git-workspace-mode">{props.modeSwitcher}</div></Show>
       <div
         class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}
         data-git-repository-header="compact"
@@ -370,7 +392,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
           >
             <div class="git-repository-identity flex min-w-0 flex-wrap items-center gap-1.5">
               <GitPrimaryTitle class="min-w-0 max-w-full truncate">{repoLabel()}</GitPrimaryTitle>
-              <span class="text-muted-foreground/45" aria-hidden="true">/</span>
+              <GitBranch class="ml-2 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <Show
                 when={headDisplay().detached}
                 fallback={<GitMetaPill tone="neutral">{headRef() || 'HEAD'}</GitMetaPill>}
@@ -399,12 +421,17 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 {localizedDetachedHeadCheckoutActionLabel(reattachBranch(), Boolean(props.checkoutBusy), i18n)}
               </Button>
             </Show>
+            <div class="git-repository-sync flex items-center">
+              <For each={(['fetch', 'pull', 'push'] as const).filter(action => action === 'fetch' ? props.onFetch : action === 'pull' ? props.onPull : props.onPush)}>{action => (
+                <Button size="sm" icon={action === 'fetch' ? Download : action === 'pull' ? ArrowDown : ArrowUp} variant={action === 'fetch' ? 'ghost' : 'outline'} loading={action === 'fetch' ? props.fetchBusy : action === 'pull' ? props.pullBusy : props.pushBusy} disabled={repositoryActionDisabled(action)} onClick={() => runRepositoryAction(action)}><StableText reserve={[repositoryActionLabel(action, false), i18n.t(action === 'fetch' ? 'uiCopy.git.fetching' : action === 'pull' ? 'uiCopy.git.pulling' : 'uiCopy.git.pushing')]}>{repositoryActionLabel(action)}</StableText></Button>
+              )}</For>
+            </div>
             <Show when={primaryRepositoryAction()}>
               {(action) => (
                 <Button
                   size="sm"
                   variant="default"
-                  class="shrink-0 rounded-md"
+                  class="git-repository-primary shrink-0 rounded-md"
                   loading={action() === 'fetch' ? props.fetchBusy : action() === 'pull' ? props.pullBusy : props.pushBusy}
                   disabled={repositoryActionDisabled(action())}
                   onClick={() => runRepositoryAction(action())}
@@ -412,19 +439,6 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                   <StableText reserve={[repositoryActionLabel(action(), false), i18n.t(action() === 'fetch' ? 'uiCopy.git.fetching' : action() === 'pull' ? 'uiCopy.git.pulling' : 'uiCopy.git.pushing')]}>{repositoryActionLabel(action())}</StableText>
                 </Button>
               )}
-            </Show>
-            <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
-              <Button
-                size="xs"
-                variant="ghost"
-                icon={History}
-                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
-                aria-label={i18n.t('files.sidebarToggle')}
-                  aria-haspopup="dialog" aria-expanded={props.sidebarExpanded}
-                onClick={event => { event.currentTarget.focus({ preventScroll: true }); props.onToggleSidebar?.(); }}
-              >
-                {i18n.t('files.sidebar')}
-              </Button>
             </Show>
             <Show when={props.onRefresh}>
               <Button
@@ -467,9 +481,22 @@ export function GitWorkbench(props: GitWorkbenchProps) {
         </Show>
       </div>
 
+      </div>
+      <Show when={props.navigation}>
+        <div class="git-workspace-navigation" data-git-workspace-navigation>
+          {props.navigation}
+          <Show when={props.onOpenStash}><Button variant="ghost" size="sm" class="git-workspace-stashes" aria-pressed={Boolean(props.stashActive)} disabled={repoActionsDisabled()} onClick={() => props.onShowStashes ? props.onShowStashes() : runRepositoryAction('stashes')}><History class="size-4" />{i18n.t('git.common.stashes')}</Button></Show>
+          <span class="flex-1" />
+          <Show when={props.onAskFlower}><Button variant="ghost" size="sm" class="git-workspace-flower" disabled={repoActionsDisabled()} onClick={() => { const target = repositoryContextTarget(); if (target) props.onAskFlower?.({ kind: 'repository', ...target }); }}><FlowerIcon class="size-4" /><span>{i18n.t('git.contextMenu.askFlower')}</span></Button></Show>
+        </div>
+      </Show>
+      <Show when={props.repoInfoError || props.repoSummaryError}><div class="shrink-0 border-b p-3" role="alert"><GitStatePane tone="error" message={props.repoInfoError || props.repoSummaryError || ''} /></div></Show>
+      <Show when={props.repoInfo?.available === false && !props.repoInfoLoading}><div class="shrink-0 border-b p-3"><GitStatePane message={props.repoUnavailableReason || i18n.t('git.notifications.currentPathNotGitRepo')} /></div></Show>
       <GitEntityContextMenu controller={repositoryContextMenu} items={repositoryContextMenuItems} />
 
-      <div class="relative flex-1 min-h-0 overflow-hidden">
+      <div class="git-workspace-body relative" data-with-selector={!props.stashActive && Boolean(props.selectorRail) && activeSubview() !== 'changes'}>
+        <div class="git-workspace-selector" hidden={props.stashActive || activeSubview() === 'changes' || !props.selectorRail}>{props.selectorRail}</div>
+        <div class="relative flex-1 min-h-0 min-w-0 overflow-hidden" hidden={props.stashActive}>
         <UIFirstKeepAlivePanel active={activeSubview() === 'changes'} class="absolute inset-0" testId="git-main-subview-changes" render={() => (
           <div
             role="tabpanel"
@@ -479,6 +506,11 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             class="h-full"
           >
             <GitChangesPanel
+              workspaceGeneration={props.workspaceGeneration}
+              showAllWorkspaceSections={props.showAllWorkspaceSections}
+              onShowAllWorkspaceSections={props.onShowAllWorkspaceSections}
+              onRetryWorkspaceSection={props.onRetryWorkspaceSection}
+              onLoadWorkspaceDirectory={props.onLoadWorkspaceDirectory}
               repoSummary={props.repoSummary}
               workspace={props.workspace}
               workspacePages={props.workspacePages}
@@ -607,6 +639,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             />
           </div>
         )} />
+      </div>
+      <div class="min-h-0 flex-1" hidden={!props.stashActive}>{props.stashContent}</div>
+      <Show when={props.onResizeRail && !props.stashActive}><div class="git-workspace-resize"><ResizeHandle direction="horizontal" onResize={delta => props.onResizeRail?.(delta)} /></div></Show>
       </div>
 
       <GitMergeBranchDialog
