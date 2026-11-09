@@ -142,7 +142,10 @@ func (s *Service) SelectTessivenThread(ctx context.Context, meta *session.Meta, 
 	return s.tessiven.BindFlowerThread(ctx, canvasID, threadID)
 }
 
-func (r *run) hasTessivenThread() bool { return r != nil && r.host.tessivenCanvasID != "" }
+func (r *run) hasTessivenThread() bool {
+	work, err := r.resolveFlowerWork(context.Background())
+	return err == nil && work != nil && work.Profile.ID == "tessiven.design"
+}
 
 func (s *Service) validateTessivenCreate(ctx context.Context, req CreateThreadRequest) error {
 	if req.TessivenCanvasID == "" {

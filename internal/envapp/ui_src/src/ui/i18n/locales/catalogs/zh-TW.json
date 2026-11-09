@@ -8385,7 +8385,8 @@
       "cache": "快取",
       "runtime": "執行階段協調狀態",
       "audit": "稽核",
-      "diagnostics": "診斷"
+      "diagnostics": "診斷",
+      "automation": "自動化"
     },
     "kinds": {
       "identity": "身分與設定",
@@ -8407,5 +8408,8 @@
     "measuredScope": "已統計的環境目錄 · 不含外部專案",
     "manageOwner": "管理{owner}",
     "locations": "儲存位置與備份範圍"
+  },
+  "automation": {
+    "title": "自動化"
   }
 }

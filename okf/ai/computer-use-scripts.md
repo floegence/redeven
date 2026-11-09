@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-One computer_exec is one Floret effect attempt. One computer_exec is one Floret effect attempt. Recheck target/grant/cancel/control each operation;canonical turn keeps target while live sampling interleaves. Changed target/permission stops confirmed prefix;private/approval consent binds target/URL/lease.
+One computer_exec is one Floret effect attempt. Recheck target/grant/cancel/control each operation;canonical turn keeps target while live sampling interleaves. Changed target/permission stops confirmed prefix;private/approval consent binds target/URL/lease.
 
 # Contract
 

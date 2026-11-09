@@ -32,7 +32,7 @@ func (s *Service) CompactThreadContext(ctx context.Context, meta *session.Meta, 
 	if threadID == "" || !validClientRequestID(req.ClientRequestID) {
 		return flruntime.ThreadView{}, errors.New("invalid context compaction identity")
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return flruntime.ThreadView{}, err
 	}
 	unlockCanvas, err := s.lockTessivenExecution(ctx, threadID)

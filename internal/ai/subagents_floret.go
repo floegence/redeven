@@ -954,7 +954,7 @@ func (service *Service) getFlowerSubagentDetail(ctx context.Context, meta *sessi
 	if parentThreadID == "" || childThreadID == "" || strings.TrimSpace(meta.EndpointID) == "" {
 		return nil, errors.New("invalid request")
 	}
-	if err := service.requireEndpointThreadAuthority(ctx, meta.EndpointID, parentThreadID); err != nil {
+	if err := service.requireInteractiveThreadAuthority(ctx, meta.EndpointID, parentThreadID); err != nil {
 		return nil, err
 	}
 	// Establish the canonical parent relationship before installing an observer.

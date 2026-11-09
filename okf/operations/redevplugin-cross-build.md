@@ -27,14 +27,10 @@ Redeven owns compiler preparation, target packaging, cache isolation and product
 
 # Evidence
 
-November4,2026:three deterministic cases reproduce release pruning unlinking open Zig archives,including package-preparation with temporary cleanup disabled. Namespace-limited traversal preserves tool/Cargo/source/manifest/unknown owners while obsolete release/assets still prune.
+November 4, 2026: three deterministic cases reproduced pruning of open Zig archives. Namespace-limited pruning preserved tool/Cargo/source/manifest/unknown owners while retiring obsolete release assets.
 
-Unmocked Desktop main-process update starts empty toolchain/Cargo/package caches separately per target,prunes every100ms during actual download/extract/probes (>2300passes/target),builds checksummed published3.15.0 on macOSarm64,validates staticPIE/signature/evidence,installs and reaches runtime_ready on nativeamd64Linux/arm64Docker. Subsequent requests verify source-package cache. Offline absence/refused download/cancel preserve installed bytes/process inventory and leave no transient tool directories. These are production-method tests,not GUI clicks.
+Unmocked Desktop update built checksummed published 3.15.0 from empty per-target caches on macOS ARM64 with concurrent 100-ms pruning, validated static PIE/signature/evidence, installed and reached runtime_ready on native AMD64 Linux and ARM64 Docker. Repeat builds verified cache reuse; offline/refused/canceled paths preserved installed bytes/processes and removed transient tools. These are production-method tests, not GUI clicks.
 
-Earlier same-day first/cache build timings:amd64116/5s,arm64109/5s. Real Worker64MiBFS/HTTP and WS/TCP/UDP pass on both native targets;published cancel/isolation and hardenedDarwin pass functionally,without performance thresholds. amd64 emulation fails containment/final inventory and is not native substitute. Published3.15.0 duplicate TCP-close revocation error remains unaccepted despite closed resources/pending rejection;no unpublished fix consumed. [Prior qualification](redevplugin-performance-qualification.md) retains it.
+Native Worker filesystem/HTTP/WS/TCP/UDP and cancellation/isolation checks passed; emulated AMD64 containment/inventory failed and cannot substitute. Published 3.15.0 duplicate TCP-close revocation remained unaccepted despite resource closure; [performance evidence](redevplugin-performance-qualification.md) retains it. Later published Floe 0.90.4 browser/Desktop/integration and ordinary hooks passed after rebase.
 
-After rebase preserving main,Floe0.90.4 passes154plugin browser/156focused Desktop/product integration;ordinary hooks all three groups pass.
-
-- `redeven:scripts/prepare_redevplugin_build_toolchain.mjs:1` - Compiler preparation owner.
-- `redeven:scripts/redevplugin_build_toolchain.test.mjs:1` - Real target/cache/failure probes.
-- `redeven:desktop/src/main/runtimePackageCache.test.ts:1` - Cache pruning isolation.
+Owners: scripts/prepare_redevplugin_build_toolchain.mjs, scripts/redevplugin_build_toolchain.test.mjs and desktop/src/main/runtimePackageCache.test.ts. Git retains exact timings, counts and failures.

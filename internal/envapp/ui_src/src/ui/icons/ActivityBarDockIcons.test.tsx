@@ -8,7 +8,7 @@ import {
   ActivityBarCodespacesIcon, ActivityBarContainersIcon, ActivityBarFolderIcon,
   ActivityBarHostApplicationsIcon, ActivityBarMonitorIcon, ActivityBarPortsIcon,
   ActivityBarSettingsIcon, ActivityBarSwitchIcon, ActivityBarTerminalIcon,
-  ActivityBarFlowerIcon, ActivityBarTessivenIcon, ActivityBarPluginsIcon,
+  ActivityBarFlowerIcon, ActivityBarTessivenIcon, ActivityBarPluginsIcon, ActivityBarAutomationIcon,
 } from './ActivityBarDockIcons';
 
 const disposers: Array<() => void> = [];
@@ -20,6 +20,7 @@ const cases: Array<[string, Component<ActivityRailIconProps>]> = [
   ['containers', ActivityBarContainersIcon], ['switch', ActivityBarSwitchIcon],
   ['settings', ActivityBarSettingsIcon],
   ['connections', ActivityBarTessivenIcon], ['launchpad', ActivityBarPluginsIcon],
+  ['automation', ActivityBarAutomationIcon],
 ];
 describe('Activity Bar published Floe adapters', () => {
   it('reuses all five original Flower petals through selection without resizing or remounting', () => {

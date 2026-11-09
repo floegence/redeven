@@ -1481,8 +1481,8 @@ describe('FlowerSurface navigation', () => {
     expect(launchTurn.mock.calls[0]?.[0].client_request_id).toBe(launchTurn.mock.calls[1]?.[0].client_request_id);
     await waitFor(() => runtime.querySelector('[data-flower-transport-delivery="failed"]') !== null);
     const failed = runtime.querySelector('[data-flower-transport-outbox-id]')!;
-    expect(failed.textContent).toContain('restore after rejection');
-    expect(failed.getAttribute('title')).toBe('request rejected');
+    expect(failed.closest('[data-flower-message-id]')?.textContent).toContain('restore after rejection');
+    expect(failed.getAttribute('aria-description')).toBe('request rejected');
     expect(failed.querySelector('[aria-label="Retry send"]')).not.toBeNull();
     expect((failed.querySelector('[aria-label="Restore to empty editor"]') as HTMLButtonElement).disabled).toBe(true);
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('New draft after the original send');
@@ -1536,8 +1536,8 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => launchTurn.mock.calls.length === 1);
     await waitFor(() => runtime.querySelector('[data-flower-transport-delivery="failed"]') !== null);
     const rejected = runtime.querySelector('[data-flower-transport-outbox-id]')!;
-    expect(rejected.textContent).toContain('Keep this draft while the previous reply stops');
-    expect(rejected.getAttribute('title')).toBe('thread already has an active turn');
+    expect(rejected.closest('[data-flower-message-id]')?.textContent).toContain('Keep this draft while the previous reply stops');
+    expect(rejected.getAttribute('aria-description')).toBe('thread already has an active turn');
     expect(rejected.querySelector('[aria-label="Retry send"]')).not.toBeNull();
     expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('');
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);

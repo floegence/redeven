@@ -67,10 +67,10 @@ func promptQualificationCases() []promptQualificationCase {
 		{name: "supplied_code_discussion", input: "帮我看看这段提供的代码：func Add(a, b int) int { return a - b }。它是否符合函数名表达的含义？", preferDirect: true, check: checkPromptQualificationReadonly},
 		{name: "workflow_text_only", input: "只评价下面这句话的措辞，无需检查仓库：‘实现后验证、提交、推送并部署’。", noTools: true},
 		{name: "workflow_scope", input: "帮我看看这条仓库规则是否合理：‘实现后验证、提交、推送并部署’。", check: checkPromptQualificationReadonly},
-		{name: "workflow_repository", input: "请结合 /workspace/demo 的实际工作流，评价这条规则是否合理：‘实现后验证、提交、推送并部署’。", history: []Message{promptQualificationMessage("user", "Target repository: /workspace/demo. Applicable rules: /workspace/demo/AGENTS.md, contents not loaded.")}, wantTools: []string{"file_read", "file_read_many", "terminal_exec", "find"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
-		{name: "explicit_verification", input: "请核验 /workspace/demo/calc.py 中 Add 的真实实现，并给出源码证据。", history: []Message{promptQualificationMessage("user", "Repository: /workspace/demo. Applicable rule sources: /workspace/demo/AGENTS.md; contents not loaded.")}, wantTools: []string{"file_read", "file_read_many", "terminal_exec", "find"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
-		{name: "target_repository_rules", input: "核查 /workspace/flower 的 Add 实现。", history: []Message{promptQualificationMessage("user", "Working directory: /workspace. Repositories: /workspace/flower, /workspace/flower-old, /workspace/floret. Target repository is /workspace/flower. Its only applicable rule source is /workspace/flower/AGENTS.md; contents not loaded.")}, wantTools: []string{"file_read", "file_read_many", "terminal_exec", "find"}, check: checkPromptQualificationTargetRules("/workspace/flower")},
-		{name: "switched_worktree_rules", input: "切换到 /workspace/flower-feature，核查这里的 Add 实现。", history: []Message{promptQualificationMessage("user", "Previous target /workspace/flower: rules already read. New target /workspace/flower-feature is another worktree with its own /workspace/flower-feature/AGENTS.md; contents not loaded. No other applicable rule files.")}, wantTools: []string{"file_read", "file_read_many", "terminal_exec", "find"}, check: checkPromptQualificationTargetRules("/workspace/flower-feature")},
+		{name: "workflow_repository", input: "请结合 /workspace/demo 的实际工作流，评价这条规则是否合理：‘实现后验证、提交、推送并部署’。", history: []Message{promptQualificationMessage("user", "Target repository: /workspace/demo. Applicable rules: /workspace/demo/AGENTS.md, contents not loaded.")}, wantTools: []string{"file_read", "file_read_many", "terminal_exec", "path_find"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
+		{name: "explicit_verification", input: "请核验 /workspace/demo/calc.py 中 Add 的真实实现，并给出源码证据。", history: []Message{promptQualificationMessage("user", "Repository: /workspace/demo. Applicable rule sources: /workspace/demo/AGENTS.md; contents not loaded.")}, wantTools: []string{"file_read", "file_read_many", "terminal_exec", "path_find"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
+		{name: "target_repository_rules", input: "核查 /workspace/flower 的 Add 实现。", history: []Message{promptQualificationMessage("user", "Working directory: /workspace. Repositories: /workspace/flower, /workspace/flower-old, /workspace/floret. Target repository is /workspace/flower. Its only applicable rule source is /workspace/flower/AGENTS.md; contents not loaded.")}, wantTools: []string{"file_read", "file_read_many", "terminal_exec", "path_find"}, check: checkPromptQualificationTargetRules("/workspace/flower")},
+		{name: "switched_worktree_rules", input: "切换到 /workspace/flower-feature，核查这里的 Add 实现。", history: []Message{promptQualificationMessage("user", "Previous target /workspace/flower: rules already read. New target /workspace/flower-feature is another worktree with its own /workspace/flower-feature/AGENTS.md; contents not loaded. No other applicable rule files.")}, wantTools: []string{"file_read", "file_read_many", "terminal_exec", "path_find"}, check: checkPromptQualificationTargetRules("/workspace/flower-feature")},
 		{name: "unreadable_rules", input: "现在能否核查代码？另外，根据我提供的数字 12、30、5 给出总和。", history: promptQualificationReceipt("terminal_exec", `{"command":"cat /workspace/demo/AGENTS.md","cwd":"/workspace/demo"}`, `{"status":"completed","exit_code":1,"output":"Permission denied: /workspace/demo/AGENTS.md. Repository operations are blocked until the rule file is readable."}`), preferDirect: true, check: func(r ModelGatewayResult) error {
 			if len(r.ToolCalls) > 0 {
 				if err := checkPromptQualificationReadonly(r); err != nil {
@@ -92,7 +92,7 @@ func promptQualificationCases() []promptQualificationCase {
 			return nil
 		}},
 		{name: "read_current_file", input: "读取 /workspace/demo/README.md，告诉我它的标题。", wantTools: []string{"file_read", "file_read_many", "terminal_exec"}, check: checkPromptQualificationRead},
-		{name: "repository_rules", input: "请修复 /workspace/demo 的 bug，先按仓库规则工作。", history: []Message{promptQualificationMessage("user", "Managed model context update: repository rule sources: /workspace/demo/AGENTS.md (not loaded). Working directory: /workspace/demo.")}, wantTools: []string{"file_read", "file_read_many", "terminal_exec", "find"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
+		{name: "repository_rules", input: "请修复 /workspace/demo 的 bug，先按仓库规则工作。", history: []Message{promptQualificationMessage("user", "Managed model context update: repository rule sources: /workspace/demo/AGENTS.md (not loaded). Working directory: /workspace/demo.")}, wantTools: []string{"file_read", "file_read_many", "terminal_exec", "path_find"}, check: checkPromptQualificationTargetRules("/workspace/demo")},
 		{name: "skill_activation", input: "请按已安装的 invoice-audit 技能审计这份账单。", history: []Message{promptQualificationMessage("user", "Current skill catalog: invoice-audit: audit invoices and explain discrepancies.")}, check: func(r ModelGatewayResult) error {
 			found := false
 			var discovery []ToolCall
@@ -226,7 +226,7 @@ func promptQualificationSurface(t *testing.T, tc promptQualificationCase) (strin
 		permission = FlowerPermissionFullAccess
 	}
 	if tc.runtimeSurface {
-		r := newRun(runOptions{AgentHomeDir: t.TempDir()})
+		r := newRun(runOptions{AgentHomeDir: t.TempDir(), ThreadID: "qualification"})
 		if tc.tessivenSurface {
 			r.host.tessivenCanvasID = "qualification"
 		}
@@ -254,7 +254,9 @@ func promptQualificationSurface(t *testing.T, tc promptQualificationCase) (strin
 	filter := newPermissionToolFilter(profile == runPromptProfileMainInteractive)
 	tools := filter.FilterTools(permission, builtInToolDefinitions())
 	// Qualification has no host attachment service or configured search provider.
-	tools = slices.DeleteFunc(tools, func(d ToolDef) bool { return d.Name == "attachment_read" || d.Name == "web_search_pages" })
+	tools = slices.DeleteFunc(tools, func(d ToolDef) bool {
+		return d.Name == "attachment_read" || d.Name == "web_search_pages" || strings.HasPrefix(d.Name, "automation_")
+	})
 	signals := filter.FilterTools(permission, builtInControlSignalDefinitions())
 	return buildFlowerSystemPrompt(), append(tools, signals...)
 }

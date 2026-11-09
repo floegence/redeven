@@ -89,7 +89,7 @@ func (s *Service) GetFlowerParentEvents(ctx context.Context, meta *session.Meta,
 	if err := requireRead(meta); err != nil {
 		return flruntime.ParentEventPage{}, err
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return flruntime.ParentEventPage{}, err
 	}
 	service, ok := s.threadRuntime.(flruntime.ThreadParentEventService)

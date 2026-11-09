@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/floegence/floret/v7/identity"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/floegence/floret/v7/identity"
 	flprovider "github.com/floegence/floret/v7/provider"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	fltools "github.com/floegence/floret/v7/tools"
@@ -1855,6 +1855,9 @@ func toAnySlice(value any) []any {
 }
 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, toolName string, args map[string]any) (any, error) {
+	if err := r.authorizeAutomationTool(ctx, toolName); err != nil {
+		return nil, err
+	}
 	authorizationSnapshot, _, err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, toolName)
 	if err != nil {
 		return nil, err
@@ -1871,6 +1874,9 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("thread query is unavailable")
 		}
 		return r.host.queryThreads(ctx, meta, toolName, args)
+	}
+	if strings.HasPrefix(toolName, "automation_") {
+		return r.execAutomationTool(ctx, meta, toolName, args)
 	}
 	if strings.HasPrefix(toolName, "plugin_author_") {
 		return r.execPluginAuthorTool(ctx, meta, toolName, args)

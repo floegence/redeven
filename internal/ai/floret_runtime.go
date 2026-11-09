@@ -220,7 +220,7 @@ func buildFloretThreadAgent(
 		return nil, errors.New("floret effect adapter requires a run and provider")
 	}
 	agentOptions := []flruntime.AgentOption{
-		flruntime.WithAgentGoals(),
+		flruntime.WithAgentUserInput(!r.noUserInteraction && r.allowsBuiltinCapability("user_ask")),
 		flruntime.WithAgentBuiltinToolNames(flruntime.BuiltinToolNames{AskUser: "user_ask", Goal: "goal_manage"}),
 		flruntime.WithAgentProviderRequestTimeoutPolicy(r.providerRequestTimeoutPolicy),
 		flruntime.WithAgentDynamicToolSurface(r.liveFloretToolSurface(surfaceConfig)),
@@ -229,6 +229,9 @@ func buildFloretThreadAgent(
 		flruntime.WithAgentEventSink(floretEventSink{run: r}),
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
 		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
+	}
+	if r.allowsBuiltinCapability("goal_manage") {
+		agentOptions = append(agentOptions, flruntime.WithAgentGoals())
 	}
 	return flruntime.NewAgent(
 		redevenFloretAgentConfig(surface.SystemPrompt, contextPolicy, options.ReasoningSelection),

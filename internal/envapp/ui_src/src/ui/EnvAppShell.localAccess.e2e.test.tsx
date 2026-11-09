@@ -4132,6 +4132,7 @@ describe('EnvAppShell environment entry affordances', () => {
         'applications',
         'containers',
         'tessiven',
+        'automation',
         'plugins',
         ...(isMobile ? [] : pinnedIDs),
       ]);
@@ -4153,7 +4154,7 @@ describe('EnvAppShell environment entry affordances', () => {
     try {
       await flushUntil(() => activityItemsState.items.some((item) => item.id === 'tessiven'));
       const items = activityItemsState.items.map((item) => item.id);
-      expect(items.slice(-2)).toEqual(['tessiven', 'plugins']);
+      expect(items.slice(-3)).toEqual(['tessiven', 'automation', 'plugins']);
       expect(host.querySelector('[aria-label="Tessiven"]')).toBeNull();
 
       (host.querySelector('[data-activity-id="tessiven"]') as HTMLButtonElement).click();
@@ -5156,6 +5157,7 @@ describe('EnvAppShell environment entry affordances', () => {
         'applications',
         'containers',
         'tessiven',
+        'automation',
         'plugins',
       ]);
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();

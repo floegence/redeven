@@ -776,7 +776,7 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 		return []fltools.Effect{fltools.EffectWrite, fltools.EffectNetwork}
 	case "plugin_author_build":
 		return []fltools.Effect{fltools.EffectShell, fltools.EffectWrite}
-	case "plugin_author_initialize", "plugin_author_capture", "plugin_author_rename", "tessiven_save_canvas", "tessiven_edit_canvas":
+	case "automation_save_definition", "automation_contribute", "automation_submit_result", "plugin_author_initialize", "plugin_author_capture", "plugin_author_rename", "tessiven_save_canvas", "tessiven_edit_canvas":
 		return []fltools.Effect{fltools.EffectWrite}
 	case "web_search_pages":
 		return []fltools.Effect{fltools.EffectNetwork}

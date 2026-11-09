@@ -8389,7 +8389,8 @@
       "cache": "Cache",
       "runtime": "Coordination du moteur",
       "audit": "Audit",
-      "diagnostics": "Diagnostic"
+      "diagnostics": "Diagnostic",
+      "automation": "Automatisations"
     },
     "kinds": {
       "identity": "Identité et réglages",
@@ -8411,5 +8412,8 @@
     "measuredScope": "Emplacements mesurés de l’environnement · projets externes exclus",
     "manageOwner": "Gérer {owner}",
     "locations": "Emplacements et périmètre de sauvegarde"
+  },
+  "automation": {
+    "title": "Automatisations"
   }
 }

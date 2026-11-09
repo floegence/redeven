@@ -7,76 +7,48 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Exact client capabilities and monotonic generations fence Git inventory, diffs and filesystem decoration. Keep Git shell/navigation mounted with local panel loading/errors, no second curtain. Diff requests/nested file references obey JSON-only transport. Filesystem navigation never waits for Git.
+Exact client capabilities and monotonic generations fence Git inventory/diffs/filesystem decoration. Retain shell/navigation with panel-local loading/errors; Files navigation never waits for Git. Nested file references and effects use JSON-only transport.
 
 # Contract
 
-## Workspace generations
-Use workspace-v1 only after the exact client confirms revision/path-status/directory-scope/stash-section capabilities. Client replacement retires old capabilities/generations and late replies. Files never uses unbounded legacy reads; Files→Workspace opens a fresh generation before section/scope.
+## Generations and effects
+Use workspace-v1 only after exact client confirms revision/path-status/directory-scope/stash-section capabilities. Replacement retires old generations/replies. Files avoids unbounded legacy reads; Files→Workspace starts fresh generation before section/scope. Committed repository/path identity fences facts; bound replacements while retaining committed decoration. Distinguish index/worktree/untracked/conflict/stash identities.
 
-One monotonic protocol `GitWorkspaceInvalidationBus` invalidates every dispatched effect in `finally`: success, application failure or unknown transport outcome; preview/validation cannot invalidate.
+One `GitWorkspaceInvalidationBus` invalidates every dispatched effect in finally, including failures/unknown transport; validation/preview never invalidate. Encoders omit absent optional fields before Flowersec JSON-only APIs, preserving false/empty strings/literal paths; later JSON serialization does not excuse undefined fields. Do not relax upstream validation.
 
-Committed path/repository identity fences detection; old directories cannot leak facts. Bound replacement generations while preserving committed decoration. Section identity distinguishes staged/unstaged/untracked/conflicted and stash rows.
+Actions retain directory and section scope. Totals cover descendant files; browsing omits repetitive folder counts. Commit review always loads staged root because commit affects whole index; incomplete line counts are not zero. Deletion previews every consequence, including branch-only entry. Any worktree blocker disables safe/force confirmation before merged-state checks. Localize primary/locked/nested blockers; retain removal/discard authorizations, including ignored-only files.
 
-## Git action requests and review
-Every Git encoder omits absent optional fields before calling the published JSON-only Flowersec API. Preserve explicit `false`, empty strings and literal file paths; serializing an object with `undefined` later is not a valid boundary. Redeven owns this adapter; do not relax upstream validation.
+Public codes produce localized permission/stale/resource/rejection/unknown guidance without private diagnostics. Unknown outcomes require refresh/review, no automatic replay. Keep legacy code 41304 reserved/localized: retired full-tree deletion-inspection limit differs from transient pressure and waiting alone does not fix oversized trees.
 
-Directory navigation and bulk actions retain changes/staged/conflicted section identity. Section totals describe descendant files in the current scope; browsing rows omit repetitive folder counts. Opening commit review loads the staged root because committing covers the whole index; directory summaries show folder counts, and incomplete line totals are not presented as zero.
+## Diffs and persistence
+Inline/Activity/Workbench/dialog share one diff owner. Snapshot patches are previews; refresh/authoritative empty/failure cannot revive them. Runtime owns first-parent meaning. Workbench persists placement targets, not summaries; equal target fields preserve requests/full context/expansion/scroll through unrelated updates. Other inspections retain fresh-summary semantics. Disconnect is not missing file; confirmed absence settles empty, errors retain recovery.
 
-Deletion uses the authoritative preview for every consequence, even when entered through a branch-only action. Any worktree blocker disables both safe and force confirmation before merged status is considered. Primary, locked and nested-worktree blockers are localized from structured codes. Show the reviewed removal/discard effects and carry both authorizations; an ignored-only worktree still requires discard review.
+## Tree workspace
+Files/Git switch keeps one native button pair; Solid Portal moves it between matching top-row slots and restores trigger focus. Forward slot callbacks through wrappers and resolve JSX once before testing/rendering; detached duplicate slots cannot own controls. Narrow Files keeps it above directory drawer. Repository/sync shares top row; full-width Git navigation spans both panes, never separate sidebar/drawer. Divider resizes rail and matching mode slot. Branch/history selectors follow navigation; narrow detail uses retained list/detail/back. Pending navigation hides stale content until destination commit; stash dismissal joins that commit, including same-view returns. Narrow navigation scrolls without overlap.
 
-Stable public error codes produce localized permission, stale-state, resource, request-rejection or unknown-outcome guidance without private Git/transport diagnostics. Unknown outcomes require refresh and review; never automatically replay a mutation. Keep deletion-inspection limit code 41304 reserved and localized for compatibility with older runtimes; current risk-based deletion reviews do not perform the retired full-tree scan. Legacy guidance distinguishes this failure from transient resource pressure and never implies that waiting alone resolves an oversized tree.
+Changes defaults All over bounded Changes/Staged/Conflicted pages. Filters preserve scope; same-path index/worktree selection stays exact. Initial All reads serialize through existing owner; refresh revalidates nonempty sections, mutations refresh affected ones, client/repository replacement cancels remainder. Errors offer retry. Rail owns search/collapsed trees/scope actions/commit draft; draft never bypasses whole-index review.
 
-## Diff requests
-Inline/Activity/Workbench/dialog share one owner. Caller patch snapshots are previews; refresh or authoritative empty/failure cannot revive them. Runtime owns first-parent meaning.
+Stashes opens within full-width workspace navigation using existing owner/review/draft; contextual stash inspection may float. Unified/side-by-side and patch/full-context are independent retained choices. Replacement pairing preserves blank sides/line numbers/context without changing authoritative reads.
 
-Persisted Workbench widgets store placement targets, never Git summaries. Equal target fields preserve in-flight work, patches/full context, expansion and both scroll axes across unrelated snapshots. Other inspections retain same-path fresh-summary behavior. Connection absence is not missing-file failure; successful no-file settles empty without old patches/perpetual overlay, failures retain recovery.
+Workspace/worktree/history/comparison/stash share tree adapter. Folders start collapsed. Collapse-all uses inward-chevron, is enabled only for expanded folders and clears forced-expansion filtering. Mouse rows 24px, indent 12px, headings 28px; coarse controls >=44px. Exact paths/rename targets/section/stash identities own actions; expansion never retargets. Arrows move/expand/collapse, Enter/Space opens; keyboard/menu handoff captures target. Modified/added/deleted/renamed status inks remain separate from selection.
 
-## Visual state
-Navigation/branches/history/summaries/files use `ring`-derived interaction tokens independent of text selection. Neutral hover cannot override selection; success/warning/danger/info/remote-violet describe facts, never selection/focus.
+Expand reads one bounded directory page through existing RPC owner, without replacing root/scope. Fence client/repository/worktree/generation/section/path/revision. Refresh/effects/root replacement retire child caches; stale revision refreshes authority without replay. Failed pages retry same offset. Search only loaded paths, leaving unread folders navigable; no silent full scan.
 
-One measured owner lays out graph rails/connectors/nodes/columns within available width without moving summaries or changing actions/selection. Workspace/commit/branch status/history/comparison reuse retained file/diff navigation; filtering/removal/section/commit changes retire stale selections. Narrow/Workbench views remain contained with independent scrolling.
+Native constrained tree viewport owns both scroll axes, allowing natural indentation/full names. Floe persistent horizontal scrollbar stays reachable; tabs/filter/draft/diff do not scroll with tree. Mode/narrow navigation retains tree DOM/scroll. Draft heading shows staged count and optional whole-index line totals; unavailable totals remain absent. Commit always opens whole-index confirmation.
 
-Every preset has complete interaction roles. Forced colors expose selection/focus/Current-chip boundaries through system colors. Selected navigation, branches, stashes and file rows use a complete surface without a colored left stripe; keyboard focus and forced-color selection retain an inset whole-row outline.
+## Presentation
+Navigation/branches/history/summaries/files use ring-derived interaction roles independent of text selection or semantic status. Neutral hover never masks selection. One measured owner fits graph rails/connectors/nodes/columns without moving summaries or changing selection/actions. Shared retained file/diff navigation retires stale targets after filter/remove/section/commit changes. Narrow/workbench scrolling stays contained.
 
-Files/Git disabled-reason tooltips use the published Floe layer below both tabs. Viewport/projected hosts keep buttons unobscured from first paint, contain wrapped copy and dismiss on pointer exit.
+All themes define full interaction roles; forced colors expose focus/selection/Current boundaries. Select whole rows with no colored left rail; keyboard/system-color states use inset outline. Files/Git disabled reason appears below tabs through Floe floating layer, unobscured from first animation frame in normal/projected hosts; wrap within viewport and dismiss on exit.
 
-## Tree review workspace
-One mounted native Files/Git button pair moves by Solid Portal between matching top-row slots. Forward slot callbacks through wrappers and resolve JSX once; detached duplicate slots cannot own the control. Restore triggering-button focus. Narrow Files keeps the control above its drawer. Repository/sync share the top row; Git navigation spans both review panes, with branch/history selectors below. The divider resizes the file rail and mode slot together. Pending navigation hides stale content until destination commit; stash dismissal joins that commit, even for same-view returns. Narrow navigation scrolls without overlap; narrow inspection retains list/detail state with Back.
-
-Changes defaults to All over bounded Changes/Staged/Conflicted pages. Filters retain scope; selection preserves the exact section even for paths in both index and worktree. The existing owner serializes initial reads, refreshes nonempty sections, revalidates affected mutations and cancels on repository/client change. Section errors offer retry. The file rail owns search, trees, scope actions and retained drafts.
-
-Stashes opens inside the workspace from the full-width navigation, reusing the existing stash owner, draft and review contracts. Other contextual stash requests retain their floating inspection. Unified/side-by-side presentation and patch/full-context selection are independent retained preferences. Side-by-side pairs replacement runs and preserves blank sides, line numbers and context without changing authoritative diff requests.
-
-Workspace, branch worktree, history, comparison and stash inventories share the Git tree adapter. Directories start collapsed. Collapse-all uses an explicit inward-chevron action, enabled only with expanded folders; it also clears filtering that forces expansion. Mouse layouts use 24px tree rows, 12px indentation and 28px group headings; coarse input keeps 44px controls. Exact paths, rename targets and section/stash identities remain authoritative; expansion never changes action targets. Arrow keys move focus/expand/collapse, Enter/Space opens the file, and keyboard/context-menu handoffs keep their captured target. Modified/added/deleted/renamed paths use warning/success/error/info ink independently of selection.
-
-Folder expansion reads a bounded page through its existing RPC owner without replacing root inventory/scope. Client, repository/worktree, generation, section/path and revision fence replies. Refresh/mutation/root replacement retire child caches. Stale revisions refresh inventory without replay; failed pages retry the same offset. Filters match loaded paths and retain unread-folder navigation without repository scans.
-
-Files/Git trees own both scroll axes. Indentation/full names overflow only their constrained viewport; the published Floe horizontal scrollbar stays reachable. Tabs, filter, draft and diff stay fixed. View/list-detail switching retains tree DOM and scroll. Draft headings show staged count and optional repository whole-index line totals; unavailable totals stay absent. Commit always opens whole-index confirmation.
-
-## Review presentation
-Git groups avoid decorative side rails or empty-status subtitles. Branch rows expose their selected state; text follows published body/caption roles. Dialog, Button, Input and Textarea retain Floe material, sizing, placement and presence. A Dialog owns its only footer separator/padding; window-local stash review supplies one equivalent footer. Narrow reviews scroll their body while actions stay reachable. Nested desktop diff modes remain 28px controls; toolbars wrap whole controls, with 44px targets reserved for coarse input.
-
-Warning/danger notices use restrained semantic tint with readable theme ink, never solid-fill foreground tokens on a pale background. All built-in themes meet 4.5:1 notice-text contrast. Deletion shows one consequence summary; safe-delete guidance is localized, with raw diagnostics behind explicit technical details. Exact-name confirmation uses one labeled field and one copy action. Validation keeps the same confirm button mounted, and deletion retains its reviewed consequences/field while disabling editing and dismissal until the effect settles. Reduced motion removes Git row travel/transitions and preserves shared modal presence rules.
+Avoid decorative rails/empty subtitles. Branches expose selected state; shared typography/dialog/button/input/textarea own sizing/material/focus/presence. Dialog has one footer divider/padding; window-local stash supplies equivalent. Narrow bodies scroll with actions reachable. Nested desktop diff modes stay 28px; toolbars wrap complete controls and coarse targets remain 44px. Restrained warning/danger tint meets 4.5:1 in every built-in theme. Deletion has one consequence summary/localized safe-delete guidance, technical diagnostics disclosed. Exact-name confirmation has one field/copy action. Keep confirm button identity; pending deletion retains reviewed fields/consequences while disabling edits/dismissal. Reduced motion removes row travel, preserves shared modal rules.
 
 # Boundaries
 
-Revisions grant read consistency, never mutation authority. UI cancellation cannot prove an effect did not run; unknown outcomes still invalidate. Non-Git Flowersec outbound allocation remains outside this transport budget and cannot be claimed fixed by batching.
-
-Layout persistence proves no content freshness. Workbench target stability cannot change inline/Activity/Stash fresh-summary semantics. Themes may vary selection hue/surfaces, never replace interaction roles with Git status colors, inherit another theme's fixed palette or use Current as selection.
+Revision is read consistency, never mutation authority. UI cancel cannot prove no effect; unknown still invalidates. Non-Git Flowersec allocation is outside this budget. Layout persistence proves no freshness and cannot change inline/Activity/Stash semantics. Themes may vary hue, never substitute status colors/fixed foreign palette or Current for selection.
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/scripts/checkGitInteractionElectron.mjs` — supervised built-renderer acceptance for staged totals, collapse/scroll, branch commit diff geometry and navigation frames; cleanup is part of success.
+Under `internal/envapp/ui_src/src/ui/widgets`: `GitWorkspaceTree`, `gitWorkspaceTreeModel` tests cover bounded lazy reads/fences/keyboard; `GitWorkspaceRedesign` and `FileBrowserWorkspace.navigation` browser tests cover retained rails/drafts/scroll/themes/widths. `GitDiffPanel`, `RemoteFileBrowser`, `GitChangesPanel`, `GitDeleteBranchConfirmDialog` cover diffs/scoped review. `../protocol/redeven_v1/gitRequests.test.ts` covers all 31 RPC methods. `GitDialogVisual` checks 28-theme contrast, footer/geometry/identity/focus/locales/reduced motion; `GitHistoryModeSwitch` checks first-frame tooltip clearance. `src/styles/gitBrowserSelectionVisual.browser.test.tsx` checks 28 themes and both materials. RemoteFileBrowser.paths.browser.test.tsx covers cold entry and visible native-control identity through real Activity/Workbench wrappers. Protocol IDs: `src/ui/protocol/redeven_v1/typeIds.ts`.
 
-- `redeven:internal/envapp/ui_src/src/ui/widgets/GitWorkspaceTree.test.tsx`, `gitWorkspaceTreeModel.test.ts` — lazy pagination, stale replies, exact paths and keyboard navigation.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/GitWorkspaceRedesign.browser.test.tsx`, `FileBrowserWorkspace.navigation.browser.test.tsx` — retained rail/draft, independent horizontal scrolling, light/dark themes and adaptive widths. `RemoteFileBrowser.paths.browser.test.tsx` exercises cold Files/Git entry and visible native control identity through real Activity/Workbench workspace wrappers.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/GitDiffPanel.test.tsx` - Diff tests.
-- `redeven:internal/envapp/ui_src/src/ui/protocol/redeven_v1/gitRequests.test.ts` - All 31 Git methods at the public RPC adapter boundary.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.e2e.test.tsx`, `GitChangesPanel.e2e.test.tsx`, `GitDeleteBranchConfirmDialog.test.tsx` - Scoped interactions and reviewed deletion consequences.
-- `redeven:internal/envapp/ui_src/src/styles/gitBrowserSelectionVisual.browser.test.tsx` - Chromium selection across 28 themes and standard/soft material, with real branch sidebar widths.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/GitDialogVisual.browser.test.tsx` - 28-theme dialogs, footers, narrow scrolling, confirmation identity, pending geometry, focus, locales and reduced motion.
-
-- `redeven:internal/envapp/ui_src/src/ui/widgets/GitHistoryModeSwitch.browser.test.tsx` - First-frame clearance, narrow viewport wrapping, projected-surface placement and pointer dismissal.
+Built checkGitInteractionElectron.mjs qualifies staged totals, collapse/scroll, branch-diff geometry and navigation frames under supervised cleanup.

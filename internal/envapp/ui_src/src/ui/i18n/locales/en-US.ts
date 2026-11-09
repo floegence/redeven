@@ -6,6 +6,7 @@ import { enUSActivityChrome } from './activityChrome';
 import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
+ automation: {"title": "Automations"},
   storage: {
     usage: "Space usage",
     measuredScope: "Measured environment locations \u00b7 external projects excluded",
@@ -36,6 +37,7 @@ export const enUS = defineDictionary({
     "code": "CodeSpace",
     "notes": "Notes",
     "tessiven": "Tessiven",
+    "automation": "Automations",
     "workbench": "Workbench",
     "terminal": "Terminal",
     "favorites": "Directory favorites",

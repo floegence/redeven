@@ -11,14 +11,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/floegence/redeven/internal/plugincreation"
 	"io"
 	"strings"
 
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/plugincreation"
 )
 
 type Model struct {
@@ -251,6 +252,7 @@ type FlowerSubagentDetailResponse struct {
 }
 
 type CreateThreadRequest struct {
+	automationWork   *automation.ThreadBinding
 	TessivenCanvasID string `json:"tessiven_canvas_id,omitempty"`
 	// managedSource is assigned only after authenticated draft resolution.
 	managedSource      *plugincreation.SourceScope

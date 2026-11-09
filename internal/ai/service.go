@@ -21,6 +21,7 @@ import (
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -50,6 +51,8 @@ const (
 )
 
 type Options struct {
+	Automation             *automation.Store
+	AutomationAuthorize    func(context.Context, automation.Owner, automation.Run) (*session.Meta, error)
 	ChatGPT                *chatgpt.Client
 	PlatformHTTPTransport  func() (http.RoundTripper, error)
 	PluginCreation         *plugincreation.Service
@@ -109,6 +112,8 @@ type Options struct {
 }
 
 type Service struct {
+	automation             *automation.Store
+	automationAuthorize    func(context.Context, automation.Owner, automation.Run) (*session.Meta, error)
 	openAIConnections      *openAIResponsesPool
 	deepSeekImageFiles     *deepSeekImageFileOwners
 	chatGPT                *chatgpt.Client
@@ -443,6 +448,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	svc := &Service{
+		automation: opts.Automation, automationAuthorize: opts.AutomationAuthorize,
 		platformHTTPTransport: opts.PlatformHTTPTransport,
 		buildVersion:          strings.TrimSpace(opts.BuildVersion),
 		pluginCreation:        opts.PluginCreation,
@@ -1468,8 +1474,13 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 	req.Input.ContextAction = contextAction
 	channelID := strings.TrimSpace(meta.ChannelID)
 	endpointID := strings.TrimSpace(meta.EndpointID)
-	if channelID == "" || endpointID == "" {
+	if endpointID == "" {
 		return nil, errors.New("invalid thread effect product scope")
+	}
+	if channelID == "" {
+		if err := s.requireBackgroundThreadAuthority(context.Background(), meta, threadID); err != nil {
+			return nil, err
+		}
 	}
 	metaCopy := *meta
 	metaRef := &metaCopy

@@ -1,0 +1,180 @@
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16000
+    },
+    "model": {
+      "type": "string"
+    },
+    "working_directory": {
+      "type": "string"
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "parallel",
+              "tool",
+              "condition",
+              "join",
+              "render",
+              "deliver"
+            ]
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            "uniqueItems": true
+          },
+          "instruction": {
+            "type": "string",
+            "maxLength": 16000
+          },
+          "tool": {
+            "type": "string",
+            "enum": [
+              "http_get",
+              "containers_list",
+              "container_inspect",
+              "artifact.save"
+            ]
+          },
+          "parameters": {},
+          "items": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "data": {}
+              },
+              "required": [
+                "id",
+                "label",
+                "data"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "items_from": {
+            "type": "string"
+          },
+          "concurrency": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          },
+          "condition": {
+            "type": "object",
+            "properties": {
+              "node_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+              },
+              "field": {
+                "type": "string",
+                "minLength": 1
+              },
+              "equals": {}
+            },
+            "required": [
+              "node_id",
+              "field",
+              "equals"
+            ],
+            "additionalProperties": false
+          },
+          "template": {
+            "type": "string",
+            "maxLength": 262144
+          },
+          "join_policy": {
+            "type": "string",
+            "enum": [
+              "all",
+              "partial"
+            ]
+          },
+          "minimum_success": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "require_review": {
+            "type": "boolean"
+          },
+          "output_schema": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "depends_on"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "max_concurrent": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    },
+    "allow_partial": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "title",
+    "goal",
+    "model",
+    "working_directory",
+    "nodes",
+    "max_concurrent",
+    "timeout_seconds",
+    "allow_partial"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Published workflow. Dependencies form a DAG. Parallel items_from is a direct dependency producing an Item array. Partial joins require allow_partial and explicitly report coverage. HTML templates use Go html/template: Title, Run, ScheduledAt, Inputs, Context."
+}

@@ -83,7 +83,7 @@ func (s *Service) SelectComputerTarget(ctx context.Context, meta *session.Meta, 
 	if err := requireRWX(meta); err != nil {
 		return err
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return err
 	}
 	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
@@ -105,7 +105,7 @@ func (s *Service) ComputerTarget(ctx context.Context, meta *session.Meta, thread
 	if meta == nil || !meta.CanRead {
 		return "", errors.New("computer access denied")
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return "", err
 	}
 	return s.snapshotThreadStore().GetComputerTarget(ctx, threadID)
@@ -115,7 +115,7 @@ func (s *Service) ComputerCandidates(ctx context.Context, meta *session.Meta, th
 	if err := requireRWX(meta); err != nil {
 		return ComputerTargetInventory{}, err
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return ComputerTargetInventory{}, err
 	}
 	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)
@@ -129,7 +129,7 @@ func (s *Service) SelectComputerCandidate(ctx context.Context, meta *session.Met
 	if err := requireRWX(meta); err != nil {
 		return TargetDescriptor{}, err
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return TargetDescriptor{}, err
 	}
 	host, ok := s.targetToolExecutor.(*ComputerUseRuntime)

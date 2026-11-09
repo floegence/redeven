@@ -119,9 +119,11 @@ func (a *sessionAdapter) Authorize(ctx context.Context, req host.AuthorizationRe
 }
 
 type resolvedSession struct {
-	context     sessionctx.Context
-	permissions sessionPermissions
-	codeSpaceID string
+	context          sessionctx.Context
+	permissions      sessionPermissions
+	codeSpaceID      string
+	ownerUser        string
+	ownerEnvironment string
 }
 
 type sessionPermissionCache struct {
@@ -255,6 +257,7 @@ func (r *sessionResolver) resolvedSessionFromMeta(expectedChannelID string, meta
 			admin:   meta.CanAdmin,
 		},
 		codeSpaceID: strings.TrimSpace(meta.CodeSpaceID),
+		ownerUser:   meta.UserPublicID, ownerEnvironment: meta.EndpointID,
 	}, nil
 }
 

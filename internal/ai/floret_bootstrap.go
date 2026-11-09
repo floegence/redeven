@@ -11,6 +11,7 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -174,6 +175,22 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 	// Admission requires RWX session authority. Tool policy is resolved at each
 	// authorization boundary independently of this durable identity.
 	meta := sessionMetaFromExecutionAuthority(authority)
+	if s.automation != nil {
+		owner, b, lookupErr := s.automation.AnyThread(ctx, request.ThreadID.String())
+		if lookupErr == nil && b.RunID != "" {
+			current, readErr := s.automation.Run(ctx, owner, b.RunID)
+			if readErr != nil {
+				return floretEffectRequest{}, readErr
+			}
+			delegated, authErr := s.automationMeta(ctx, owner, current)
+			if authErr != nil {
+				return floretEffectRequest{}, authErr
+			}
+			meta = *delegated
+		} else if lookupErr != nil && !errors.Is(lookupErr, automation.ErrNotFound) {
+			return floretEffectRequest{}, lookupErr
+		}
+	}
 	options := RunOptions{NoUserInteraction: strings.TrimSpace(settings.ParentThreadID) != "", PermissionType: authority.PermissionType}
 	modelID := settings.ModelID
 	if authority.ExecutionConfigJSON != "" {

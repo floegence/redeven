@@ -242,7 +242,7 @@ func TestPluginDraftManagedSourceAdmissionRecoveryAndScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, section := range contextSnapshot.Sections {
-		if section.Key == "plugin_authoring" {
+		if section.Key == "work_binding" {
 			t.Fatal("ordinary model context contains plugin workspace guidance")
 		}
 		if section.Key == "skills" && strings.Contains(section.Text, "redeven-plugin-authoring") {
@@ -278,7 +278,7 @@ func TestPluginDraftManagedSourceAdmissionRecoveryAndScope(t *testing.T) {
 	}
 	guidanceCount := 0
 	for _, section := range contextSnapshot.Sections {
-		if section.Key == "plugin_authoring" {
+		if section.Key == "work_binding" {
 			guidanceCount++
 			if !strings.Contains(section.Text, "plugin_author_get_status") || !strings.Contains(section.Text, pluginAuthoringSkillName) {
 				t.Fatal("dedicated runtime context lost authoring guidance")

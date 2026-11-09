@@ -17,18 +17,18 @@ it('shows only a concise message estimate and dismisses by keyboard, outside poi
   }} />, host);
   const trigger = host.querySelector<HTMLElement>('[role="button"]')!;
   trigger.focus();
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Message text estimate: ≈ 159.1k → 17.5k tokens');
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')?.textContent).toBe('Message text estimate: ≈ 159.1k → 17.5k tokens');
   trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).toBeNull();
   expect(document.activeElement).toBe(trigger);
   trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).not.toBeNull();
   document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
-  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).toBeNull();
   trigger.click();
-  expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).not.toBeNull();
   const outside = document.createElement('button'); document.body.append(outside); outside.focus();
-  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).toBeNull();
   expect(document.activeElement).toBe(outside);
 });
 
@@ -42,15 +42,15 @@ it('closes the floating detail when hidden and can reopen after disclosure', () 
   }} />, host);
   const trigger = host.querySelector<HTMLElement>('[role="button"]')!;
   trigger.focus();
-  expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).not.toBeNull();
   setVisible(false);
-  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).toBeNull();
   trigger.click();
-  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).toBeNull();
   setVisible(true);
-  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).toBeNull();
   trigger.click();
-  expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).not.toBeNull();
 });
 
 it('explains unavailable historical estimates without inventing token totals', () => {
@@ -65,7 +65,7 @@ it('explains unavailable historical estimates without inventing token totals', (
   expect(trigger.getAttribute('role')).toBe('button');
   expect(trigger.tabIndex).toBe(0);
   trigger.click();
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Token counts unavailable.');
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')?.textContent).toBe('Token counts unavailable.');
 });
 
 it('keeps failure details and an independent icon retry with a focus tooltip', async () => {
@@ -77,12 +77,12 @@ it('keeps failure details and an independent icon retry with a focus tooltip', a
     compaction: { operation_id: 'failed', turn_id: 'turn-1', canonical_ordinal: 1, phase: 'failed', status: 'failed', error: 'Summary unavailable', updated_at_ms: 1 },
   }} />, host);
   host.querySelector<HTMLElement>('[role="button"]')!.focus();
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Summary unavailable');
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')?.textContent).toBe('Summary unavailable');
   const action = host.querySelector<HTMLButtonElement>('button')!;
   expect(action.textContent).toBe('');
   expect(action.getAttribute('aria-label')).toBe(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider.retry);
   action.focus();
-  await vi.waitFor(() => expect(document.querySelector('[role="tooltip"]')?.textContent).toBe(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider.retry));
+  await vi.waitFor(() => expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')?.textContent).toBe(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider.retry));
   action.click();
   expect(retry).toHaveBeenCalledOnce();
 });
@@ -141,11 +141,11 @@ it('updates an open tooltip when canonical estimates become unavailable and retu
   }} />, host);
   const trigger = host.querySelector<HTMLElement>('[role="button"]')!;
   trigger.focus();
-  expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')).not.toBeNull();
   setTokens(undefined);
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Token counts unavailable.');
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')?.textContent).toBe('Token counts unavailable.');
   expect(trigger.hasAttribute('aria-describedby')).toBe(true);
   expect(trigger.tabIndex).toBe(0);
   setTokens(21000);
-  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Message text estimate: ≈ 150k → 21k tokens');
+  expect(document.querySelector('[role="tooltip"]:not([aria-hidden="true"])')?.textContent).toBe('Message text estimate: ≈ 150k → 21k tokens');
 });

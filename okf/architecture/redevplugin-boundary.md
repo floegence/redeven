@@ -7,109 +7,47 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Redeven consumes coordinated released ReDevPlugin Go/npm/Rust/machine artifacts. Channel auth is separate: failed/panicked binding grants nothing and cannot close host channel. Request panic releases admission; HTTP contains failure. Granted HTTPS hostname connectors without private-prefix binding use released transport factory.
+Redeven consumes one coordinated published ReDevPlugin Go/npm/Rust/machine release. Product adapters never recreate upstream runtime, permission or storage mechanics. Failed channel binding grants nothing and cannot close the host channel; request panic releases admission and HTTP contains failure.
 
 # Contract
 
 ## Ownership
-Product placement is `StateDir/apps/plugins/platform`; [storage ownership](storage-ownership.md) defines the pre-release offline relocation and admission gate.
-Upstream owns validation/hash/source identity, inspection/registry, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, Executions/Events, storage/network/secrets, supervision/IPC/WASM, quotas/revocation, control state and releases/contracts. One coordinated release; frontend cannot downgrade independently. Manifests/dependency tests own pins; bootstrap retains bounded credentials before readiness. [Packages](redevplugin-package-lifecycle.md) owns admission/cache, [adapters](redevplugin-redeven-adapters.md) product modules/display.
+Published schedule/agent.work own cadence, claims and capability contracts; Redeven owns workflow admission, business context, review and canonical Flower adapters ([workflows](automation-workflows.md)). StateDir/apps/plugins/platform follows [storage](storage-ownership.md) offline relocation/admission rules.
 
-## Availability
-Plugin readiness cannot block Runtime/ordinary sessions. Market/package/runtime/storage/init failure stays local; retain files/terminal/Notes/Workbench. PLUGIN_RUNTIME_UNAVAILABLE executes nothing; rejected writes report not_committed. Localize faults; unreadable inventory is not empty, auto-failure never global interruption. Init budget10s; cancel fences results/closes integration. Error/panic unwinds construction without hiding host cancellation.
+Upstream owns validation, hashing/identity, registry/inspection, permission/confirmation, tokens/assets, sandbox/bridge, settings/intents, executions/events, storage/network/secrets, IPC/WASM/supervision, quotas/revocation, control state and releases. Manifests/tests pin the coordinated release; frontend cannot independently downgrade. Bootstrap credentials stay bounded before readiness. [Packages](redevplugin-package-lifecycle.md) owns admission/cache; [adapters](redevplugin-redeven-adapters.md) owns product placement/display.
 
-Incompatible opaque state stays unchanged, never reauthorized.
+## Availability and network
+Plugin failures stay local and preserve ordinary sessions, files, terminal, Notes and Workbench. PLUGIN_RUNTIME_UNAVAILABLE executes nothing; rejected writes report not_committed. Unreadable inventory is not empty. Initialization has a 10-second budget, cancellation fences late results/closes integration, and errors/panics unwind without hiding host cancellation. Incompatible opaque state remains unchanged.
 
-## Network/history
-ReDevPlugin3.12.0 separates routing/package verification/execution. Single-hop host transports honor explicit proxy,current macOS proxy/PAC,OS DNS/VPN for market/package/release. Synthetic/private addresses alone are not denial. Upstream validates URL/redirect/origin/size/cancel/hash; downloads grant nothing.
+Released single-hop transports honor explicit proxy, macOS proxy/PAC, OS DNS/VPN for market/package/release. Private/synthetic addresses alone are not denial. Upstream validates URL/redirect/origin/size/cancellation/hash; downloads grant no execution. Platform checks target/method/grant/revision, quotas and revocation; private prefixes, literals and other protocols retain address-bound rules. Resolve configuration at request time. Granted HTTPS hostname connectors without private-prefix binding use the released factory.
 
-Platform checks target/method/grant/revision,pools/quotas/revocation. Private prefixes,literal addresses/other protocols keep address-bound policy. Resolve configuration at request time; faults local.
+Current admission requires Web v9. Retained data stays upstream-owned; unknown/corrupt roots fail unchanged. Product mounts origins/handlers, never interprets declarations, translates DOM/VNodes, rewrites packages or supplies ambient parent credentials.
 
-Current admission requires Web v9. Existing retained records and data remain upstream-owned; no host compatibility parser, VNode renderer, invented declaration or package rewrite is introduced. Unknown or corrupt state stays unchanged and locally unavailable.
+## Runtime build and Web communication
+Prepare complete Rust/C/archiver/link tools before exact published-source builds. [Build tooling](../operations/redevplugin-cross-build.md) owns pinned Zig, real probes, cache identity, cancellation and Desktop acceptance. Upstream owns containment and semantics: one actor/job path, fresh invocation state, bounded compiled-module reuse, finite fuel and signed deadlines. Immutable manifest caches never replace permission/revocation checks. Cold preparation and warm latency remain distinct.
 
-Platform owns Web admission/package modules/sandbox/bootstrap/bridge. Product allocates origins/mounts handlers; no DOM translation/VNode renderer/ambient parent credentials.
+Pure Web uses the released browser sandbox without Worker forwarding. Defaults declare no unused methods/intents; resource templates retain required declarations. No Surface methods means no receiver polling; removing the last drains claimed calls/cancellation before stopping. Opening/authority/resource/business traffic remain separate. Each simultaneous container has a distinct slot/frame/origin. Zero receiver requests proves neither zero network nor latency; qualify private resources, sibling closure and fresh authority through real SDK/product routes.
 
-## Runtime build ownership
-Product prepares complete Rust/C/archiver/link tools before exact published-source builds; [target build tooling](../operations/redevplugin-cross-build.md) owns pinned Zig, early real probes, cache identity, cancellation and Desktop package acceptance. Upstream runtime semantics and containment stay unchanged.
+## Authoring and execution
+Platform owns config/manifest validation, bindings, build/test/package, diagnostics/watch, persistent previews, update candidates, connection review and dev runtime. Product owns intent, placement, review/install approval and release proof; version-derived skills invoke published CLI. Authoring grants no execution permission.
 
-## Runtime performance boundary
-Released 3.15 uses one Wasmtime actor/job path with fresh invocation state, bounded in-process compiled-module reuse, finite fuel and signed deadlines. Immutable manifest caching never replaces current permission or revocation checks. Product supplies fixed toolchain, runtime signing and placement policy; it does not add an executor, authorization cache or compatibility fallback. Cold module preparation remains separate from warm execution latency.
+Use authoring.WorkspaceStore and isolated authoring.Environment. Retain only opaque workspace/artifact/inspection/install-request/instance references. Upstream owns initialization, immutable artifacts, build reports, preview Host state, exact inspection and durable committed/unknown/not-committed outcomes. Status-read failure never means absence or permits a new install identity. Preview and installed stores/grants are separate; deleting drafts preserves installed plugins.
 
-## Pure Web communication
-Pure Web applications use native browser rendering and the released sandbox,
-not a Worker forwarding layer. The default author template declares no unused
-methods or intents; resource templates retain their own declared actions.
-No registered Surface methods means no receiver polling. Removing the final
-method drains already claimed calls and cancellation before stopping the receiver.
-Opening, authority renewal, resource access and business calls remain separate
-traffic. Zero receiver requests is not a zero-network or product latency claim.
-Each simultaneous container owns a distinct slot, frame and origin. Product
-qualification exercises private resources, sibling closure and fresh authority
-through the published SDK and actual product routes.
+Admission/execution resolve cwd from current owner-bound SourceScope, never retained paths. Idempotent recovery preserves request evidence and uses that same source. Missing source fails before admission as PLUGIN_WORKSPACE_UNAVAILABLE, without fallback or widening. Authenticated draft source access still uses Flower approval. Admitted reads/builds use released user/environment ownership, live tool policy and user/application caps rather than browser-channel lifetime; no Host session is minted. Preview/install require a fresh channel; disconnected builds retain artifacts for later review. Preview success alone does not qualify continued authoring.
 
-## Authoring/execution
-Platform owns config/manifest validation,bindings,build/test/package,diagnostics/watch,persistent preview,manual update candidates,connection review,verified dev runtime. Redeven version-derived skill invokes released CLI. Product owns intent/placement/review/install approval and build/signature/SBOM/publication proof; authoring grants no permissions.
+Platform author locks are atomically close-on-exec: child terminals/services must not retain them after Runtime shutdown. Never delete state or bypass locks to recover. desktop/scripts/check-plugin-author-restart.mjs verifies a real restart with a surviving terminal child and the same draft. Preview refresh preserves selected actions/JSON drafts and single-flight work; unknown effects require review. Project-relative tools resolve from project cwd through published CLI.
 
-Embedded creation uses the published `authoring.WorkspaceStore` and isolated
-`authoring.Environment`; the product retains only opaque workspace, artifact,
-inspection, installation-request and installed-instance references. Platform owns
-source initialization, immutable artifacts, durable build reports, isolated Host
-state, preview application and exact-byte inspection. Durable inspected installs
-own idempotent request recovery and committed/unknown/not-committed outcomes.
-Redeven must never turn a failed status read into absence or replay an uncertain
-installation under a new request identity. Preview state and formal installation
-have separate stores and grants. Deleting author resources preserves installed
-plugins. Host-local source access is scoped to the authenticated draft and normal
-Flower effect approval; it does not authorize plugin execution.
+Released direct Surface KV/SQLite/files/settings need no Worker forwarding. Dedicated-origin binary/WebSocket handlers require exact handshakes; Host checks session ceilings/scope/grants/quotas/revocation. Product only mounts/presents. Conflict/unknown cannot replay; coalesced watches are not logs. Private-file migration remains upstream and separate from author/control schemas; snapshots/recovery stay opaque. Trusted parent query/event/cancel binds exact current gateway/plugin scope through authenticated handlers; malformed/stale/plugin-origin calls cannot widen to management. Read-only ceilings precede process effects; compiled SQL excludes host paths and bounds values/complexity/concurrency.
 
-Managed conversation admission and execution resolve their working directory
-from the current owner-bound `SourceScope`, never a retained absolute path.
-Frozen create recovery uses that same source while preserving original request
-evidence and identity. Unavailable source fails before admission with
-`PLUGIN_WORKSPACE_UNAVAILABLE`; no obsolete directory fallback or grant widening
-is allowed. Preview success alone does not qualify continued authoring. Admitted
-source reads/builds use the released user/environment workspace owner and Flower's
-live tool policy plus local user and agent-application caps, not the browser
-channel lifetime. They do not register a Host session. Preview and installation still require a fresh authenticated channel;
-a disconnected build retains its artifact and reports pending installation review.
-This is product adapter ownership, not a platform lifecycle exception.
+## Visual review and distribution
+Opt-in context menus are upstream capability: bounded hints/normalized geometry, validated source/port/frame/handle/sequence. Product owns annotations, artifact binding, comments and Flower submission. Metadata is untrusted context, never permission, parent DOM access or another dispatcher.
 
-Author-store locks belong to the owning Host process. The platform must
-open them atomically close-on-exec, so terminal and service descendants cannot
-keep author workspaces locked after Runtime shutdown. The host must not delete
-author state or bypass exclusive ownership to recover a failed startup.
-`desktop/scripts/check-plugin-author-restart.mjs` explicitly qualifies a real
-Desktop restart while a terminal child survives, then verifies inventory and
-the same persisted draft through the product UI.
-
-Preview refresh preserves selected actions and JSON drafts; pending work remains
-single-flight. Unknown outcomes require explicit review and never replay.
-Readiness resolves project-relative tools from the project directory. These
-behaviors belong to the released author CLI; Redeven only provides its
-version-derived instructions.
-
-3.13.0 owns manifest actions/direct Surface KV/SQLite/files/settings without Worker forwarding. Dedicated-origin binary/WebSocket handler requires exact handshake; Host checks session ceilings/scope/grants/quotas/revoke. Product mounts/presents,never new endpoints/manifest interpretation. SDK conflict/unknown cannot replay; coalesced watches are not logs.
-
-Private files1→chunked2 migration stays upstream, separate from control/author schemas. Snapshots/recovery opaque; no copied SQL/rewrite.3.12.2 retains ordinary packaging/SDK. Trusted parent query/event/cancel binds current surface gateway/plugin; pass exact scope via authenticated transport/released handler. Stale/malformed cannot broaden to management; plugin-origin direct calls denied.
-
-Host enforces read/write ceilings/read-only effects before process operations. SQLite authorizes compiled SQL,excludes host paths,bounds values/complexity/concurrency. Product maps sessions/process adapters only; no new manifest/data flags.
-
-## Visual review boundary
-Opt-in context menus are a released ReDevPlugin surface capability. Bootstrap
-collects bounded target hints and normalized viewport geometry; the SDK validates
-current source/port, frame, handle, sequence and limits. Product owns canvas
-annotations, artifact binding, comment text and Flower submission. No parent DOM
-inspection, injected application bridge, permission grant or alternate dispatcher
-is introduced. Visual metadata is untrusted model context, never authority.
-
-## Open distribution
-Ordinary plugins require no signature, publisher trust, registration or manual directory admission. Official/community is display-only. Released platform helpers own GitHub repository-derived identity; product validates market evidence using those helpers and delegates independent source inspection to Host. Authors maintain only `plugin.slug` in source and `slug` in the index. Local development needs no GitHub access. The released `build --release` pipeline compiles repository-derived identity before bindings/build/hash without rewriting author inputs. Product initialization accepts `slug`; it has no identity parser, publisher registration or signature evidence. Local/upload identities do not confer GitHub provenance. All sources use inspection, exact consent, durable receipts and independent permissions. Product update scheduling uses the current authenticated session and upstream automatic-eligibility rules; it adds no host install state machine. Signed platform releases, product runtime identity and signed runtime leases remain separate platform/product protections.
+Ordinary plugins need no publisher trust, signature, registration or manual admission. Official/community is display-only. Upstream derives GitHub identity; product validates market evidence then delegates independent inspection. Authors provide only plugin.slug/index slug; local work needs no GitHub. Published build --release compiles repository identity before bindings/build/hash without rewriting inputs. Local/upload identities cannot claim GitHub provenance. Every source needs exact inspection/consent/receipts and independent permissions. Product updates use current authenticated sessions/upstream eligibility, not a second install state machine. Signed platform releases, product identity and runtime leases remain separate protections.
 
 # Boundaries
 
-Never mutate opaque state,mint tokens/grants. Wrong/legacy/drifted/tampered/future roots fail unchanged. Conversion/history binding remains upstream; host shows review/calls update,not converter interpretation,generation copies,DB migration or unknown-write retry. Durable scheduling/claims/restart/uncertainty upstream; host supplies cap adapter/summaries,not retained user sessions/timers/table access.
+Never mutate opaque stores or mint platform tokens/grants. Legacy, wrong, drifted, tampered and future roots fail unchanged. Conversion/history binding and durable schedule/claim/restart/uncertainty belong upstream. Product displays review and supplies caps/summaries, never copies generations, edits upstream SQL, retains user sessions for scheduling or replays unknown writes.
 
 # Evidence
 
-- `redeven:go.mod:14` - Source.
-- `redeven:internal/session/dependency_contract_test.go:1` - Tests.
+Pins: go.mod and frontend/runtime manifests. internal/session/dependency_contract_test.go checks published dependency contracts; workflow, authoring and package acceptance remain in their owning concepts.

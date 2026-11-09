@@ -8385,7 +8385,8 @@
       "cache": "キャッシュ",
       "runtime": "ランタイムの調整状態",
       "audit": "監査",
-      "diagnostics": "診断"
+      "diagnostics": "診断",
+      "automation": "自動化"
     },
     "kinds": {
       "identity": "識別情報と設定",
@@ -8407,5 +8408,8 @@
     "measuredScope": "測定済みの環境ディレクトリ · 外部プロジェクトを除く",
     "manageOwner": "{owner}を管理",
     "locations": "保存場所とバックアップ範囲"
+  },
+  "automation": {
+    "title": "自動化"
   }
 }

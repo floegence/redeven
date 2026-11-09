@@ -24,20 +24,8 @@ Browser qualification neither changed nor timed native delivery. The subsequent 
 
 # Evidence
 
-## Browser — October 28
+October 28 browser regressions reproduced duration, coordinates, both transports and interruption boundaries. Repair passed focused Node/Go/vet checks; delivered 5,000-ms spans were ~5,007/5,004 ms. DeepSeek's original 27/33 retained five assertion defects and one extra click. Corrected repeats still failed invalid/omitted waits; invalid durations rejected before input. Later 9/9 browser tasks are separate and include recovered model errors.
 
-Six Chromium regressions fail before repair/pass afterward: duration0/1/500/5000, image coordinates, managed/connected transports and cancellation/takeover/document/uncertain-effect interruption.5000ms delivered spans: managed5007.3ms, connected5004.1ms.145 focused Node assertions, full internal/ai, vet and four safety fixtures pass. Fix is shared Redeven CDP adapter; dependencies unchanged.
+Native monotonic scheduling reproduced an old 500-ms request releasing at ~17 ms. Published repair delivered ~502/5,002 ms, with early release on cancellation. Independent AppKit receipts and production-helper tests cover actual down/up/endpoints; Go rejects fractional/nonfinite/out-of-range values. Authorization, balanced cleanup and takeover remained unchanged.
 
-DeepSeek Flash1017:11 scenarios×3=33 tasks;27 original passes, five assertion defects (three codes/two unrequested single-call requirements), one model-added click. Corrected assertions:4/6 additional pass; invalid wait/omitted requested wait remain model failures. All six invalid-duration tasks reject before input then perform one timed drag. Reports stay distinct; no zero-error/probability claim.
-
-## Native — October 28
-
-Published floe-native-apps schedules from one monotonic origin after acknowledged mouse-down. Redeven retains authorization/receipts/held-input cleanup, with no app-specific recovery. Independent AppKit receiver reproduces old500ms request releasing~17ms. Repaired upstream0/1/500/5000 requests deliver1.11/2.76/501.79/5001.71ms; cancelled5000ms releases113.91ms before endpoint. Production helper passes five direct cases,500/5000 measured503.42/5005.30ms.
-
-DeepSeek V4.1 Flash1017: five scenarios×3 (timed/invalid/zero drag, tree/text),11 original passes; three native rejection assertions wrongly expect browser fields and one parser stops at a label brace. Retain those test defects separately. One tree task has four model field errors before observation/one confirmed input. Six corrected validation/tree tasks pass; intentional invalid durations always reject before input.
-
-Upstream Swift covers boundaries/slow receipts/cancel/unknown effects/ordinary input. Go protocol rejects fractional/nonfinite/out-of-range before integer conversion. Three-tool surface/prompt unchanged; help states range/straight-path/timing limits.
-
-Nine more browser tasks (timed/invalid/batch,three each) pass. Earlier unanchored selector accidentally selects three native cases without opt-in and fails before their model runs; retain its nine browser reports separately. Precisely selected rerun9/9, sometimes with syntax/argument/nonactionable-target errors before recovery; final success does not certify every call.
-
-Final v0.25.1 passes five direct cases, affected Go/vet,38 Swift and normal commit gate; macOS bytes match earlier candidate. Five final model tasks4/5: valid drag rejected TAKEOVER_REQUIRED before input. Three validation repeats2/3: receiver sees extra release of unknown origin. Neither failure is silently passed/classified as model error. Receiver adds source PID/marker without filtering/weaker assertions. Three subsequent tasks pass with one marked source and1002.99–1003.62ms spans. This cannot identify the earlier source; originals remain. Production takeover policy unchanged.
+Original native model 11/15 retained browser-field assertion defects and a parser defect; a tree task made four field errors before recovery. Corrected cases passed separately. Final v0.25.1 direct, Go/vet and Swift checks passed, but 4/5 model tasks retained TAKEOVER_REQUIRED before input. Validation repeats retained one extra release of unknown origin. Adding source markers yielded three later passes (~1,003 ms) without explaining that earlier release. Original failures remain and are not silently classified as model errors. Browser tests do not certify native timing or arbitrary applications.

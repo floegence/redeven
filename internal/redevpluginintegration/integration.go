@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/floegence/redeven/internal/auditlog"
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/hostnetwork"
@@ -18,6 +19,8 @@ import (
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/storagecontract"
+	"github.com/floegence/redevplugin/v3/pkg/agentwork"
+	"github.com/floegence/redevplugin/v3/pkg/capability"
 	"github.com/floegence/redevplugin/v3/pkg/connectivity"
 	"github.com/floegence/redevplugin/v3/pkg/externalsource"
 	"github.com/floegence/redevplugin/v3/pkg/host"
@@ -29,6 +32,7 @@ import (
 )
 
 type Options struct {
+	Automation           *automation.Store
 	PluginCreation       *plugincreation.Service
 	StateDir             string
 	AgentHomeDir         string
@@ -51,6 +55,7 @@ type pluginMarketService interface {
 }
 
 type Integration struct {
+	automation             *automation.Store
 	author                 *authorBackend
 	handler                http.Handler
 	webHandler             http.Handler
@@ -156,6 +161,7 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 	}
 	integration := &Integration{
 		handler:          handler,
+		automation:       opts.Automation,
 		webHandler:       webHandler,
 		host:             h,
 		runtimeAuthority: opts.RuntimeAuthority,
@@ -172,6 +178,9 @@ func New(ctx context.Context, opts Options) (opened *Integration, err error) {
 		integration.handler = author
 		integration.webHandler = author.router
 		opts.PluginCreation.SetBackend(author)
+	}
+	if opts.Automation != nil {
+		opts.Automation.SetPluginValidator(h.ValidateCapabilityContinuation)
 	}
 	if integration.marketService != nil {
 		integration.startMarketRefreshController(defaultMarketRefreshPolicy())
@@ -298,6 +307,9 @@ func (i *Integration) Close() error {
 		return nil
 	}
 	var out error
+	if i.automation != nil {
+		i.automation.SetPluginValidator(nil)
+	}
 	i.stopMarketRefreshController()
 	if i.author != nil {
 		out = errors.Join(out, i.author.Close())
@@ -392,8 +404,23 @@ func buildHostAdapters(ctx context.Context, root string, opts Options, withAsset
 		}
 	}()
 
+	var capabilities *host.CapabilityModule
+	// Isolated author previews do not borrow the installed host's work authority.
+	if withAssets && opts.Automation != nil {
+		contract, e := agentwork.Contract()
+		if e != nil {
+			return host.Config{}, nil, nil, e
+		}
+		adapter := &agentWorkAdapter{store: opts.Automation, sessions: sessions.resolver.cache, directory: opts.AgentHomeDir}
+		registry := capability.NewRegistry()
+		if e = registry.Register(capability.Registration{Contract: contract, TargetProjector: adapter, Adapter: adapter}); e != nil {
+			return host.Config{}, nil, nil, e
+		}
+		capabilities = &host.CapabilityModule{Registry: registry}
+	}
 	hostConfig := host.Config{
-		StateRoot: root,
+		Capability: capabilities,
+		StateRoot:  root,
 		Core: host.CoreAdapters{
 			Policy:        sessions,
 			Authorization: sessions,

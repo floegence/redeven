@@ -296,7 +296,8 @@ vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div /> }
 vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div /> }));
 vi.mock('./pages/EnvAIPage', () => ({ EnvAIPage: () => <div /> }));
 
-vi.mock('./services/localApi', () => ({
+vi.mock('./services/localApi', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./services/localApi')>(),
   fetchLocalApiJSON: vi.fn(async () => ({ scope_id: 'a'.repeat(64) })),
   readApiJSONResponse: vi.fn(async () => ({ data: {}, headers: new Headers(), status: 200 })),
   localApiRequestCredentials: () => 'same-origin',

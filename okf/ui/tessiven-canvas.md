@@ -7,119 +7,52 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Published Floe owns graph layout, routing and viewport paint; Tessiven supplies canonical topology and selectable details. Browsers retain popup-blocking feedback, and native refusal or failure remains visible through localized command feedback without starting another opening path.
+Published Floe owns graph layout/routing/paint; Tessiven supplies canonical topology and details. Browser popup and native opening failures remain visible; never silently choose another route.
 
 # Contract
 
 ## Canvas surfaces
-The Connected environments panel and Runtime node details follow the [scoped Runtime operations contract](../ai/tessiven-runtime-operations.md#runtime-operations).
-
-Separate responsibilities include cloud controllers, node agents, container runtimes, network plugins, service meshes, ingress, operators, registries, observability, identity, secret and certificate services, streaming, and metadata; repeated instances of the same responsibility keep the same icon.
+Connected environments and Runtime details follow [scoped operations](../ai/tessiven-runtime-operations.md#runtime-operations). Distinct infrastructure responsibilities have distinct icons; repeated instances retain the same icon.
 
 ## Navigation and rendering
 ### Layout and routing
-Automatic layout and library thumbnails use the same published Floe layout engine, direction, layers, and visibility projection. Saved positions guide ordering within a layer and never override its rank. Positioned objects without relationships still contribute their actual world bounds, so fitting a newly mapped or isolated node keeps it inside the viewport.
+Canvas and thumbnails share Floe direction/layers/visibility. Saved positions order within rank, never override it. Isolated positioned nodes contribute actual bounds for fit.
 
 ### Connection scopes
-Default browsing shows one directed overview connector per root endpoint pair. Group-internal relationships remain in the canonical pool overview and never create a group self-loop.
-
-The interactive overview and library thumbnails always paint the root overview, even while the main canvas shows a focused host's detailed paths.
+Default overview has one directed connector per root endpoint pair; internal relationships remain in canonical overview without group self-loops. Overview/thumbnails always paint root scope, even during focused-host detail.
 
 ### Controls and rendering
-- Canvas controls expand or collapse all logical groups in one compact reflow. They preserve the selected visible object, or its enclosing group when hidden, and never create a document version. Large-graph qualification measures actual host counts, including groups of ten so a thousand-host fixture never silently measures only aggregate cards.
+Expand/collapse all groups reflows once, preserving selected visible object or enclosing group, without a document version. Large-graph tests count actual hosts, including grouped hosts.
 
 ## Document reading
-View document opens the current saved YAML in the published Floe read-only code
-viewer, loaded only on demand. The shared Env App/Desktop surface follows the
-shell theme, shows line numbers and indentation guides, supports folding and
-find, and wraps long lines by default. A visible wrap toggle restores original
-line layout. Escape dismisses the editor's find control before the dialog.
-The filename includes the canvas and version; copy and export use the exact
-saved YAML, never rendered tokens or a reserialized document. Viewing, finding,
-wrapping and folding do not create a version or modify the canvas. Plain source
-stays readable while the editor loads; clipboard failure remains visible.
+View document lazily opens exact saved YAML in Floe's read-only themed code viewer: line numbers, guides, folding/find, default wrap and explicit wrap toggle. Escape closes find before dialog. Filename identifies canvas/version; copy/export preserve bytes, not reserialization. Plain source remains readable during loading; clipboard errors remain visible. Reading never changes versions.
 
 ## Relationship summaries
 ### Group summaries
-Patterns use ordered canonical endpoint identities, endpoint granularity, relationship kind, exact protocol and locality.
-
-Main graph and thumbnail share this projection; raw relationship volume never expands every group's top padding.
+Patterns use ordered canonical endpoints/granularity, kind, exact protocol and locality. Canvas/thumbnail share projection; raw relationship count never expands every group header.
 
 ### Interaction and details
-Hover and keyboard focus never open a popup.
-
-No list is silently truncated to 100 references.
+Hover/focus never opens popups; lists never silently truncate at 100 references.
 
 ## Flower replies
 ### Reading surface
-The window uses the theme's main reading surface continuously across its titlebar, transcript and composer surroundings. A subtle border and shadow frame compact readable message spacing; canvas nodes must not bleed through reply text.
-
-End padding keeps the final choice fully readable when scrolled to the bottom; the action controls remain outside the fade.
+One opaque themed reading surface spans title/transcript/composer, with restrained border/shadow and compact spacing. End padding keeps final choices readable; actions stay outside fade.
 
 ### Actions and continuity
-Each canvas keeps multiple Flower conversations and marks exactly one active.
-The More menu offers a new conversation and history with an explicit active
-indicator alongside settings, subagents, available Computer actions and files.
-Selecting a history item activates it before opening its composer. Creating a
-draft does not replace the active conversation until canonical admission; users
-can return to the current conversation without losing its draft. Answers retain
-copy, export and explicit fork actions. Desktop and Env App share the contract.
-Known ongoing execution disables switching/new-conversation controls; the server
-also rejects stale requests while active root or child work remains. Busy failures
-stay visible without changing the selection. Stop/settle the current work before
-activating another conversation; selection never implicitly cancels work.
+Each canvas owns multiple conversations with exactly one active. More offers new/history with active indicator, settings, subagents, available Computer actions and files. Activate history before opening composer. New drafts replace active identity only at canonical admission; returning preserves drafts. Copy/export/explicit fork remain shared across Desktop/Env.
 
-Canvas live metadata owns the active identity across windows. Late acceptance
-receipts refresh that metadata instead of posting another selection, so an older
-receipt cannot steal activation. Canvas changes, reply visibility and late
-receipts preserve pending drafts.
-Ordinary navigation cannot render a canvas transcript,
-including a stale direct ThreadID navigation request or live receipt.
-Existing-thread runtime content waits for product metadata; a new conversation's
-provisional receipt retains its submitted canvas ownership.
-
-Messages, tool disclosures, questions, approvals and errors remain canonical.
-
-Existing canvases open the combined window directly.
+Ongoing root/child work disables switching/new; server rejects stale activation, preserving visible errors/selection. Stop or settle first; switching never cancels implicitly. Live canvas metadata owns selection. Late admission refreshes it rather than posting another selection; canvas/visibility changes preserve drafts. Ordinary navigation, including stale ThreadID/live receipts, never renders canvas conversations. Existing content waits for product metadata; provisional new-thread receipts retain submitted canvas ownership. All messages/tools/questions/approvals/errors stay canonical; existing canvases open the combined window directly.
 
 # Boundaries
 
-The iOS host bundles the shared TessivenGraph and the published Floe graph engine as fixed application resources.
-
-The data-only bridge reports loading, rendered, failure, or an immutable object selection; iOS validates the canvas, version and referenced objects before opening native details or Flower.
-
-Ask Flower focuses the canvas composer and never sends a message automatically.
+The iOS host bundles shared TessivenGraph and published Floe as fixed resources. Data-only loading/rendered/failure/immutable selection messages are validated against canvas/version/objects before native details/Flower. Ask Flower focuses without sending.
 
 ### Explicit Group Packing
-The shared document-to-graph mapper passes only visible container rules from `presentation.groupLayouts` to the published Floe layout API. No additional menu or local layout engine owns these rules.
-
-The saved canvas contract owns topology and versions; these browsing controls change only the visible scene. Tessiven does not replace worker failures with guessed routes or use viewport culling to alter the complete inspectable model.
-
-Native hosts use the same summary browser and retain the existing single-object selection callback when an exact relationship is selected. The native renderer loads the published Floe foundation stylesheet as well as graph styles; shared floating layers must retain their positioning utilities.
-
-Canonical endpoint indexes and Set-based deduplication bound repeated-call aggregation without a second persisted graph or local router.
+The shared mapper passes only visible presentation.groupLayouts to Floe; no second layout engine/menu. Browsing changes scenes, not saved topology/versions. Worker faults never produce guessed routes; culling cannot alter inspectable models. Native hosts share summary browsing/exact-object callbacks and load foundation plus graph styles. Canonical indexes/Set deduplication bound aggregation without another graph/router.
 
 ### Product verification
-Component rendering and an HTTP 200 from a frontend development server do not qualify a connected Env App.
-
-Both surfaces send a Flower turn, display the canonical streamed reply and exercise the reply menu in the compact window.
-
-It never attaches to an existing user browser or Runtime.
+A rendered component or dev-server HTTP 200 is not connected Env acceptance. Both hosts must send a turn, display canonical streaming and exercise the compact reply menu using owned browser/Runtime fixtures.
 
 # Evidence
 
-- `internal/envapp/ui_src/src/styles/tessiven-document.browser.test.tsx` — Rendered syntax colors, themes, wrapping, read-only interaction, find, copy and export.
-
-- `desktop/src/shared/desktopShellServiceCanvasWindowIPC.ts`
-- Identity-only native request/ACK.
-- `desktop/src/main/main.ts`
-- Source.
-- Real Desktop Open/repeat/close/reopen and invalid rejection.
-- Tests.
-
-- Source.
-- Source.
-- Source.
-
-- Source.
-- Source.
+internal/envapp/ui_src/src/styles/tessiven-document.browser.test.tsx covers syntax/themes/wrap/read-only/find/copy/export. desktop/src/shared/desktopShellServiceCanvasWindowIPC.ts and desktop/src/main/main.ts own identity-only native request/ACK; native acceptance covers open/repeat/close/reopen and invalid rejection.

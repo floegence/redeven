@@ -15,6 +15,7 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/logsafe"
@@ -481,6 +482,17 @@ func (s *Service) threadSettingsForRead(ctx context.Context, meta *session.Meta,
 		return nil, errors.New("missing thread_id")
 	}
 
+	if s.automation != nil {
+		owner, _, e := s.automation.AnyThread(ctx, threadID)
+		if e == nil {
+			expected, _ := automation.OwnerFromSession(meta)
+			if owner != expected {
+				return nil, automation.ErrNotFound
+			}
+		} else if !errors.Is(e, automation.ErrNotFound) {
+			return nil, e
+		}
+	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	th, err := db.GetThreadSettings(ctx, endpointID, threadID)
 	if err != nil {
@@ -837,6 +849,29 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 			}
 		}
 	}
+	if s.automation != nil {
+		owner, binding, lookupErr := s.automation.AnyThread(ctx, t.ThreadID)
+		expected, ownerErr := automation.OwnerFromSession(meta)
+		if lookupErr == nil && (ownerErr != nil || owner != expected || req.automationWork == nil || binding != *req.automationWork) {
+			return nil, threadstore.ErrCanonicalThreadSettingsConflict
+		}
+		if lookupErr != nil && !errors.Is(lookupErr, automation.ErrNotFound) {
+			return nil, lookupErr
+		}
+		if req.automationWork != nil {
+			existing, e := db.GetThreadSettingsByCanonicalThreadID(ctx, t.ThreadID)
+			if e != nil {
+				return nil, e
+			}
+			if existing != nil && lookupErr != nil {
+				return nil, threadstore.ErrCanonicalThreadSettingsConflict
+			}
+			b := req.automationWork
+			if e = s.automation.BindThread(ctx, expected, b.WorkflowID, b.RunID, b.AttemptID, t.ThreadID); e != nil {
+				return nil, e
+			}
+		}
+	}
 	// Persist project ownership before publishing a root settings row. A list
 	// or runtime summary racing first creation can never see a temporary chat.
 	if req.pluginDraftID != "" {
@@ -1076,6 +1111,13 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 		return nil, errors.New("threads store not ready")
 	}
 	sourceThreadID = strings.TrimSpace(sourceThreadID)
+	if s.automation != nil {
+		if _, _, err := s.automation.AnyThread(ctx, sourceThreadID); err == nil {
+			return nil, automation.ErrConflict
+		} else if !errors.Is(err, automation.ErrNotFound) {
+			return nil, err
+		}
+	}
 	if sourceThreadID == "" {
 		return nil, errors.New("missing thread_id")
 	}
@@ -1211,6 +1253,15 @@ func canonicalThreadBusy(current flruntime.ThreadView) bool {
 }
 
 func (s *Service) threadPreferenceChangeBlocked(ctx context.Context, threadID string) (bool, error) {
+	if s.automation != nil {
+		_, b, err := s.automation.AnyThread(ctx, threadID)
+		if err == nil && b.RunID != "" {
+			return true, nil
+		}
+		if err != nil && !errors.Is(err, automation.ErrNotFound) {
+			return true, err
+		}
+	}
 	current, err := s.readCanonicalThreadState(ctx, threadID)
 	if err != nil {
 		return false, err
@@ -1560,6 +1611,13 @@ func (s *Service) deleteThread(ctx context.Context, meta *session.Meta, threadID
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	if endpointID == "" {
 		return errors.New("invalid request")
+	}
+	if s.automation != nil {
+		if _, _, err := s.automation.AnyThread(ctx, threadID); err == nil {
+			return automation.ErrConflict
+		} else if !errors.Is(err, automation.ErrNotFound) {
+			return err
+		}
 	}
 	if s.pluginCreation != nil && !draftCleanup {
 		if d, owner, e := s.pluginCreation.Store.ForAnyThread(ctx, threadID); e == nil && owner.Environment == meta.EndpointID && d.Lifecycle != "deleted" {

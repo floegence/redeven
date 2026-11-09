@@ -1,4 +1,5 @@
 import {
+  ActivityRailGlyph,
   RailGlobe,
   RailSettings,
   RailSwitch,
@@ -29,6 +30,13 @@ export function ActivityBarSwitchIcon(props: ActivityRailIconProps) {
 
 export function ActivityBarSettingsIcon(props: ActivityRailIconProps) {
   return <RailSettings {...props} data-activity-bar-icon="runtime-settings" />;
+}
+
+export function ActivityBarAutomationIcon(props: ActivityRailIconProps) {
+  return <ActivityRailGlyph {...props} identity="automation"
+    shape={() => <><rect x="3.5" y="8.5" width="6" height="7" rx="2" /><rect x="15" y="3.5" width="5.5" height="6" rx="2" /><rect x="15" y="14.5" width="5.5" height="6" rx="2" /></>}
+    lines={() => <path d="M9.5 12h2a1 1 0 0 0 1-1V7.5a1 1 0 0 1 1-1H15M12.5 11v5.5a1 1 0 0 0 1 1H15" />}
+  />;
 }
 
 /** Preserve the product's five-petal artwork inside Floe's navigation frame. */

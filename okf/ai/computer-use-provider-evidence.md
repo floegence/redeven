@@ -20,17 +20,13 @@ Browser evidence excludes native platforms; provider names do not verify remote 
 
 # Evidence
 
-Configured deepseek-flash is local Flash1017,not verified weights. Full original reports/request/error counts remain private or in Git history; later passes never replace these failures.
+Configured deepseek-flash identifies local Flash1017, not verified remote weights. Original reports and request/error counts remain private or in Git history; later passes never replace failures.
 
-| Scope | Result and remaining failures |
-| --- | --- |
-| Nov2 lifetime2627dbced | Node/Go,Native Messaging/sandbox/relocation/safety/examples pass with picker/opt-in skips.20types×2:34/40 strict (291requests):four model deviations,Wikipedia timeout,visual assertion missed valid image;unresolved Promise explicit. Public4/6 strict,content5/6. Earlier29/38,32/38 missed emit:false;corrected public6/6 separate. Four assertion regressions/two real visual passes use unchanged production. |
-| Floret7.100.1 | 12×2:22/24 (132requests),stale navigation ref/omitted optional wait fail. Empty-helper cases pass;seven missing-installation browser lanes later pass,other opt-ins skipped. Sources unchanged by rebase. |
-| Nov2 helper | Original20/24 includes removal races with cancellation,cannot prove ordinary rejection. Corrected empty-helper2/2 separate;acceptance22/24 retains stale-ref/omitted-wait. Node/Go/relocation/packaged IPC pass;no native/Desktop-renderer claim. |
-| Nov2 evaluation | Final23/24,undefined variable before one wheel. Earlier22/24 guessed wait/premature conclusion. Canonical faults and actual Chromium CDP prove install/privacy/no replay;focused/Go/relocation pass. |
-| Oct29 | 23/24 (142requests);six faults preserve prefix/stop input plus one save/navigation. content_wait wrong requireState arity/unqualified value fails;separate image/anchor12/12 never replaces it. Stale image retires,fresh permits one pointer. |
-| Oct26 | 60/60 (173.114s,273activities,31errors:18required/13model),one click/image,no save replay. Pre-canonical60/60,strict51/60,59/60 remain separate. |
+- November 2 lifetime source 2627dbced: 34/40 strict tasks retained four model deviations, a Wikipedia timeout and a missed valid image assertion; public content was 5/6. Corrected emit:false/visual assertions and subsequent 6/6 public checks are separate. Protocol, sandbox, relocation and examples passed with picker/opt-in skips.
+- Floret 7.100.1: 22/24 retained stale-navigation and omitted-wait failures. Empty-helper checks passed; seven missing-installation lanes passed later. Original removal-race cases could not prove ordinary rejection; corrected empty-helper tests did. Final 23/24 still retained an undefined variable before one wheel.
+- October 29: 23/24 preserved six faults' completed prefixes and stopped input, but content_wait used wrong arguments/unqualified value. Separate image/anchor passes did not replace it.
+- October 26: 60/60 tasks included required and model errors, one click/image and no save replay. Earlier 51/60 and 59/60 remain separate.
 
-Carrier91passes/one picker skip,12contracts/eight headed-extension checks cover2100refs,geometry,stale/live frames,partial effects. Native fixture port/macOS35Swift checks are separate. Linux native,multimonitor,combined Desktop/Native Messaging/Service excluded;emulated scale is not real zoom,debugger detach not focus-loss proof. No paired-performance claim.
+Carrier/contract/extension fixtures cover large reference sets, geometry, stale/live frames and partial effects. Native Mac checks are separate; Linux native, multimonitor and combined Desktop/Native Messaging/Service were excluded. Emulated scale is not real zoom; debugger detach is not focus-loss proof. No paired-performance claim.
 
-Runners: [product](../../internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs),[private](../../internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs),[connected](../../internal/envapp/ui_src/scripts/checkDesktopSystemBrowser.mjs). [Historical platform evidence](computer-use-qualification-evidence.md) retains other failures.
+Runners: [product](../../internal/envapp/ui_src/scripts/checkDesktopComputerStage.mjs), [private](../../internal/envapp/ui_src/scripts/checkDesktopPrivateComputer.mjs), [connected](../../internal/envapp/ui_src/scripts/checkDesktopSystemBrowser.mjs). [Historical evidence](computer-use-qualification-evidence.md) retains other platform failures.

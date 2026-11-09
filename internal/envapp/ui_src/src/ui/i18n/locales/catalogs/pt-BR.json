@@ -8389,7 +8389,8 @@
       "cache": "Cache",
       "runtime": "Coordenação do mecanismo",
       "audit": "Auditoria",
-      "diagnostics": "Diagnóstico"
+      "diagnostics": "Diagnóstico",
+      "automation": "Automações"
     },
     "kinds": {
       "identity": "Identidade e ajustes",
@@ -8411,5 +8412,8 @@
     "measuredScope": "Locais medidos do ambiente · sem projetos externos",
     "manageOwner": "Gerenciar {owner}",
     "locations": "Locais e escopo do backup"
+  },
+  "automation": {
+    "title": "Automações"
   }
 }

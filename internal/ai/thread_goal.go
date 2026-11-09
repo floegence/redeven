@@ -64,7 +64,7 @@ func (s *Service) ManageThreadGoal(ctx context.Context, meta *session.Meta, req 
 		}
 		req.ThreadID = thread.ThreadID
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, req.ThreadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, req.ThreadID); err != nil {
 		return flruntime.GoalMutationResult{}, flruntime.ThreadView{}, err
 	}
 	if req.Operation == "submit" {

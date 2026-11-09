@@ -35,6 +35,7 @@ func Entries(stateDir string) []Entry {
 		{"service_registry", "apps/portforward", "persistent", "environment"},
 		{"code", "apps/code", "persistent", "environment"},
 		{"notes", "apps/notes", "persistent", "environment"},
+		{"automation", "apps/automation", "persistent", "environment"},
 		{"tessiven", "apps/tessiven", "persistent", "environment"},
 		{"workbench", "apps/workbench", "persistent", "environment"},
 		{"terminal", "apps/terminal", "persistent", "environment"},

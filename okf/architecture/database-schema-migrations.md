@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Database schema migration ownership
 tags: [architecture, storage, sqlite, migrations, upgrades]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -15,6 +15,8 @@ Each repository migrates its own opaque stores. Validate full SQLite/WAL before 
 Each SQLite store declares a stable database kind, current version, supported minimum version, ordered `n -> n+1` migrations, an existing-schema validator, and a final exact verifier.
 
 Migration and verification failure rolls back.
+
+The process-locked redeven_automation store migrates local schema 1 grants to publication-version keys, then schema 2 to 3 recovers published_revision from retained definitions. Changed drafts remain unpublished; grants, runs and private platform bindings are preserved. The adjacent scheduler database remains upstream-owned.
 
 Host identity upgrades use their own private journal and native verification after Registry migration; no live-engine guess or database reset substitutes for resource ownership.
 

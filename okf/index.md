@@ -8,6 +8,7 @@ Repository knowledge derived from current source, generated contracts and releas
 
 ## Architecture
 
+- [Scheduled workflows and shared Flower work](architecture/automation-workflows.md)
 - [Product storage placement and lifecycle](architecture/storage-ownership.md)
 
 - [Applications keyboard, pointer and composition](architecture/host-application-input.md)

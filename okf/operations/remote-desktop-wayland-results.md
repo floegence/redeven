@@ -20,14 +20,9 @@ udesk24's October2 performance-only waiver never waives functionality. Synthetic
 
 # Evidence
 
-## GNOME
-udesk24 GNOME46/native0.22.7 office/mode recovery passes; 1080p/1440p scroll remains27.458/23.458 FPS after authorized VM106 provisioning. Raw capture32 FPS; DMA_DRM/BGRx DMA-BUF negotiation fails without fallback. No55 FPS, three repetitions or window-motion pass. Task port24864/private state/forward uses real desktop; old0.22.2 rejected before task-only0.22.6 upgrade, canonical-origin fix retains strict admission and user Runtime/Desktop untouched. Evidence: task-evidence/remote-desktop-20261001/, udesk24-v0226-environment-readback.log, udesk24-v0226-product-wayland.log and both product-input-1080-udesk24-v0226-wayland-office-current dimension-labelled JSONs. Actual canvas dimensions override harness filename labels.
+Historical outcomes are source-bound; Git and private task-evidence retain tables and failures.
 
-## MemFd
-Normal product reproduces CAPTURE_LAYOUT_UNSUPPORTED. Nineteen native tests pass padding/unaligned rows/read-only mapping/identity/truncation/cleanup, but fresh Portal consent times out; repaired real GNOME and complete release remain unpassed. Evidence: task-evidence/wayland-buffer-layout-20261005/{scope.json,installed-layout-red.log,installed-layout-green.log,unit-red.log,unit-green.log,native-source-gate.log}. Git retains failing release/red-green identities.
-
-## Cursor and scheduling
-Native0.22.12 synthetic BGRA/header/damage/animated-cursor fixtures prove reply delivery cannot block capture/authority and post-gap changes survive. No observation threshold. Fresh GNOME HOST_CONSENT_TIMEOUT prevents live latency claims. Immutable ba8ecda3294a732c25a4829734896139f6df7ad8 verifies through Go proxy/SumDB; Go/Swift consumers published. Evidence: task-evidence/desktop-cursor-ownership-20261005/, pipewire-qualification.log,portal-input-qualification.log,damage-benchmark.json,benchmark-damage.py,upstream-main-push-final.log,upstream-qualification-status.json.
-
-## Capture pool
-Native0.22.14 replaces full-frame copies with bounded pooling;36 native tests pass. Alternating udesk24 synthetic1440p60/x264: encoded46.86–48.06→59.90 FPS,capture19.34–19.96→2.64–2.79ms,paint ACK improves. Not live GNOME/physical-input qualification. Source ec0d9cc8/tables remain in Git. Published host_desktop_pixels.py/pipewire.py/media.py and qualification pixel/PipeWire modules own checks. [Release37320233514](https://github.com/floegence/floe-native-apps/actions/runs/37320233514) records both architectures/macOS/distribution.
+- GNOME 46/udesk24/native 0.22.7 office/recovery passed, but 1080/1440p scroll ~27/23 FPS and raw 32 FPS failed 55-FPS/repetition/motion requirements. DMA-BUF negotiation failed without fallback. Task-only VM/state/ports preserved the user Runtime; actual canvas dimensions govern evidence (task-evidence/remote-desktop-20261001).
+- MemFd CAPTURE_LAYOUT_UNSUPPORTED was reproduced; padding/alignment/mapping/identity/truncation/cleanup tests passed. Fresh Portal consent timed out, leaving repaired live GNOME/release unqualified (task-evidence/wayland-buffer-layout-20261005).
+- Published native 0.22.12 synthetic BGRA/damage/cursor proved reply delivery cannot block capture/authority or lose post-gap changes. HOST_CONSENT_TIMEOUT blocked live latency qualification (task-evidence/desktop-cursor-ownership-20261005).
+- Published 0.22.14 bounded pools passed 36 tests and synthetic 1440p60 improved ~47–48 to 59.90 FPS. This was neither live GNOME nor physical input. Release 37320233514 and published native modules retain architecture/format checks.

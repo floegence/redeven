@@ -14,6 +14,7 @@ import (
 
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
@@ -42,6 +43,7 @@ import (
 	"github.com/floegence/redeven/internal/tessiven"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 	processruntime "github.com/floegence/redevplugin/v3/pkg/process"
+	"github.com/floegence/redevplugin/v3/pkg/schedule"
 )
 
 const (
@@ -109,22 +111,27 @@ type Service struct {
 	codePortMin int
 	codePortMax int
 
-	reg                *registry.Registry
-	pf                 *portforward.Service
-	managed            *managedwebservice.Manager
-	hostApps           *hostapps.Manager
-	remoteDesktop      *remotedesktop.Manager
-	containers         *containerresource.Service
-	runner             *codeserver.Runner
-	runtime            *codeserver.RuntimeManager
-	directoryFavorites *directoryfavorites.Store
-	notes              *notes.Service
-	layouts            *workbenchlayout.Service
-	pluginDrafts       *plugincreation.Store
-	tessiven           *tessiven.Service
-	tessivenBroker     *tessiven.Broker
-	aiReady            *aiReadinessController
-	appSrv             *appserver.Server
+	reg                     *registry.Registry
+	pf                      *portforward.Service
+	managed                 *managedwebservice.Manager
+	hostApps                *hostapps.Manager
+	remoteDesktop           *remotedesktop.Manager
+	containers              *containerresource.Service
+	runner                  *codeserver.Runner
+	runtime                 *codeserver.RuntimeManager
+	directoryFavorites      *directoryfavorites.Store
+	notes                   *notes.Service
+	layouts                 *workbenchlayout.Service
+	automationStore         *automation.Store
+	automationController    *automation.Controller
+	automationSchedules     *schedule.Store
+	stopAutomationSchedules context.CancelFunc
+	automationSchedulesDone chan struct{}
+	pluginDrafts            *plugincreation.Store
+	tessiven                *tessiven.Service
+	tessivenBroker          *tessiven.Broker
+	aiReady                 *aiReadinessController
+	appSrv                  *appserver.Server
 
 	pluginIntegration *redevpluginintegration.Integration
 
@@ -277,6 +284,34 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		runtime:      runtimeMgr,
 	}
 
+	automationStore, err := automation.Open(filepath.Join(stateAbs, "apps", "automation", "workflows.sqlite"))
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		return nil, err
+	}
+	automationOwned := true
+	defer func() {
+		if automationOwned {
+			_ = automationStore.Close()
+		}
+	}()
+	authorizeAutomation := automationAuthority(automationStore, opts.ConfigPath)
+	scheduleStore, err := schedule.Open(filepath.Join(stateAbs, "apps", "automation", "schedules.sqlite"))
+	if err != nil {
+		return nil, err
+	}
+	schedulesOwned := true
+	defer func() {
+		if schedulesOwned {
+			_ = scheduleStore.Close()
+		}
+	}()
+	schedules := &automation.Schedules{Store: automationStore, Plans: scheduleStore, Authorize: func(ctx context.Context, o automation.Owner, r automation.Run) error {
+		_, err := authorizeAutomation(ctx, o, r)
+		return err
+	}}
+
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
 	chatGPT := chatgpt.New(secrets)
 	tessivenSvc, err := tessiven.Open(filepath.Join(stateAbs, "apps", "tessiven", "canvases.sqlite"))
@@ -336,7 +371,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ChatGPT:               chatGPT,
 		PlatformHTTPTransport: opts.PlatformHTTPTransport,
 		PluginCreation:        pluginCreation,
-		Tessiven:              tessivenSvc, TessivenResources: tessivenResources,
+		Automation:            automationStore, AutomationAuthorize: authorizeAutomation,
+		Tessiven: tessivenSvc, TessivenResources: tessivenResources,
 		Logger:            logger,
 		StateDir:          stateAbs,
 		ModelCatalogDir:   filepath.Join(filepath.Dir(opts.ConfigPath), "runtime", "model-catalog"),
@@ -408,6 +444,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 
 		return redevpluginintegration.New(pluginCtx, redevpluginintegration.Options{
 			PluginCreation: pluginCreation,
+			Automation:     automationStore,
 			StateDir:       stateAbs,
 			AgentHomeDir:   agentHomeDir,
 			ResolveWorkspacePath: func(ctx context.Context, codeSpaceID string) (string, bool, error) {
@@ -452,6 +489,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 			_ = hostApps.Close()
 		}
 	}()
+	automationController := &automation.Controller{Engine: &automation.Engine{Store: automationStore, Executor: &automationExecutor{provider: aiReady, store: automationStore, configPath: opts.ConfigPath, containers: containerResourceSvc}}, Report: func(err error) { logger.Warn("automation reconciliation failed", "error", err) }}
 	browserRuntime, _ := opts.ComputerUseExecutor.(*ai.ComputerUseRuntime)
 	appSrv, err := appserver.New(appserver.Options{
 		ChatGPT:                       chatGPT,
@@ -469,6 +507,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		Notes:                         notesSvc,
 		WorkbenchLayout:               workbenchLayoutSvc,
 		PluginCreation:                pluginCreation,
+		Automation:                    automationStore,
+		AutomationSchedules:           schedules,
 		Tessiven:                      tessivenSvc,
 		TessivenResources:             tessivenResources,
 		Terminal:                      opts.Terminal,
@@ -528,6 +568,19 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.terminalLayoutCleanup = terminalLayoutCleanup
 	svc.stopAccountMaintenance = chatGPT.Maintain(context.Background())
 	aiReady.Start()
+	svc.automationStore = automationStore
+	svc.automationController = automationController
+	automationOwned = false
+	automationController.Start(context.Background())
+	scheduleCtx, scheduleCancel := context.WithCancel(context.Background())
+	svc.automationSchedules = scheduleStore
+	svc.stopAutomationSchedules = scheduleCancel
+	svc.automationSchedulesDone = make(chan struct{})
+	schedulesOwned = false
+	go func() {
+		defer close(svc.automationSchedulesDone)
+		_ = scheduleStore.Run(scheduleCtx, schedules, func(err error) { logger.Warn("automation scheduling failed", "error", err) })
+	}()
 	managedSvc.Start(context.Background())
 	containerResourcesOwned = false
 
@@ -537,6 +590,16 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 func (s *Service) Close() error {
 	if s == nil {
 		return nil
+	}
+	if s.stopAutomationSchedules != nil {
+		s.stopAutomationSchedules()
+		<-s.automationSchedulesDone
+	}
+	if s.automationSchedules != nil {
+		_ = s.automationSchedules.Close()
+	}
+	if s.automationController != nil {
+		s.automationController.Close()
 	}
 	if s.stopAccountMaintenance != nil {
 		s.stopAccountMaintenance()
@@ -584,6 +647,9 @@ func (s *Service) Close() error {
 	}
 	if s.tessivenBroker != nil {
 		s.tessivenBroker.Close()
+	}
+	if s.automationStore != nil {
+		_ = s.automationStore.Close()
 	}
 	if s.pluginDrafts != nil {
 		_ = s.pluginDrafts.Close()

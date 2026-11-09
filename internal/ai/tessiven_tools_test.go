@@ -21,7 +21,7 @@ func TestTessivenToolCanvasLifecycleWithoutModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer library.Close()
-	r := &run{host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessiven: library}}
+	r := &run{threadID: "thread-fixture", host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessiven: library}}
 	meta := &session.Meta{CanRead: true, CanWrite: true}
 	document := "apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Commerce}\n"
 	if _, err := r.execTessivenTool(t.Context(), meta, "tessiven_read_schema", map[string]any{}); err != nil {
@@ -65,7 +65,7 @@ func TestTessivenInspectReturnsStructuredUnavailableForDescriptiveRuntime(t *tes
 		t.Fatal(err)
 	}
 	defer library.Close()
-	r := &run{host: runHostCapabilities{tessivenCanvasID: "canvas-fixture",
+	r := &run{threadID: "thread-fixture", host: runHostCapabilities{tessivenCanvasID: "canvas-fixture",
 		tessiven:          library,
 		tessivenResources: &tessiven.ResourceBackend{},
 	}}
@@ -140,7 +140,7 @@ func TestTessivenToolsRejectUnplacedServicesWithoutCreatingVersions(t *testing.T
 		t.Fatal(err)
 	}
 	defer library.Close()
-	r := &run{host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessiven: library}}
+	r := &run{threadID: "thread-fixture", host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessiven: library}}
 	meta := &session.Meta{CanRead: true, CanWrite: true}
 	document := "apiVersion: redeven.io/tessiven/v1.0.0\nkind: ServiceCanvas\nmetadata: {title: Reference architecture}\nservices: [{id: api, name: API, kind: api}]\n"
 	result, err := r.execTessivenTool(t.Context(), meta, "tessiven_validate_canvas", map[string]any{"document_yaml": document})
@@ -199,7 +199,7 @@ func TestTessivenSchemaToolSelectsExactDSLVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer library.Close()
-	r := &run{host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessiven: library}}
+	r := &run{threadID: "thread-fixture", host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessiven: library}}
 	for _, version := range []string{"", "v1", "v1.0.0", "v1.1.0"} {
 		args := map[string]any{}
 		if version != "" {
@@ -231,7 +231,7 @@ func TestTessivenSchemaToolSelectsExactDSLVersion(t *testing.T) {
 // A referenced resource belongs to its manager, even when no canvas library is installed.
 func TestTessivenDirectResourceDoesNotRequireCanvasLibrary(t *testing.T) {
 	manager := &directManagedFixture{}
-	r := &run{host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessivenResources: &tessiven.ResourceBackend{Managed: manager}}}
+	r := &run{threadID: "thread-fixture", host: runHostCapabilities{tessivenCanvasID: "canvas-fixture", tessivenResources: &tessiven.ResourceBackend{Managed: manager}}}
 	args := map[string]any{"runtime_ref": "local:local", "action": "inspect", "binding": map[string]any{"owner": "managed_service", "resourceId": "host"}}
 	result, err := r.execTessivenTool(t.Context(), &session.Meta{CanRead: true}, "tessiven_inspect_resource", args)
 	if err != nil {

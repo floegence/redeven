@@ -178,7 +178,7 @@ func (s *Service) BindDraftUploadStaging(ctx context.Context, meta *session.Meta
 	if err := requireRWX(meta); err != nil {
 		return UploadStagingScopeResponse{}, err
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return UploadStagingScopeResponse{}, err
 	}
 	owner, err := NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)

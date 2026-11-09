@@ -82,3 +82,13 @@ func (f flowerPermissionToolFilter) FilterTools(permissionType FlowerPermissionT
 	}
 	return out
 }
+
+// Built-in Floret controls obey the same explicit run allowlist as host tools.
+// Their implementation stays upstream; this only selects the admitted surface.
+func (r *run) allowsBuiltinCapability(name string) bool {
+	if r == nil || len(r.toolAllowlist) == 0 {
+		return true
+	}
+	_, allowed := r.toolAllowlist[name]
+	return allowed
+}

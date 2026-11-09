@@ -691,6 +691,7 @@ func builtInToolDefinitions() []ToolDef {
 	}
 	defs = append(defs, builtInTessivenToolDefinitions()...)
 	defs = append(defs, builtInPluginAuthorToolDefinitions()...)
+	defs = append(defs, builtInAutomationToolDefinitions()...)
 	defs = append(defs, builtInThreadQueryToolDefinitions()...)
 	defs = append(defs, builtInParentEventToolDefinitions()...)
 	defs = append(defs, builtInComputerToolDefinitions()...)
@@ -739,13 +740,13 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run, webBindings ...map[
 	if reg == nil {
 		return fmt.Errorf("nil tool registry")
 	}
-	pluginAuthoring := r.hasPluginDraft()
-	tessivenThread := r.hasTessivenThread()
+	work, err := r.resolveFlowerWork(context.Background())
+	if err != nil {
+		return err
+	}
 	for _, def := range builtInToolDefinitions() {
-		if strings.HasPrefix(def.Name, "tessiven_") && !tessivenThread {
-			continue
-		}
-		if strings.HasPrefix(def.Name, "plugin_author_") && !pluginAuthoring {
+		workScoped := strings.HasPrefix(def.Name, "automation_") || strings.HasPrefix(def.Name, "tessiven_") || strings.HasPrefix(def.Name, "plugin_author_")
+		if workScoped && (work == nil || !work.Profile.AllowsTool(def.Name)) {
 			continue
 		}
 		if def.Name == "subagent_report" && (r == nil || r.subagentDepth == 0) {

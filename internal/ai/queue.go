@@ -37,7 +37,7 @@ func (s *Service) DeleteQueuedInput(ctx context.Context, meta *session.Meta, thr
 	if threadID == "" || queueID == "" || s.threadRuntime == nil {
 		return errors.New("invalid request")
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return err
 	}
 	_, err := s.threadRuntime.DeleteQueued(ctxOrBackground(ctx), flruntime.DeleteQueuedInput{ThreadID: identity.ThreadID(threadID), QueueItemID: queueID,
@@ -56,7 +56,7 @@ func (s *Service) PromoteQueuedInput(ctx context.Context, meta *session.Meta, th
 	if threadID == "" || queueID == "" || s.threadRuntime == nil {
 		return flruntime.ThreadView{}, errors.New("invalid request")
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return flruntime.ThreadView{}, err
 	}
 	unlockCanvas, err := s.lockTessivenExecution(ctx, threadID)
@@ -84,7 +84,7 @@ func (s *Service) SendQueuedInputNow(ctx context.Context, meta *session.Meta, th
 	if threadID == "" || queueID == "" || s.threadRuntime == nil {
 		return flruntime.ThreadView{}, errors.New("invalid request")
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return flruntime.ThreadView{}, err
 	}
 	unlockCanvas, err := s.lockTessivenExecution(ctx, threadID)
@@ -112,7 +112,7 @@ func (s *Service) ReorderQueue(ctx context.Context, meta *session.Meta, threadID
 	if threadID == "" || s.threadRuntime == nil {
 		return errors.New("invalid request")
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return err
 	}
 	requestID, err := newProductRequestID("reorder_queue_")
@@ -137,7 +137,7 @@ func (s *Service) EditQueuedInput(ctx context.Context, meta *session.Meta, threa
 	if threadID == "" || queueID == "" || s.threadRuntime == nil {
 		return flruntime.ThreadView{}, errors.New("invalid request")
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return flruntime.ThreadView{}, err
 	}
 	if req.Content != nil {

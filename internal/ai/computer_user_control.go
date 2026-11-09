@@ -33,7 +33,7 @@ func (s *Service) pendingComputerControl(ctx context.Context, meta *session.Meta
 	if err := requireRWX(meta); err != nil {
 		return TargetToolCall{}, err
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return TargetToolCall{}, err
 	}
 	typed, err := s.typedFloretRuntime()

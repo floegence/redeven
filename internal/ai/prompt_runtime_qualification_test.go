@@ -78,7 +78,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		saveCompactionQualificationJSON(t, filepath.Join(root, "report.json"), report)
 	}()
 	send := func(id, text string) *FlowerThreadDetail {
-		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: id, Input: RunInput{Text: text}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal_exec", "terminal_read", "file_write", "file_apply_patch"}}})
+		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: thread.ThreadID, ClientRequestID: id, Input: RunInput{Text: text}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal_exec", "terminal_read", "file_write", "file_apply_patch", "goal_manage"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,7 +95,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 		assertQualificationContextAttribution(t, detail)
 		return detail
 	}
-	// Intent pairs share the actual tool surface and Goal injection. Contextual
+	// Intent pairs share the actual tool surface, including explicitly granted Goal. Contextual
 	// assessment may inspect; request/call counts are efficiency observations.
 	for _, tc := range []struct {
 		name, input string
@@ -114,7 +114,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 		start := len(recorder.snapshot())
-		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: consultation.ThreadID, ClientRequestID: tc.name, Input: RunInput{Text: tc.input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal_exec", "terminal_read", "file_write", "file_apply_patch"}}})
+		response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{ThreadID: consultation.ThreadID, ClientRequestID: tc.name, Input: RunInput{Text: tc.input}, Options: RunOptions{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff}, MaxOutputTokens: 4096, NoUserInteraction: true, ToolAllowlist: []string{"terminal_exec", "terminal_read", "file_write", "file_apply_patch", "goal_manage"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +193,7 @@ func TestE2E_FlowerPromptDeepSeekRuntime(t *testing.T) {
 	}
 	report["repair_results"] = repairResults
 	terminalStart := len(recorder.snapshot())
-	detail = send("terminal", fmt.Sprintf("Run this finite command once in %s with yield_ms:0, then observe the existing process until completion: python3 -c 'import time; time.sleep(2); print(7319 * 2)'. Report its result, do not modify files.", workspace))
+	detail = send("terminal", fmt.Sprintf("Run this finite command once in %s with yield_ms:100, then observe the existing process until completion: python3 -c 'import time; time.sleep(2); print(7319 * 2)'. Report its result, do not modify files.", workspace))
 	if !strings.Contains(ollamaTaskText(detail.Current), "14638") {
 		t.Error("terminal output was not reported")
 	}

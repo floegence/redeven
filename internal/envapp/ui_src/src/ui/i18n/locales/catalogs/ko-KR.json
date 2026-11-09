@@ -8385,7 +8385,8 @@
       "cache": "캐시",
       "runtime": "런타임 조정 상태",
       "audit": "감사",
-      "diagnostics": "진단"
+      "diagnostics": "진단",
+      "automation": "자동화"
     },
     "kinds": {
       "identity": "ID 및 설정",
@@ -8407,5 +8408,8 @@
     "measuredScope": "측정된 환경 디렉터리 · 외부 프로젝트 제외",
     "manageOwner": "{owner} 관리",
     "locations": "저장 위치 및 백업 범위"
+  },
+  "automation": {
+    "title": "자동화"
   }
 }

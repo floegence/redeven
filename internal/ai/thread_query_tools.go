@@ -10,6 +10,7 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/floret/v7/threadquery"
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -68,6 +69,18 @@ func (s *Service) threadQueryScope(ctx context.Context, meta *session.Meta, canv
 	}
 	scope := threadquery.Scope{Authority: string(authority)}
 	for _, id := range ids {
+		if s.automation != nil {
+			owner, b, lookupErr := s.automation.AnyThread(ctx, id)
+			if lookupErr == nil {
+				expected, _ := automation.OwnerFromSession(meta)
+				if owner != expected || b.RunID != "" {
+					continue
+				}
+			}
+			if lookupErr != nil && !errors.Is(lookupErr, automation.ErrNotFound) {
+				return threadquery.Scope{}, lookupErr
+			}
+		}
 		canvasID, err := s.tessivenThreadCanvas(ctx, id)
 		if err != nil {
 			return threadquery.Scope{}, err

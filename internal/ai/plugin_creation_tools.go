@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -56,15 +55,8 @@ func (r *run) execPluginAuthorTool(ctx context.Context, meta *session.Meta, name
 }
 
 func (r *run) hasPluginDraft() bool {
-	if r == nil || r.host.pluginCreation == nil || r.sessionMeta == nil || r.host.authorityThreadID == "" {
-		return false
-	}
-	owner, err := plugincreation.OwnerFromSession(r.sessionMeta)
-	if err != nil {
-		return false
-	}
-	draft, err := r.host.pluginCreation.Store.ForThread(context.Background(), owner, r.host.authorityThreadID)
-	return err == nil && draft.Lifecycle == "active"
+	work, err := r.resolveFlowerWork(context.Background())
+	return err == nil && work != nil && work.Profile.ID == "plugin.author"
 }
 
 const pluginAuthoringSkillName = "redeven-plugin-authoring"

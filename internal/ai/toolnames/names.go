@@ -39,7 +39,8 @@ func Historical(name string) string {
 	return name
 }
 func IsFirstParty(name string) bool {
-	if name == "web_fetch" {
+	switch name {
+	case "web_fetch", "automation_read_definition", "automation_save_definition", "automation_read_context", "automation_contribute", "automation_submit_result":
 		return true
 	}
 	for _, n := range historical {

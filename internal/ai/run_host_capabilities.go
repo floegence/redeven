@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/session"
@@ -15,6 +16,8 @@ import (
 // exact root-thread runtime. It intentionally contains no Service, Floret
 // bootstrap, lifecycle coordinator, or capability binder.
 type runHostCapabilities struct {
+	automation           *automation.Store
+	automationAuthorize  func(context.Context, automation.Owner, automation.Run) (*session.Meta, error)
 	openAIConnections    *openAIResponsesPool
 	deepSeekImageFiles   *deepSeekImageFileOwners
 	webProvider          func(string) (config.AIProvider, bool)
@@ -90,6 +93,7 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 		return runHostCapabilities{}, err
 	}
 	return runHostCapabilities{
+		automation: s.automation, automationAuthorize: s.automationAuthorize,
 		tessivenCanvasID:   canvasID,
 		openAIConnections:  s.openAIConnectionPool(),
 		deepSeekImageFiles: s.deepSeekFiles(),

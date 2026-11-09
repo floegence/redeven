@@ -148,6 +148,11 @@ func nativeWebTool(r *run, name string, binding webToolBinding, snapshot Permiss
 		permission.ResourceKinds = []string{"search_query"}
 	}
 	resolve := func(request fltools.PermissionRequest) (fltools.PermissionSpec, error) {
+		if r != nil {
+			if err := r.authorizeAutomationTool(context.Background(), name); err != nil {
+				return fltools.PermissionSpec{}, err
+			}
+		}
 		// Released pending Brave invocations may still carry their old provider field.
 		// It must never select a different service or be silently ignored.
 		if name == "web_search_pages" {

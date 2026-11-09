@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { buildContainerServiceFlowerIntent, containerServiceDiagnosticKey, containerServiceNeedsAssistance } from './containerServiceAskFlower';
 import { parseAskFlowerContextActionEnvelope } from '../../../../../flower_ui/src/contextActionWire';

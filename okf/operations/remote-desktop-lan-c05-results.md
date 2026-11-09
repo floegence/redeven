@@ -42,17 +42,8 @@ Release/compatibility gates qualify only named contracts, not LAN performance. A
 
 # Evidence
 
-## Measured outcomes
-Native v0.22.48 six-frame, three rounds: mean FPS 46.21 vs RustDesk 32.54; pooled P95 310.60 vs 207.59 ms; >250ms gaps nine vs three. Round three reaches 53.04 FPS/150.20ms without gaps, but round one remains adverse. Full parity, historical repeatability and three-round stability remain unaccepted; 52–53 FPS diagnostic peaks cannot replace them.
+Native v0.22.48's three rounds averaged 46.21 FPS versus RustDesk 32.54, but pooled P95 was worse (310.60 versus 207.59 ms) with nine versus three >250-ms gaps. Round-three 53.04-FPS improvement never replaces the adverse first round. Full parity, historical repeatability and stability remain unaccepted.
 
-All resource rows share the post-reboot host, physical 1920 x 1280/60 Hz scene v8, ordinary small windows and approximately 1020 x 680 logical content viewports. First Redeven motion attempt had 45 tapped local inputs and 58 outside events after operator window movement: retain/exclude that whole attempt without invalidating unrelated complete trials.
+The same post-reboot host used physical 1920x1280/60-Hz scene v8 and ordinary ~1020x680 content windows. Retain/exclude the first operator-interrupted motion attempt, without invalidating complete trials. Proxy/SumDB and release 38721381321 verify published v0.22.48; initial capability-refresh assertion failure remains.
 
-## Published preparation
-Go proxy/SumDB verifies immutable v0.22.48 with module sum `h1:wlvpKFaGY5zYhA20QzUTXCfVEQvYpT5rj1bTivcn8VY=`; release qualification run `38721381321`. First attempt failed because a fixture capability refresh omitted the selected window while assertion retained six. Preserve that failure; unrelated refreshes must carry the same offer. These checks prove compatibility only.
-
-Runtime consumer `20bc99cb46938f3349555e9a91b5e66b1497bb0d` uses published v0.22.48 without overlay. Durable evidence: `/Volumes/JianDisk/.codex-cc/artifacts/redeven-lan-performance-20261014/published-c05-20261015`; paths below are relative to B/`published-v48-paired`:
-- `input-audit-and-pooled.json` / `audit-c05.py`: independent counts, response percentiles, invalid fixtures and every motion trial.
-- `resources-three-rounds.json` / `resources-final.log`: complete lineages, intervals, CPU/RSS/footprint/route counters.
-- `quality-summary.json` / six `*-quality-quality-analysis/results.json` sets: original screenshots, references, resampling/OCR.
-- `release-attempt1`: original release failure/qualification artifacts.
-- B/`window-c04/input-audit.json`: separate C04 diagnostic evidence.
+Consumer 20bc99cb46938f3349555e9a91b5e66b1497bb0d used the published dependency without overlay. Evidence root: /Volumes/JianDisk/.codex-cc/artifacts/redeven-lan-performance-20261014/published-c05-20261015. B/published-v48-paired contains input-audit-and-pooled.json, audit-c05.py, resources-three-rounds.json, resources-final.log, quality-summary.json, screenshot analyses and release-attempt1. B/window-c04/input-audit.json is separate diagnostic evidence. Git history retains hashes and per-round tables.

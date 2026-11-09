@@ -8389,7 +8389,8 @@
       "cache": "Cache",
       "runtime": "Laufzeitkoordination",
       "audit": "Audit",
-      "diagnostics": "Diagnose"
+      "diagnostics": "Diagnose",
+      "automation": "Automatisierungen"
     },
     "kinds": {
       "identity": "Identität und Einstellungen",
@@ -8411,5 +8412,8 @@
     "measuredScope": "Erfasste Umgebungsverzeichnisse · ohne externe Projekte",
     "manageOwner": "{owner} verwalten",
     "locations": "Speicherorte und Sicherungsumfang"
+  },
+  "automation": {
+    "title": "Automatisierungen"
   }
 }

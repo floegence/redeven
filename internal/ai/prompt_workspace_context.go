@@ -257,21 +257,15 @@ func (r *run) collectModelContextSnapshot(ctx context.Context, permission Flower
 		{Key: "repository_rules", Title: "Repository rule sources", Text: strings.Join(renderPromptRepoRuleLines(workspace.RepoRules, nil), "\n")},
 		{Key: "skills", Title: "Available skills", Text: skills},
 	}}
-	if r.hasPluginDraft() {
-		snapshot.Sections = append(snapshot.Sections, flruntime.ModelContextSection{
-			Key: "plugin_authoring", Title: "Plugin creation workspace",
-			Text: "This is a dedicated plugin creation conversation. Read the redeven-plugin-authoring skill and plugin_author_get_status before editing. Discuss requirements or implement as requested. Use the managed source directory and plugin_author_build; the workspace shows retained artifacts and handles preview and installation review.",
-		})
+	work, err := r.resolveFlowerWork(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", flruntime.ErrModelContextUnavailable, err)
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if r.hasTessivenThread() {
-		body, err := systemSkillFS.ReadFile("system_skills/redeven-tessiven/SKILL.md")
-		if err != nil {
-			return nil, err
+	if work != nil {
+		snapshot.Sections = append(snapshot.Sections, flruntime.ModelContextSection{Key: "work_binding", Title: "Current work", Text: fmt.Sprintf("Kind: %s\nWork: %s\nRevision: %s\nProfile: %s\n%s", work.Binding.Kind, work.Binding.ID, work.Binding.Revision, work.Profile.ID, work.Profile.Guidance)})
+		for _, section := range work.Context {
+			snapshot.Sections = append(snapshot.Sections, flruntime.ModelContextSection{Key: section.Key, Title: section.Title, Text: section.Text})
 		}
-		snapshot.Sections = append(snapshot.Sections, flruntime.ModelContextSection{Key: "tessiven", Title: "Tessiven canvas guidance", Text: string(body)})
 	}
 	if err := snapshot.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: runtime snapshot cannot be admitted: %v", flruntime.ErrModelContextUnavailable, err)

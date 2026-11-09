@@ -30,7 +30,7 @@ func (s *Service) RetryThreadContinuation(ctx context.Context, meta *session.Met
 	if endpointID == "" || threadID == "" {
 		return RetryThreadContinuationResponse{}, errors.New("invalid request")
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, endpointID, threadID); err != nil {
 		return RetryThreadContinuationResponse{}, err
 	}
 	unlockCanvas, err := s.lockTessivenExecution(ctx, threadID)

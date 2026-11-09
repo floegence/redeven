@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -65,6 +66,14 @@ func (s *Service) ordinaryThreadSettings(ctx context.Context, list []threadstore
 		canvasID, err := s.tessivenThreadCanvas(ctx, item.ThreadID)
 		if err != nil {
 			return nil, err
+		}
+		if s.automation != nil {
+			_, _, err := s.automation.AnyThread(ctx, item.ThreadID)
+			if err == nil {
+				managed[item.ThreadID] = true
+			} else if !errors.Is(err, automation.ErrNotFound) {
+				return nil, err
+			}
 		}
 		if !managed[item.ThreadID] && canvasID == "" {
 			out = append(out, item)

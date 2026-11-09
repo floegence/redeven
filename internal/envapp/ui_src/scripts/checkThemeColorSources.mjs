@@ -119,6 +119,21 @@ function isInsideNamedFunction(source, offset, functionName) {
 // Exceptions are deliberately scoped by path and source context. A whole file or
 // directory must never be exempted merely because it currently contains one valid color source.
 export const THEME_COLOR_EXCEPTIONS = Object.freeze([
+  exception(
+    'internal/envapp/ui_src/src/ui/automation/templates.ts',
+    'persisted',
+    'The editable standalone HTML report template persists its own print palette outside the product shell.',
+    ({ value, lineSource }) => ['#172234', '#1558a6'].includes(value)
+      && lineSource.trim().startsWith("'<!doctype html>")
+      && lineSource.includes('{{.ScheduledAt}}'),
+  ),
+  exception(
+    'internal/flower_ui/src/preview/SpreadsheetPreview.tsx',
+    'media',
+    'Search overlays on imported worksheet cells use translucent colors that preserve the document palette.',
+    ({ value, lineSource }) => ['rgba(255, 179, 0, 0.12)', 'rgba(26, 115, 232, 0.24)'].includes(value)
+      && lineSource.trim().startsWith('findHighlightColors:'),
+  ),
   ...[
     'desktop/src/shared/i18n/locales/en-US.ts',
     'internal/envapp/ui_src/src/ui/i18n/locales/en-US.ts',

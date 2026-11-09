@@ -43,7 +43,7 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 	} else if !req.RejectAll && interactionID == "" {
 		return SubmitFlowerApprovalResponse{}, errors.New("invalid request")
 	}
-	if err := s.requireEndpointThreadAuthority(context.Background(), meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(context.Background(), meta.EndpointID, threadID); err != nil {
 		return SubmitFlowerApprovalResponse{}, err
 	}
 	unlockCanvas, err := s.lockTessivenExecution(context.Background(), threadID)

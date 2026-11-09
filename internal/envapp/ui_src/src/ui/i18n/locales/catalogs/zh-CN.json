@@ -8385,7 +8385,8 @@
       "cache": "缓存",
       "runtime": "运行时协调状态",
       "audit": "审计",
-      "diagnostics": "诊断"
+      "diagnostics": "诊断",
+      "automation": "自动化"
     },
     "kinds": {
       "identity": "身份与设置",
@@ -8407,5 +8408,8 @@
     "measuredScope": "已统计的环境目录 · 不含外部项目",
     "manageOwner": "管理{owner}",
     "locations": "存储位置与备份范围"
+  },
+  "automation": {
+    "title": "自动化"
   }
 }

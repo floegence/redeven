@@ -7,164 +7,50 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Redeven owns product visibility, policy, prompts and approval UI; Floret owns invocation and neutral tools. Default tools omit todo_write; historical Todo stays readable. [Goals](flower-goals.md) retains independent ownership. File inspection is shared across modes within current scope.
+Redeven owns visibility/policy/prompts/approval UI; Floret owns invocation and neutral tools. Retired Todo remains readable but unavailable; [Goals](flower-goals.md) retains its own owner. File inspection shares current scope across modes.
 
 # Contract
 
-Typed details exclude raw/status/name-only affordances. Media validates MIME/size/digest; never persist image bytes in tool state.
-
-Pure conditional-input validation belongs in typed tool decoders, before resource
-resolution and effect authorization. Published Floret owns bounded correction and
-paired model feedback; Redeven reuses its existing [child action validator](subagent-runtime.md).
-Projector failures remain contract failures; permission/storage/business failures
-retain owner classifications and never imply safe replay.
+Typed details exclude raw/status/name-only affordances. Validate media MIME/size/digest without storing bytes in tool state. Typed decoders validate conditional inputs before resource resolution/authorization. Published Floret owns bounded correction and paired feedback; reuse [child validation](subagent-runtime.md). Projector failures stay contract failures; business/permission/storage errors never imply safe replay.
 
 ## Model-visible guidance
-First-party callables use reviewed `<domain>_<action>[_object]` names, lowercase
-ASCII snake_case with single separators and at most 64 characters. The
-[shared catalog](../../internal/ai/toolnames/migration.json) owns released-to-current
-spelling. Registration and final provider preparation reject invalid names and
-duplicates; source rank and priority never replace an existing handler. First-party
-names and the `mcp_` namespace are reserved. MCP names use 192 bits of the existing
-released capability-name digest; original display labels remain readable.
+First-party names follow lowercase ASCII <domain>_<action>[_object], single underscores and <=64 characters. Registration/final preparation reject invalid/duplicate names; priority never replaces handlers. [Historical spelling](../../internal/ai/toolnames/migration.json) maps only released names; names.go reserves current first-party additions without invented migrations. Reserve mcp_; MCP uses 192 bits of the exact released capability digest, retaining display labels.
 
-New definitions, dispatch, observation and all provider transports use identical
-names. No aliases or mapping footnotes are advertised. Provider-owned hosted tools
-and JavaScript `browser.navigate()`/`ui.*` methods retain their own contracts.
-Strict-schema null-to-omit applies only to adapter-added nullable fields, not native
-null values. Frozen transport retries replay identical bytes.
+Definitions/dispatch/observation/transports share names, without advertised aliases. Hosted provider tools and JavaScript methods retain separate contracts. Strict-schema null-to-omit affects only adapter-added nullable fields. Frozen retries keep bytes.
 
-Floret v7.108.2 includes configurable built-in names and semantic Goal/input markers;
-Flower selects `goal_manage` and `user_ask`. Product schema 12→13 migrates only exact
-`Options.tool_allowlist` entries in execution configuration, including MCP names
-derived from their exact released identity without consulting current server settings. Canonical journal names,
-signatures, effects and historical user/script text remain unchanged. Read-only
-presentation resolves historical names; saved search bindings retain their service.
-OpenAI history keeps its original wire spelling and Anthropic native history remains
-byte-preserved. Restart recovery pairs known-undispatched prepared calls with factual
-canceled results under the original identity; newly proposed work rechecks current
-permissions. No historical execution alias or automatic effect replay is added.
+Published Floret names Goal/input goal_manage/user_ask. Exact explicit allowlists constrain these built-ins; unattended input is separately disabled. Product schema 12→13 migrates exact execution Options.tool_allowlist values, deriving MCP identities without current server configuration. Journals, signatures/effects, user/script text and native history retain original bytes/spelling. Read-only presentation maps history; search bindings retain service. Restart pairs known-undispatched calls with canceled receipts under original identity; new work reauthorizes. No aliases or automatic replay.
 
-[Budget tests](../../internal/ai/tool_definition_budget_test.go) measure final
-permission-filtered HTTP tools, pin membership and allow about 3-4% growth without
-runtime description truncation. Fixtures cover full-access, readonly, Computer
-disabled and plugin creation, including controls, attachments and Goal. Search/MCP
-are unconfigured. Computer defaults to three tools; historical primitives remain
-separate.
+[Budget tests](../../internal/ai/tool_definition_budget_test.go) pin final HTTP membership/bytes with ~3–4% allowance, no description truncation. Full/readonly/Computer-disabled/plugin fixtures include controls, attachments and Goal; search/MCP remain unconfigured. Computer defaults to three tools, historical primitives separate.
 
 ## Diagnostic ownership
-Owner-typed, cancellation, deadline and filesystem errors retain classifications;
-unknown wording stays UNKNOWN. Keywords cannot infer resources, authority, retry
-safety or replacement arguments. Missing result data on an error is not encoding
-loss. Authorized relative/home paths resolve at the owner. Removing heuristic diagnostics alone proves no quality gain.
+Typed owner/cancel/deadline/filesystem classifications survive; unknown wording stays UNKNOWN. Keywords never infer resources, authority, safety or replacement arguments. Missing error data is not encoding loss. Owners resolve authorized relative/home paths. Removing heuristics alone proves no quality gain.
 
 ## File inspection
-`file_read`, `file_read_many` and `path_find` are shared read-only tools in every Flower mode.
-Session read permission and current filesystem scope remain mandatory; thread
-admission retains its separate session requirements. Published Floret APIs suffice.
-`file_search` stays readonly-only; no read/glob/list-directory alias is added.
+file_read/file_read_many/path_find are read-only across modes, retaining session read and filesystem policy; admission requirements remain separate. file_search remains readonly-only, with no aliases.
 
-`file_read` streams complete UTF-8 lines through `Registry.OpenRead`. Offset is
-1-based (omitted/0=1), default 200/max 400 lines, capped at 8,000 content bytes and
-24 KiB JSON-escaped content. Returned `line_offset`/`line_count` are exact;
-`next_offset` continues when `truncated`. `eof` is observed; `total_lines` is unknown
-until EOF (empty=0). No whole-file rejection or tail scan. Prefix scans
-stop at 64 MiB and honor cancellation. Oversized lines, invalid UTF-8 and NUL data
-fail explicitly without partial-line cursors or automatic fallback. Calls read current bytes, not snapshots.
+file_read uses Registry.OpenRead and complete UTF-8 lines: 1-based offset (omitted/0=1), default 200/max400, <=8,000 content bytes/24KiB escaped JSON. Exact line_offset/count and next_offset report continuation; total_lines stays unknown until EOF (empty=0). No whole-file rejection/tail scan. Prefix scanning stops at64MiB with cancellation. Oversized lines, invalid UTF-8/NUL fail without partial cursors/fallback; every call reads current bytes.
 
-`file_read_many` accepts 50 paths, defaults to 120 lines/file and bounds encoded items
-to 32 KiB. Errors stay per-file. `next_index` is the submitted paths' next 0-based
-index; individual files continue through file_read. Model projection preserves
-executor-bounded content/coordinates; Activity remains a separate presentation.
+file_read_many accepts50 paths/default120 lines and <=32KiB encoded items. Errors are per-file; next_index is submitted zero-based index. Individual continuation uses file_read. Preserve executor coordinates/content in model projection; Activity is separate.
 
-`path_find.name` matches basenames with `*`, `?`, character classes, never relative-path
-globs. Malformed patterns fail. Hidden entries default off; no symlink following
-or gitignore. Scope, default 200/max 1000 results, default 8/max 32 depth (0=default),
-10,000 visited entries, 5 seconds and 32 KiB encoded items bound discovery.
-Truncation/scan facts mean incomplete results; narrow the query before concluding
-absence.
+path_find.name is a basename glob (*,?,classes), not relative path. Reject malformed patterns; hidden defaults off, no symlink following/gitignore. Bound default200/max1000 results, default8/max32 depth (0=default),10,000 entries,5s,32KiB. Truncation means incomplete; narrow before concluding absence.
 
 ## File editing
-Redeven resolves patch cwd; registry owns logical/canonical write policy, including
-authorized external/scratch roots. Deny readonly/sibling/ancestor/symlink escapes;
-target policy stays separate. Resolve symlinks/new-file ancestors before approval.
-Preserve submitted paths; ordered canonical resources and snapshots reject swaps
-at preflight, each commit and Move source deletion. This is not an OS sandbox or
-elimination of all TOCTOU races.
+Product resolves cwd; registry owns logical/canonical write policy including authorized external/scratch roots. Reject readonly/sibling/ancestor/symlink escape independently of target policy. Resolve existing/new-file ancestors before approval. Preserve submitted paths; ordered canonical resources/snapshots reject swaps at preflight, every commit and Move deletion. This is neither OS sandbox nor elimination of TOCTOU.
 
-Only `file_write` (complete contents) and `file_apply_patch` (contextual single/multiple
-file changes, creation, deletion, moves) execute. No literal-replacement tool,
-input_format/patch alias or implied freeform protocol. Historical calls/results
-and typed target navigation remain readable without restoring execution.
+Only file_write/full contents and file_apply_patch/contextual add/change/delete/move execute. No literal replacement/input_format alias/implied freeform protocol; historical calls and target navigation stay readable.
 
-Search forward with anchors/EOF/ranges. Only order failures may reorder uniquely
-exact nonoverlapping chunks without anchors/ranges/EOF/pure additions, using the
-same matcher/plan. Preserve arguments/classifications; ambiguous chunks require
-unique context, and providers still request source order. Pure additions append.
-Untouched endings survive; insertions use first ending (empty=LF), nonempty updates
-retain final newline. Match exact, trailing/surrounding whitespace, then selected
-Unicode normalization at the first permitted match. Copy context; literal
-insertions never reindent. Add/Move may replace regular files; one operation/path.
+Forward matching uses anchors/EOF/ranges. Only order failures may reorder unique exact nonoverlapping chunks without anchors/ranges/EOF/pure additions, through the same matcher/plan. Ambiguity requires unique context; providers still request source order. Pure additions append. Preserve untouched endings; insertion uses first ending (empty=LF), nonempty updates retain final newline. Match exact, then whitespace, then supported Unicode normalization at first allowed match; never reindent literals. Add/Move may replace regular files; one operation/path.
 
-Diagnostics include order/overlap/anchor/EOF/context/duplicate path, chunk/body-line,
-search boundary/source line and remedy; never select writes. Floret validates JSON.
-Validate all before writing and snapshot-check every commit. Validation confirms
-no writes; commit failure retains completed operations/unknown effects without
-replay permission. completed_files means whole operations. Activity retains paths,
-counts and actual full diff; model omits diff and may inspect content. Destination
-success/source deletion failure reports create/update against prior destination,
-not rename. Atomicity is per file, not patch/Move. Published ordered-resource,
-EffectOutcome and PatchActivity own authorization, settlement and history.
+Diagnostics retain order/overlap/anchor/EOF/context/duplicate path, chunk/body-line, search boundary/source line and remedy, never choose writes. Validate all before writing; snapshot-check each commit. Validation proves no writes; failure retains completed operations and uncertainty. completed_files means complete operations. Activity owns full actual diff/paths/counts; model omits diff and may inspect. Destination success/source-delete failure is create/update against prior destination, not rename. Atomicity is per-file, never whole patch/Move. Published ordered resources/EffectOutcome/PatchActivity own authorization/settlement/history.
 
 # Boundaries
 
-No aliases restore deleted knowledge tools. OKF is an embedded project corpus, not internet access; external/current/news/third-party/market/pricing/web facts require authoritative URLs or web search.
-Search and fetch are independently configured. Published Floret fetch guidance
-describes reading a known URL without assuming search is available.
-
-Remote/target execution claims require explicit provenance from a tool result or product command, never thread context alone.
+OKF is embedded project knowledge, not internet; external/current/news/market facts require authoritative URLs/search. Search/fetch configure independently; known-URL fetch cannot imply search. Remote execution needs explicit tool/command provenance, not thread context.
 
 # Evidence
 
-- [File windows](../../internal/ai/file_read_window_test.go): exact bounded provider
-  JSON, escaping, large files/lines, UTF-8/EOF, batch continuation, discovery,
-  cancellation, scope and authorization. [Service acceptance](../../internal/ai/file_read_service_test.go):
-  all modes, HTTP definitions/results, no read approval, Activity and restart on
-  published Floret. Read-only dispatch caps do not widen thread admission.
-- [Local diagnostics](../../internal/ai/local_tool_feedback_test.go) and
-  [Service tests](../../internal/ai/local_tool_feedback_integration_test.go): retired
-  calls, no-effect validation, explicit correction, HTTP, Activity and restart.
-  [Provider tests](../../internal/ai/model_gateway_tool_names_test.go): name/schema
-  guidance and frozen retries. [Registry](../../internal/ai/tools/registry.go): presentation.
-- `internal/ai/patch_{correctness,order,diagnostics,scope,tool,runtime}_test.go`:
-  ordering/endings/authorization/partial failures/restart/Fork. Live proposals in
-  `patch_prompt_qualification_test.go` run in memory, never execute tools; small
-  samples do not establish production failure rates.
-- 2026-11-08 description baseline `16f0a9854`: 37 tools retained; JSON shrank
-  37,465→35,293 bytes (DeepSeek), 45,063→40,515 (strict Responses). DeepSeek Flash
-  three repeats/case: baseline 9/9, candidate 8/9 (one cancellation-count error);
-  child inspection/service identity each 3/3. Proposed subagent_manage compression was
-  withdrawn for inconsistent cancellation interpretation. No model-quality gain;
-  strict tests used fake providers.
-  `REDEVEN_FLOWER_PROMPT_PROVIDER_ID` selects only qualification profiles.
-- After integrating Tessiven scope isolation at `95a8b4b68`, shared inspection adds
-  three ordinary full-access tools (24→27): DeepSeek 24,663→26,747 bytes; strict
-  Responses 28,354→30,963. Canvas-specific surfaces retain their own inventory.
-  System prompt unchanged. Bytes are not tokens, latency or task success.
+File-window/Service tests cover bounded JSON, escaping, UTF-8/EOF/batches, scope, all modes, Activity/restart. Local feedback/integration and patch correctness/order/diagnostics/scope/runtime tests cover no-effect correction, partial commits/Fork/restart; live proposal fixtures never execute writes. Naming/history tests cover final provider mappings, original signed/paired histories, pending input/approval, Fork/Retry and no replay on published Floret.
 
-- [Naming acceptance](../../internal/ai/tool_names_history_test.go): published runtime
-  reopening an old input interaction under new names, complete paired history, Fork,
-  Retry and no automatic effect replay; Anthropic signed history with old names and
-  new definitions. This is deterministic protocol acceptance, not a live API claim.
-- [Name contract](../../internal/ai/tool_names_contract_test.go): catalog, portable MCP
-  identities and unchanged browser JavaScript method dispatch.
+November8 baseline16f0a9854 retained37 tools with smaller JSON; DeepSeek baseline9/9 versus candidate8/9 retained a cancellation-count error. Subagent compression was withdrawn; no quality gain claimed. Tessiven isolation later added three shared reads (24→27), increasing bytes with unchanged system prompt. Bytes are not tokens/latency/success. REDEVEN_FLOWER_PROMPT_PROVIDER_ID selects qualification profiles only.
 
-- Exact published v7.107.9 writer fixtures cover pending input and approval across
-  restart, paired original call identities and zero effect replay. Floret v7.108.2
-  owns the restart fix and qualifies it through candidate/published adoption.
-- Isolated local-copy qualification on 2026-11-08 read 680 threads through public
-  APIs with execution deferred. Product schema 12→13 retained all 334 execution
-  configurations unchanged (none had nonempty allowlists); synthetic fixtures
-  exercise actual renames and atomic rollback. The running source was not upgraded.
-  This establishes readability, not a byte-preservation audit of the whole copy:
-  an earlier timed-out attempt had execution enabled before qualification was corrected.
+Isolated 680-thread schema12→13 public-API inspection retained334 configurations unchanged (no allowlists). Synthetic fixtures test renaming/rollback. Source Runtime was not upgraded; prior timeout enabled execution before correction, so this is readability evidence, not full-copy byte preservation. Git retains exact metrics and source identities.

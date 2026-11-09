@@ -7,62 +7,55 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Development launcher owns Desktop, local Runtime, saved Gateways and bundles. Read Rust pin from scripts/redevplugin_build_toolchain.json, shared with Runtime preparation, never a shell assignment. Capture pin/installed compiler identities without auto-installing; cache misses prepare absent tools.
+The launcher owns source-bound Desktop/Runtime/Gateway bundles and a checkout-stable profile. Shared build tooling owns dependency preparation.
 
 # Contract
 
-## Identity, tools and acquisition
-`scripts/dev_desktop.sh` freezes HEAD/tracked/nonignored inputs, including authored OKF/builders/Go embeds, and rejects drift. Generated OKF/ignored assets are outputs. Reuse requires identical source/dependencies/tools/target/settings and verified Desktop/immutable Runtime; missing/corrupt/incomplete output rebuilds, never launches old bytes. --rebuild forces; REDEVEN_AGENT_FORCE_INSTALL=1 reinstalls three JS packages once. Manifests choose pnpm/npm/locks; only pinned Rust preparation may install tools.
+## Source and tooling
+`scripts/dev_desktop.sh` freezes HEAD, tracked and nonignored inputs (including authored OKF/builders/Go embeds), rejects drift and verifies complete immutable outputs. Generated OKF/ignored assets are outputs. Reuse requires matching source/dependencies/tools/target/settings; missing/corrupt output rebuilds, never launches old bytes. `--rebuild` forces; `REDEVEN_AGENT_FORCE_INSTALL=1` reinstalls three JS packages once. Manifests select package manager/locks. `scripts/redevplugin_build_toolchain.json` owns Rust pin; capture installed identities without eager installation, prepare missing tools only on cache miss. Invalid pins name configuration; drift invalidates preparation.
 
-Invalid pins name configuration; drift invalidates preparation.
+Resolve physical checkout and parent aliases before ownership/build/dependency checks. Managed package-local links may survive aliases; external/sibling source links remain forbidden. Toolchain CLI uses Node main-module identity.
 
-Resolve physical checkout before profile/service ownership/building so aliases share one owner and execute CLI preparation. Resolve parent aliases for dependency boundaries: package-local links may survive managed-worktree aliases; external links/symlinked roots remain forbidden. Toolchain CLI uses Node main-module identity.
+macOS infers static HTTP/HTTPS proxy once unless any explicit proxy variable (including empty/lowercase) or `REDEVEN_DEV_SYSTEM_PROXY=0` exists. Preserve NO_PROXY or add loopback. PAC/SOCKS-only needs explicit policy. Preserve credentials/TLS/integrity; remove only inferred values before launch.
 
-macOS infers enabled static HTTP/HTTPS proxies once unless explicit HTTP_PROXY/HTTPS_PROXY/ALL_PROXY (either case, even empty) or REDEVEN_DEV_SYSTEM_PROXY=0. Preserve NO_PROXY or add loopback exclusions; PAC/SOCKS-only needs explicit policy. Preserve credentials/TLS/integrity and remove only inferred environment before launch.
+Official Node downloads retry transport/408/429/500/502/503/504 three times with1/2s backoff; permanent HTTP/certificate errors stop. Retain URL/CONNECT/origin/byte diagnostics. Resume owned partials only, freshly verify official checksum for cached/downloaded bytes and delete failures.
 
-Official Node downloads retry three times with1/2s backoff for transport or HTTP408/429/500/502/503/504. Permanent HTTP/certificate failures stop. Retain URL/policy and CONNECT/origin/byte diagnostics. Resume owned partials only; require fresh official checksum for cache, verify complete bytes and delete failures.
-
-Cargo reuse requires exact freshly staged locked public crates and regenerated digest/execution/consumption evidence. Complete cache works offline; missing data requires acquisition. Corruption/compiler failures cannot substitute paths. Isolate releases and rebuild whole product on source change; no component/watch mode.
+Cargo reuse still freshly stages exact locked public crates and regenerates digest/execution/consumption proofs. Complete cache permits offline work; absence acquires, corruption/compiler failure never substitutes. Whole-product rebuild follows source change; no component/watch mode.
 
 ## Bundle
-Include Runtime/plugin runtime/standalone Computer Node/released SDKs/UI without first-launch download. Chromium remains optional [confirmed installation](../ai/computer-use-browser-installation.md). Main is pure JS/inline CSS; native SDK/updater retain boundaries, frontend trees build-only. Electron Builder admits main/four preloads/full renderer licenses/workers/fonts/Wasm; reject tests/maps/demos/extra ASAR entries and>80MiB including unpacked modules. Report Runtime/Electron separately.
+Ship Runtime,plugin runtime,standalone Computer Node,released SDK/UI without first-launch download; Chromium remains [explicit installation](../ai/computer-use-browser-installation.md). Main is pure JS/inline CSS; frontend trees build-only, native/updater boundaries unchanged. Electron Builder allows main,four preloads,renderer licenses/workers/fonts/Wasm; reject tests/maps/demos/extra ASAR and >80MiB including unpacked modules. Report Runtime/Electron separately.
 
-Computer retains released layout/licenses/platform binary, excludes maps and checks manifest.upstream.json inventory. macOS verifies pre-signing plus signatures/unsigned Mach-O, normalizing only signature-dependent __LINKEDIT allocation. Derive signed record before sealing; reject unsigned-byte/manifest/executable drift. Linux manifest unchanged. Qualify relocated helpers/utilities offline without source/global Node, audit Electron cache/archive and report components/largest files; compare equal inputs with installed/compressed bytes distinct.
+Computer preserves released layout/licenses/platform binary, excludes maps, validates manifest.upstream.json. macOS compares pre-signing/signatures/unsigned Mach-O, normalizing only signature-dependent __LINKEDIT; derive signed record before seal and reject manifest/executable drift. Linux manifest unchanged. Qualify relocated helpers offline without source/global Node; audit Electron archive/cache,components/largest files and distinguish installed/compressed bytes under equal inputs.
 
-## Scheduling/lifecycle
-Overlap Desktop compilation/Runtime preparation; assets-Go/plugins/Computer own outputs. Env typecheck/bundle share checkout lock; Go waits embeds and publication requires complete unchanged inputs. Three dependency workers preserve serial digest/order. Failure/cancel retains errors and stops owned descendants. Dev skips notice freshness; staged/main enforce it and releases run after assets.
+## Build and lifecycle
+Overlap Desktop/Runtime preparation; asset-Go/plugin/Computer workers own outputs. Env typecheck/bundle share checkout lock; Go waits embeds. Three dependency workers retain serial digest/order. Publish only complete unchanged inputs; failure/cancel stops owned descendants and preserves errors. Dev skips notice freshness; staged/main require it,releases run after assets.
 
-Reuse compatible intact Gateways; drift never auto-upgrades. Owner repairs corrupt/missing packages; explicit Update selects a build. Dirty source is in cache key; changes retire generation, missing key creates session cache; archive owner validates. Read-only startup/cleanup locates schema5 by connection_id, supported old schemas by legacy gateway_id until migration; never trust_profile.gateway_id/change records/cleanup-ledger gatewayID for paths. Unknown/invalid schemas fail without substitution.
+Reuse intact compatible Gateways; drift never upgrades automatically. Owner repairs missing/corrupt packages; explicit Update chooses build. Dirty bytes enter cache key; source change retires generation,missing key creates session cache,archive owner validates. Read-only startup/cleanup finds schema5 via connection_id and supported older schemas via legacy gateway_id until migration. Never derive paths from trust_profile.gateway_id/changed records/cleanup-ledger gatewayID; invalid schemas fail unchanged.
 
-Dev gzip1/Brotli4 preserves decoded bytes; release uses maximum compression; profile belongs to identity. Exclude other worktrees/native cache from Gateway copies. Record dependency/verification/Desktop/Runtime/Gateway durations. Rebuilt/reused launch acceptance needs saved local Gateway,exact Runtime commit and verified cleanup; empty profile timing is insufficient. Exit/signals/failure stop owned services only. Electron resolver emits only path to stdout, diagnostics stderr, propagates failure and rechecks executable after build.
+Dev gzip1/Brotli4 preserves decoded bytes; release maximizes compression. Compression profile belongs to identity. Exclude other worktrees/native cache from Gateway copies; record dependency/verification/build durations. Rebuild/reuse acceptance needs saved local Gateway,exact Runtime commit and cleanup,not empty-profile timing. Exit/signals/failure stop owned services only. Electron resolver emits path only on stdout,diagnostics stderr; propagate failure/recheck executable after build.
 
-macOS stages a profile-owned `Redeven Desktop Dev.app` and opens it through Launch Services. Desktop capture/input permissions belong to the separately signed `Redeven Desktop Access Dev.app`, not the Electron wrapper. Before stopping services or capturing cache inputs, resolve desktop-access signing to an exact valid certificate fingerprint. Explicit `REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY`/`REDEVEN_DESKTOP_MAC_IDENTITY` takes priority; otherwise development selects the unique Apple Development identity, or the unique Developer ID Application identity if no development certificate exists. Deduplicate identical fingerprints across keychains; multiple eligible certificates, missing keys and invalid explicit values fail without fallback. Stop-only and dry-run do not require keychain access. Ad-hoc signing remains rejected. Its certificate and stable bundle identifier preserve designated requirements across rebuilds. Export the resolved fingerprint into the existing build-cache identity and pass it through native staging, which revalidates availability before creating resources. Production staging uses `REDEVEN_DESKTOP_MAC_IDENTITY` and the distinct `com.floegence.redeven.desktop-access` identifier. The computer manifest includes every helper bundle file and signature seal. Outer Electron signing preserves this independently sealed helper; validation rejects missing or ambiguous application inventories. Only explicit exclusion PID and media metadata cross the relay boundary.
+## macOS identity
+Launch profile-owned `Redeven Desktop Dev.app` via Launch Services; capture/input authority belongs to separately signed `Redeven Desktop Access Dev.app`. Resolve exact certificate fingerprint before stopping services or capturing cache inputs. Explicit `REDEVEN_DESKTOP_ACCESS_SIGNING_IDENTITY`/`REDEVEN_DESKTOP_MAC_IDENTITY` wins; otherwise choose unique Apple Development, or unique Developer ID Application only if none. Deduplicate fingerprints across keychains; ambiguity/missing keys/invalid explicit values fail,never ad-hoc fallback. Stop-only/dry-run need no keychain.
 
-## Branch and profile identity
-The development profile is stable by checkout path across branch changes. Source identity selects a verified bundle, not a new data profile. Running older code against newer persisted formats can reject admission; use a compatible published Runtime or an explicitly isolated `REDEVEN_STATE_ROOT`. Never reset data or bypass format checks to make a cached build launch.
+Certificate plus stable bundle ID preserves designated requirements. Fingerprint enters build-cache identity; native staging revalidates before resource creation. Production uses `REDEVEN_DESKTOP_MAC_IDENTITY` and `com.floegence.redeven.desktop-access`. Computer manifest inventories every helper file/seal; outer Electron signing preserves it. Reject missing/ambiguous app inventory. Relay carries only explicit exclusion PID/media metadata.
 
-## Retained plugin storage
+## Profiles, storage and credentials
+Profile follows physical checkout across branches; source selects bundle,not new data. Older code may reject newer state: use compatible Runtime or explicit isolated `REDEVEN_STATE_ROOT`,never reset/bypass formats.
 
-Before shutdown/build, the launcher checks retired plugin placement without opening platform databases. The explicit `--relocate-storage` recovery entry previews first, uses the selected profile's stop inventory, applies the existing offline journal and checks readiness before continuing. It never clears stores or bypasses unsupported links; invalid/no-stop combinations fail before shutdown. See [storage ownership](../architecture/storage-ownership.md) for the relocation contract. Native plugin qualification must use a verified published-source runtime, actual retained state and real sandbox/worker execution; admission-only fixtures cannot establish Desktop usability.
+Before stop/build, inspect retired plugin placement without opening platform DBs. Explicit `--relocate-storage` previews,uses selected profile stop inventory,applies existing offline journal and verifies readiness. Invalid/no-stop combinations fail before shutdown; no clearing/bypassing links. [Storage ownership](../architecture/storage-ownership.md) owns relocation. Native qualification requires published-source runtime,retained state and real sandbox/Worker; admission-only fixtures prove no usability.
 
-## Credentials/retention
-Unpackaged dev uses AES-256-GCM with random retained0600 profile key, protecting plaintext rather than same-user access. Other modes use system storage without constructor probes. Explicit legacy Keychain recovery never reads preferences/secrets automatically; migrate files atomically, retaining credentials/Retry/Quit on failure. Corrupt keys cannot reset accounts/Runtime/Keychain.
+Unpackaged dev encrypts with AES-256-GCM/random retained0600 profile key (not same-user protection); other modes use system storage without constructor probes. Legacy Keychain recovery is explicit,never automatically reads preferences/secrets. Atomic migration retains credentials/Retry/Quit on failure; corrupt key never resets accounts/Runtime/Keychain.
 
-Publish complete <development-state-root>/desktop/bundles/<manifest-sha256>. Keep newest three plus selected/reused/live; bound verified inactive count, not bytes or active/unverified growth.
+Publish complete `<development-state-root>/desktop/bundles/<manifest-sha256>`. Keep newest three plus selected/reused/live; bound verified inactive count,not bytes or active/unverified growth.
 
 # Boundaries
 
-Prune generated packages only in selected profile; builders own in-progress directories.
+Prune only selected-profile generated packages; builders own in-progress directories. Preserve grants and unrelated processes.
 
 # Evidence
 
-- November 8, 2026: with both signing identity variables unset, isolated macOS ARM64 rebuild and cache reuse selected the installed development certificate, strictly verified the signed helper, started the saved local Gateway and exact-commit Runtime, and opened the Environment window. Supervised process, port and temporary-profile cleanup passed. The initial external-volume attempt waited for macOS removable-volume authorization; qualification continued from an internal-disk task worktree without changing TCC grants. Certificate discovery, native seal stability, build-cache/source contracts and 18 launcher lifecycle scenarios passed.
-- November 4, 2026: isolated macOS ARM64 launcher rebuilt and reused the verified bundle through a checkout alias. Saved Gateway, ready local Environment, exact Runtime identities and cleanup passed; 39 focused cases and 12 signal/failure cases passed. Earlier alias failures remain failed evidence.
-- November 8, 2026: Launch Services fixture verified independent TCC identity, denied unrequested grants, sandboxed renderer, normal/error exits and interruption cleanup. Product UI fixtures covered permission destinations and refresh; no new user grant was made.
-- `redeven:scripts/dev_desktop.sh` - Source.
-- `redeven:scripts/dev_desktop_build_cache.test.mjs` - Tests.
+- November8 macOS ARM64 isolated rebuild/reuse with unset signing variables selects installed development certificate,strictly verifies helper,starts saved Gateway/exact Runtime/Environment and cleans processes/ports/profile. Initial external-volume attempt waits removable-volume consent; internal-disk task checkout succeeds without TCC change. Certificate/native seal/cache and18 lifecycle scenarios pass.
+- November4 alias rebuild/reuse verifies saved Gateway,ready Environment,exact identities/cleanup;39 focused and12 signal/failure cases. Prior alias failures retained.
+- November8 Launch Services fixture verifies independent TCC identity,no unrequested grant,sandboxed renderer,normal/error/interrupt cleanup; UI covers permission destinations/refresh. Signed-helper/localized usage/enclosing seal/relocation pass; ad-hoc/missing identity fails before staging. No grants requested or TCC reset.
 
-- November 8, 2026: independently signed helper staging, localized usage strings,
-  enclosing-app resource sealing and relocated complete computer resources passed.
-  Explicit ad-hoc signing or absence of an eligible identity fails before macOS resource staging. The
-  explicit native helper qualification requests no grants and never resets TCC.
+Sources: `scripts/dev_desktop.sh`, `scripts/dev_desktop_build_cache.test.mjs`; Git retains original run details.

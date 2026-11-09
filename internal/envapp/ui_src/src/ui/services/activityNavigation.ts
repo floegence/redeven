@@ -3,7 +3,7 @@ import { ENV_TESSIVEN_ACTIVITY_ID, isEnvSurfaceId, type EnvSurfaceId } from '../
 import { isDesktopStateStorageAvailable, readUIStorageItem, readUIStorageJSON, removeUIStorageItem, rendererScopedUIStorageKey, writeUIStorageJSON } from './uiStorage';
 import { resolveEnvAppStorageBinding } from './uiPersistence';
 
-export type BuiltinActivityPage = EnvSurfaceId | typeof ENV_TESSIVEN_ACTIVITY_ID;
+export type BuiltinActivityPage = EnvSurfaceId | typeof ENV_TESSIVEN_ACTIVITY_ID | 'automation';
 export type ActivityTarget = Readonly<{ kind: 'builtin'; page: BuiltinActivityPage }> | Readonly<{
   kind: 'plugin'; pluginInstanceID: string; pluginID: string; surfaceID: string;
 }>;
@@ -15,7 +15,7 @@ const LEGACY_PLUGIN_PREFIX = 'redeven.plugin.activity:';
 export type ActivityRestoreTarget = ActivityTarget | Readonly<{ kind: 'legacy-plugin'; inventoryKey: string }>;
 
 export function isBuiltinActivityPage(value: unknown): value is BuiltinActivityPage {
-  return typeof value === 'string' && (isEnvSurfaceId(value) || value === ENV_TESSIVEN_ACTIVITY_ID);
+  return typeof value === 'string' && (isEnvSurfaceId(value) || value === ENV_TESSIVEN_ACTIVITY_ID || value === 'automation');
 }
 
 export function activityTargetID(target: ActivityRestoreTarget): string {

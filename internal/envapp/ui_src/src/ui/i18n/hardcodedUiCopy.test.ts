@@ -51,6 +51,7 @@ const EXCEPTIONS: readonly Exception[] = [
   { file: 'src/ui/pages/EnvPortForwardsPage.tsx', kind: 'text', text: 'SHA-256', reason: 'Standard content-digest algorithm identifier beside the reviewed package hash.' },
   { file: 'src/ui/plugins/PluginCreationPlaceholder.tsx', kind: 'text', text: 'Aa', reason: 'Decorative type specimen, not user-facing copy.' },
   { file: '../../tessiven_ui/src/TessivenDocumentDialog.tsx', kind: 'text', text: 'YAML', reason: 'Standard document format identifier.' },
+  { file: 'src/ui/automation/AutomationWorkspace.tsx', kind: 'text', text: 'SHA-256', reason: 'Standard content-digest algorithm identifier paired with the retained artifact hash.' },
   { file: '../../flower_ui/src/FlowerChromeConnection.tsx', kind: 'text', text: 'chrome://extensions', reason: 'Literal browser destination opened by the adjacent host action.' },
   { file: '../../flower_ui/src/extensions/AgentPluginDetails.tsx', kind: 'text', text: 'MCP', reason: 'Standard Model Context Protocol identifier.' },
   { file: '../../flower_ui/src/extensions/AgentPluginsPanel.tsx', kind: 'placeholder', text: 'owner/repository', reason: 'Literal GitHub repository coordinate example.' },
@@ -128,6 +129,7 @@ const EXCEPTIONS: readonly Exception[] = [
   { file: 'src/ui/pages/EnvContainersPage.tsx', kind: 'placeholder', text: 'no-new-privileges', reason: 'Container security-option literal.' },
   { file: 'src/ui/pages/EnvContainersPage.tsx', kind: 'placeholder', text: '/dev/ttyUSB0', reason: 'Literal Linux device-path example.' },
   { file: 'src/ui/pages/EnvContainersPage.tsx', kind: 'placeholder', text: 'rwm', reason: 'Container device-permission enum literal.' },
+
   { file: 'src/ui/pages/ManagedServiceSettingsDrawer.tsx', kind: 'placeholder', text: '/usr/local/bin/start', reason: 'Literal managed-container executable-path example.' },
   { file: 'src/ui/pages/ManagedServiceSettingsDrawer.tsx', kind: 'text', text: 'no', reason: 'Docker restart-policy enum literal.' },
   { file: 'src/ui/pages/ManagedServiceSettingsDrawer.tsx', kind: 'text', text: 'unless-stopped', reason: 'Docker restart-policy enum literal.' },

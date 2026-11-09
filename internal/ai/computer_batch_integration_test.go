@@ -210,7 +210,7 @@ func TestComputerMixedBatchPreservesIndependentTools(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			terminal, err := runTypedTurnForTest(t, context.Background(), svc, meta, "batch", RunStartRequest{ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Inspect the task page."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess, ToolAllowlist: append(legacyComputerFixtureTools(), "terminal_exec")}})
+			terminal, err := runTypedTurnForTest(t, context.Background(), svc, meta, "batch", RunStartRequest{ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "Inspect the task page."}, Options: RunOptions{PermissionType: config.AIPermissionFullAccess, ToolAllowlist: append(legacyComputerFixtureTools(), "terminal_exec", sibling.name)}})
 			if err != nil {
 				t.Fatalf("turn: %v; failure=%+v", err, terminal.Failure)
 			}

@@ -53,7 +53,7 @@ func (s *Service) PrepareQueuedDraft(ctx context.Context, meta *session.Meta, th
 	if s == nil || s.threadRuntime == nil || len(req.ExpectedInputFingerprint) != 64 {
 		return draft, errors.New("invalid queued draft request")
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return draft, err
 	}
 	current, err := s.threadRuntime.View(ctx, identity.ThreadID(threadID))
@@ -162,7 +162,7 @@ func (s *Service) TakeBackQueuedInput(ctx context.Context, meta *session.Meta, t
 	if s == nil || s.threadRuntime == nil || strings.TrimSpace(threadID) == "" || strings.TrimSpace(queueID) == "" || len(fingerprint) != 64 {
 		return flruntime.ThreadView{}, errors.New("invalid queue take-back request")
 	}
-	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+	if err := s.requireInteractiveThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return flruntime.ThreadView{}, err
 	}
 	return s.threadRuntime.DeleteQueued(ctx, flruntime.DeleteQueuedInput{ThreadID: identity.ThreadID(threadID), QueueItemID: queueID, ExpectedInputSHA256: fingerprint, RequestKey: flruntime.RequestKey("take-back:" + queueID + ":" + fingerprint)})

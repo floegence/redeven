@@ -54,6 +54,7 @@ import {
   ActivityBarCodespacesIcon,
   ActivityBarFlowerIcon,
   ActivityBarTessivenIcon,
+  ActivityBarAutomationIcon,
   ActivityBarPluginsIcon,
   ActivityBarContainersIcon,
   ActivityBarHostApplicationsIcon,
@@ -347,6 +348,7 @@ const PluginCenterView = lazy(() => import('./plugins/PluginCenterView').then(mo
 const PluginCreationWorkspace = lazy(() => import('./plugins/PluginCreationWorkspace').then(module => ({ default: module.PluginCreationWorkspace })));
 const PluginPageViewport = lazy(() => import('./plugins/PluginPageViewport').then(module => ({ default: module.PluginPageViewport })));
 const PluginDraftLibrary = lazy(() => import('./plugins/PluginDraftLibrary').then(module => ({ default: module.PluginDraftLibrary })));
+const EnvAutomationPage = lazy(() => import('./pages/EnvAutomationPage'));
 const EnvTessivenPage = lazy(() => import('./pages/EnvTessivenPage'));
 const EnvTerminalPage = lazy(() => import('./pages/EnvTerminalPage').then((module) => ({ default: module.EnvTerminalPage })));
 const EnvMonitorPage = lazy(() => import('./pages/EnvMonitorPage').then((module) => ({ default: module.EnvMonitorPage })));
@@ -368,7 +370,7 @@ const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost').then((mod
 const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHost').then((module) => ({ default: module.FileBrowserSurfaceHost })));
 const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then((module) => ({ default: module.EnvWorkbenchPage })));
 
-type EnvActivitySurfaceId = EnvSurfaceId | typeof ENV_TESSIVEN_ACTIVITY_ID;
+type EnvActivitySurfaceId = EnvSurfaceId | typeof ENV_TESSIVEN_ACTIVITY_ID | 'automation';
 
 type ActivityPluginWindow = Readonly<{
   creationID?: string;
@@ -4261,6 +4263,9 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       sidebar: { order: 1, fullScreen: true },
     });
     list.push({
+      id: 'automation', name: i18n.t('automation.title'), icon: ActivityBarAutomationIcon, component: EnvAutomationPage, sidebar: {order:96,fullScreen:true},
+    });
+    list.push({
       id: ENV_TESSIVEN_ACTIVITY_ID,
       name: i18n.t('shell.tessivenLabel'),
       icon: ActivityBarTessivenIcon,
@@ -4277,7 +4282,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
 
   const pageModules = { terminal: EnvTerminalPage, monitor: EnvMonitorPage, files: EnvFileBrowserPage,
     codespaces: EnvCodespacesPage, ports: EnvPortForwardsPage, applications: EnvHostApplicationsPage,
-    containers: EnvContainersPage, ai: EnvAIPage, tessiven: EnvTessivenPage };
+    containers: EnvContainersPage, ai: EnvAIPage, tessiven: EnvTessivenPage, automation: EnvAutomationPage };
   if (initialSurface in pageModules) void pageModules[initialSurface as keyof typeof pageModules].preload().catch(() => undefined);
 
   const [persistReady, setPersistReady] = createSignal(false);
@@ -4731,6 +4736,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         onClick: () => openTessiven(),
       });
     }
+    items.push({id:'automation',icon:ActivityBarAutomationIcon,label:i18n.t('automation.title'),collapseBehavior:'preserve',onClick:()=>activateActivitySurface('automation')});
     items.push(pluginPanelItem);
     if (!layout.isMobile()) {
       for (const tile of pinnedActivityPluginTiles()) {

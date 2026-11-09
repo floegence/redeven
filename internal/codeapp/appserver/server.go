@@ -33,6 +33,7 @@ import (
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/auditlog"
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/chatgpt"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/config"
@@ -80,6 +81,8 @@ type Options struct {
 	DirectoryFavorites   *directoryfavorites.Store
 	Notes                *notes.Service
 	WorkbenchLayout      *workbenchlayout.Service
+	Automation           *automation.Store
+	AutomationSchedules  *automation.Schedules
 	PluginCreation       *plugincreation.Service
 	Tessiven             *tessiven.Service
 	TessivenResources    *tessiven.ResourceBackend
@@ -241,9 +244,11 @@ func codeRuntimeSetupChunkIndexFromPath(rawPath string) (int64, bool) {
 }
 
 type Server struct {
-	hostAccessMu sync.RWMutex
-	log          *slog.Logger
-	lifecycleMu  sync.Mutex
+	automation          *automation.Store
+	automationSchedules *automation.Schedules
+	hostAccessMu        sync.RWMutex
+	log                 *slog.Logger
+	lifecycleMu         sync.Mutex
 
 	backend            Backend
 	pf                 PortForwardBackend
@@ -469,6 +474,8 @@ func New(opts Options) (*Server, error) {
 		directoryFavorites:    opts.DirectoryFavorites,
 		notes:                 opts.Notes,
 		layouts:               opts.WorkbenchLayout,
+		automation:            opts.Automation,
+		automationSchedules:   opts.AutomationSchedules,
 		pluginCreation:        opts.PluginCreation,
 		tessiven:              opts.Tessiven,
 		tessivenResources:     opts.TessivenResources,
@@ -2726,6 +2733,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if g.handleHostApplicationsAPI(w, r) {
+		return
+	}
+	if g.handleAutomationAPI(w, r) {
 		return
 	}
 	if g.handlePluginCreationAPI(w, r) {

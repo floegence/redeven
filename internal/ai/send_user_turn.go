@@ -12,6 +12,7 @@ import (
 	"github.com/floegence/floret/v7/identity"
 	flruntime "github.com/floegence/floret/v7/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/automation"
 	"github.com/floegence/redeven/internal/plugincreation"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -36,6 +37,7 @@ type typedSendOperation struct {
 }
 
 type SendUserTurnRequest struct {
+	automationInternal bool
 	// Set only by the authenticated product draft route.
 	PluginDraftID     string               `json:"-"`
 	StorageGeneration string               `json:"storage_generation,omitempty"`
@@ -104,6 +106,20 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	threadID := strings.TrimSpace(req.ThreadID)
 	if endpointID == "" {
 		return SendUserTurnResponse{}, errors.New("invalid request")
+	}
+	if threadID != "" && s.automation != nil {
+		owner, b, e := s.automation.AnyThread(ctx, threadID)
+		if e == nil {
+			expected, _ := automation.OwnerFromSession(meta)
+			if expected != owner {
+				return SendUserTurnResponse{}, automation.ErrNotFound
+			}
+			if b.RunID != "" && !req.automationInternal {
+				return SendUserTurnResponse{}, automation.ErrUnauthorized
+			}
+		} else if !errors.Is(e, automation.ErrNotFound) {
+			return SendUserTurnResponse{}, e
+		}
 	}
 	draftID := req.PluginDraftID
 	if threadID != "" && s.pluginCreation != nil {

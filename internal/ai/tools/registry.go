@@ -100,8 +100,13 @@ func cleanStringList(values []string) []string {
 }
 
 var builtinDefinitions = map[string]Definition{
-	"thread_query": {Name: "thread_query", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("thread_query"))},
-	"thread_read":  {Name: "thread_read", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("thread_read"))},
+	"automation_read_definition": {Name: "automation_read_definition", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "automation", "args", "result"), operation("automation_read_definition"))},
+	"automation_save_definition": {Name: "automation_save_definition", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "automation", "args", "result"), operation("automation_save_definition"))},
+	"automation_read_context":    {Name: "automation_read_context", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "automation", "args", "result"), operation("automation_read_context"))},
+	"automation_contribute":      {Name: "automation_contribute", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "automation", "args", "result"), operation("automation_contribute"))},
+	"automation_submit_result":   {Name: "automation_submit_result", Mutating: true, RequiresApproval: true, Presentation: withPresentationOptions(presentation(ToolPresentationMutation, "approval", "structured", "automation", "args", "result"), operation("automation_submit_result"))},
+	"thread_query":               {Name: "thread_query", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("thread_query"))},
+	"thread_read":                {Name: "thread_read", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("thread_read"))},
 	// Historical presentation only; this tool is no longer registered for execution.
 	"threads.aggregate":         {Name: "threads.aggregate", Presentation: withPresentationOptions(presentation(ToolPresentationResearch, "readonly", "structured", "research"), operation("threads.aggregate"))},
 	"plugin_author_get_status":  {Name: "plugin_author_get_status", Mutating: false, RequiresApproval: false, Presentation: withPresentationOptions(presentation(ToolPresentationContext, "readonly", "structured", "plugin_author", "args", "result"), operation("status"))},
