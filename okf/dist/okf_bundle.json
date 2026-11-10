@@ -23936,7 +23936,7 @@
         "title": "Plugin Center interaction",
         "type": "UI Contract"
       },
-      "body_length": 9105,
+      "body_length": 10474,
       "summary": "Redeven owns retained Center navigation/search/filter/selection/scroll; Floe owns dialogs/presence/input. Authoring starts with centered composer and quiet canvas.",
       "sections": [
         {
@@ -23957,8 +23957,8 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "November9 isolated production Desktop verified placements, Settings return, search, Back/Escape, history and narrow details, not model/plugin execution. Browser fixtures cover geometry/authority/preview/comments; IndexedDB/outbox tests cover drafts/lost receipts. scripts/check_plugin_creation_model.mjs qualifies actual generation/apply/install/restart/delete. Admission-only runtime continuity certifies Files/Terminal/composer only. Retained-data fixtures cover exact commits, unknown outcomes, authority, locales and focus.",
-          "char_count": 527
+          "body": "November9 isolated production Desktop verified placements, Settings return, search, Back/Escape, history and narrow details, not model/plugin execution. Browser fixtures cover geometry/authority/preview/comments; IndexedDB/outbox tests cover drafts/lost receipts. scripts/check_plugin_creation_model.mjs qualifies actual generation/apply/install/restart/delete. Admission-only runtime continuity certifies Files/Terminal/composer only. Retained-data fixtures cover exact commits, unknown outcomes, authority, locales and focus.\n\nNovember9 preview-history acceptance consumes published ReDevPlugin3.25.1 and Floe0.101.14. Real Host/sandbox tests verify fresh-origin automatic replacement, lower- and same-version history, persisted selection and mobile Follow latest. Native Desktop restores a retained generated project, switches the actual UI to its older artifact, retains it after reload, returns to latest and opens the installed timer without losing authoring. Card/details pins have transparent resting backgrounds, zero borders/shadows and filled icons in both themes; reload retains the pin. Native cleanup reports no remaining owned processes. These checks complement90 browser assertions and99 unit/localization assertions; they do not establish build-phase streaming.\n\nThe complete real-model run generated a runnable timer, submitted a native right-click comment through the same Flower thread, automatically displayed its revision, restored historical UI across reload, installed the displayed artifact, restarted the product and reopened the formal plugin. Chinese desktop/mobile comment controls and unsent composer text remained usable. Deleting the creation project preserved the installed timer; pin persistence and timer interaction passed afterward. The run recorded no page errors, stopped its runtime, removed temporary credentials and verified the source profile unchanged.",
+          "char_count": 1896
         }
       ],
       "snippet": "Redeven owns retained Center navigation/search/filter/selection/scroll; Floe owns dialogs/presence/input. Authoring starts with centered composer and quiet canvas.",
@@ -24849,5 +24849,5 @@
       ]
     }
   ],
-  "source_sha256": "091af6e8ea58c95f2cf6e8702b483715c9d9c1c5f16b3f980132530a1dab6484"
+  "source_sha256": "659d18dab81705c918ff4a0217ab8a3ad4e06c7266cf0a231a4eaf1e2cbd27c3"
 }
