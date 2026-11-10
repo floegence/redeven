@@ -3,7 +3,7 @@ type: Product Design Proposal
 title: Plugin build visibility
 tags: [ui, plugins, authoring, preview]
 lifecycle: active_evidence
-reviewed_at: "2026-11-06"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -38,6 +38,8 @@ Pin published artifacts and map verified facts into existing Checks/status/all l
 
 ## Current implementation
 At ReDevPlugin 3.24.1, WorkspaceStore.Build persists running status before Project.Build, then copies completed stages/commands. No progress observer exists; faster polling cannot reveal absent events. Product polls at 2.5 seconds; successful artifacts auto-apply while following latest; historical selection pins an exact build. Checks shows completed stages/bounded logs. Decorative motion proves nothing; generation, build, sandbox readiness and acceptance remain separate.
+
+November 9 qualification against published 3.25.1 verifies real Host/sandbox replacement, lower- and same-version history, reload persistence and Follow latest. An actual Flower generation and canvas comment also produced and automatically displayed a new runnable artifact. This evidence does not establish live build-phase streaming or an interactive milestone before a model turn completes.
 
 ## Open-source comparison
 The November 6 comparison informed design only: bolt.diy separates actions from server/port readiness; Dyad separates refresh/restart/diagnostics; E2B Fragments executes before results; Sandpack composes preview/tests/console. No runtime/storage/sandbox/bridge/permission copying is authorized. Moving sources remain historical references: [bolt](https://github.com/stackblitz-labs/bolt.diy/blob/main/app/lib/runtime/action-runner.ts), [Dyad](https://www.dyad.sh/docs/guides/previewing), [Fragments](https://github.com/e2b-dev/fragments/blob/main/app/api/sandbox/route.ts), [Sandpack](https://sandpack.codesandbox.io/docs/advanced-usage/components).

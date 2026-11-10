@@ -386,6 +386,7 @@ try {
     filled: getComputedStyle(element.querySelector('svg')).fill !== 'none',
   })), { border: '0px', shadow: 'none', filled: true });
   await page.reload();
+  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
   await page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first().click();
   await page.locator('[data-plugin-center-market-action]').click();
   await page.getByRole('tab', { name: /^Installed/ }).click();
