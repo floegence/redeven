@@ -235,9 +235,15 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       assert.equal(detail.current.last_outcome, 'completed');
       await card.waitFor({ state: 'hidden' });
       await page.getByText(`ASK_FLOWER_COMPLETE_${marker}: context verified and fixture read successfully.`, { exact: true }).filter({ visible: true }).waitFor();
-      assert.ok(strings(detail).some(text => text.includes(facts)), 'Canonical admitted context matches the preview');
+      const references = (detail.current.items ?? []).flatMap(item => item.references ?? []);
+      assert.ok(references.some(reference => reference.text === facts), 'Canonical admitted reference exactly matches the preview');
+      if (sourceFile) {
+        assert.equal(references.length, 2, 'Only the selected file and frozen text enter canonical history');
+        assert.ok(references.some(reference => reference.kind === 'file' && reference.text === sourceFile), 'Canonical file identity matches the selected source');
+        assert.ok(references.some(reference => reference.kind === 'text' && reference.text === facts && !reference.truncated), 'Canonical selection preserves whitespace without truncation');
+      }
       assert.ok(!report.sends.some(previous => previous.threadID === threadID), 'Every Ask creates a new task');
-      report.sends.push({ marker, threadID, outcome: detail.current.last_outcome, previewEqualsSubmission: true, answerVisible: true });
+      report.sends.push({ marker, threadID, outcome: detail.current.last_outcome, previewEqualsSubmission: true, answerVisible: true, references: references.map(({ kind, label, text, truncated }) => ({ kind, label, text, truncated: !!truncated })) });
       await page.screenshot({ path: path.join(output, `completed-${marker}.png`) });
     };
     await sendAndVerify('QUALIFY_ASK_IMAGE', context);

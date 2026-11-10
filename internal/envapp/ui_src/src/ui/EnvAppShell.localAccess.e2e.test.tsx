@@ -5451,12 +5451,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('button[aria-label="Command palette"]')).toBeNull();
       expect(host.querySelector('[data-envapp-theme-trigger]')).toBeNull();
       expect(host.querySelector('button[aria-label="Change appearance"]')).toBeNull();
-      expect(appearanceButton?.getAttribute('aria-label')).toBe('Settings');
-      expect(appearanceButton?.getAttribute('data-tooltip')).toBe('Settings');
-
-      appearanceButton?.click();
-      await flushAsync();
-      expect(new URL(window.location.href).searchParams.get('settings')).toBe('appearance');
+      expect(appearanceButton).toBeNull();
     } finally {
       dispose();
     }
@@ -5511,8 +5506,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
       expect(host.querySelector('[data-envapp-theme-trigger]')).toBeNull();
       expect(host.querySelector('button[aria-label="Change appearance"]')).toBeNull();
-      expect(appearanceButton?.getAttribute('aria-label')).toBe('Settings');
-      expect(appearanceButton?.getAttribute('data-tooltip')).toBeNull();
+      expect(appearanceButton).toBeNull();
     } finally {
       dispose();
     }

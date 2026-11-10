@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { createSignal, Show } from 'solid-js';
+import { LayoutProvider } from '@floegence/floe-webapp-core';
 import { render as renderRoot } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setFlowerTurnLauncherAttachmentSourcePath } from '../../../../../flower_ui/src/flowerTurnLauncherCopy';
@@ -18,8 +19,8 @@ import {
 } from '../workbench/surface/workbenchWheelInteractive';
 
 const disposers: Array<() => void> = [];
-const render: typeof renderRoot = (...args) => {
-  const dispose = renderRoot(...args);
+const render: typeof renderRoot = (code, element) => {
+  const dispose = renderRoot(() => <LayoutProvider>{code()}</LayoutProvider>, element);
   disposers.push(dispose);
   return dispose;
 };
