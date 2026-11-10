@@ -388,7 +388,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       await chips.nth(1).click(); await text.waitFor();
       assert.equal(await text.textContent(), selection, 'Preview preserves the exact selected text');
       await preview.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
-      await page.waitForFunction(() => document.querySelector('.flower-context-preview-window')?.getAttribute('data-floating-presence') === 'entered');
+      await page.waitForFunction(() => document.querySelector('.flower-context-preview-window')?.getAttribute('data-floating-presence') === 'open');
       await page.screenshot({ path: path.join(output, `selection-${path.basename(file)}.png`) });
       await preview.locator('[data-floe-floating-window-control="close"]').click(); await preview.waitFor({ state: 'hidden' });
       report.previews.push({ type: 'file-selection', file, selection, exact: true });

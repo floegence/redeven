@@ -8,7 +8,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.10, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.
+Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.13, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.
 
 # Contract
 
@@ -22,7 +22,7 @@ components import their shared header stylesheet; the root stylesheet does not
 duplicate these imports. Every document retains the enforced 122 KiB gzip
 initial CSS budget, including Desktop development builds.
 
-Floe owns strict target-based context-source capture, retained reading selection, compact contributed menu icons and composable PromptCard toolbar actions. Secondary-pointer menus preserve prompt drafts. Redeven supplies semantic readers and screenshot authorization. Boot forwards the declared response-header allowlist; Redeven declares its attachment staging capability header without changing protocol validation.
+Floe owns strict target-based context-source capture, retained reading selection, compact contributed menu icons and composable PromptCard toolbar actions. Secondary-pointer menus, including Monaco Shadow DOM actions, preserve prompt drafts. Monaco reads its model selection before contributing contextual actions. Redeven supplies semantic readers and screenshot authorization. Boot forwards the declared response-header allowlist; Redeven declares its attachment staging capability header without changing protocol validation.
 
 Floe owns logical-edge anchored-panel alignment and surface clamping; Flower opts into start alignment for a stable model picker.
 
