@@ -24,6 +24,19 @@ the same thumbnail geometry and use the authorized staged preview until admitted
 Failed and unknown outcomes retain the frozen request for explicit recovery;
 server 5xx responses never prove rejection or authorize a fresh request identity.
 
+An explicit submission enters the latest reading window and follows new output
+without wheel input or a Latest click. Sending and Latest use one transition:
+supersede historical reads, replace anchor/item-selection interest with bounded
+tail interest, and let the existing viewport owner position accepted content.
+Already-current interests are reused. Running status remains a canonical fact,
+never a command to reclaim the viewport. Immediate completion also reveals output.
+
+Admission refresh cannot be satisfied by a pre-admission read. HTTP and live
+confirmation share request identity; live-first confirmation wins over a late
+receipt or transport error. Later navigation, native reading and selection retain
+ownership; delayed preparation or confirmation must not restore follow. New drafts
+and overlapping message identities survive. Read recovery never resubmits input.
+
 Composer-origin failures remain under their original transcript row with a
 visible explanation and persistent recovery actions; they are not duplicated in
 the queue dock. Queue-origin failures keep their existing dock placement.
@@ -68,3 +81,5 @@ Recall never submits, changes canonical messages, restores attachments or overwr
 - `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerContextPreviewWindow.tsx` - Source.
 
 - `redeven:internal/flower_ui/src/composer/flowerInputHistory.test.ts` - Tests.
+- [Send/latest browser regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.sendLatest.browser.test.tsx) covers new executions, late pages, confirmation ordering, reading, navigation and recovery.
+- [Desktop send/latest qualification](../../desktop/scripts/check-flower-send-latest.mjs) exercises the Desktop shell, adapter and wire stream in English/Chinese with normal/reduced motion.

@@ -1043,9 +1043,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const historyPendingEnvelopes = createHistoryHandoffQueue();
   const subagentPendingEnvelopes = createHistoryHandoffQueue();
   const historyReadRevisions = new WeakMap<object, number>();
+  let interruptLatestReading: (() => void) | undefined;
   const acceptHistoryReading = (revision: number, child = false) => {
     if (child) subagentAcceptedReadingRevision = revision;
-    else historyAcceptedReadingRevision = revision;
+    else { historyAcceptedReadingRevision = revision; interruptLatestReading = undefined; }
     const pending = child ? subagentPendingEnvelopes : historyPendingEnvelopes;
     const envelopes = pending.take();
     for (const envelope of envelopes) if (envelope.reading_revision === revision) applyFlowerLiveStreamEnvelope(envelope, true);
@@ -1214,6 +1215,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let navigationReadController = new AbortController();
   const [navigationReadRevision, setNavigationReadRevision] = createSignal(0);
   const releaseNavigationReads = () => {
+    interruptLatestReading = undefined;
     navigationReadController.abort();
     for (const controller of preparingBodyReads.values()) controller.abort();
     preparingBodyReads.clear();
@@ -1506,7 +1508,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     preparing: () => selectedThreadTailPreparing(),
     canFollowLatest: () => !selectedThread()?.history_window?.has_after
       && (selectedThreadHasContent() || selectedThreadHasLiveProgress() || visibleTransportOutbox().length > 0),
-    onUserInteraction: () => { if (selectedThreadTailPreparing()) cancelSelectedThreadTailReveal(); },
+    onUserInteraction: () => {
+      interruptLatestReading?.();
+      if (selectedThreadTailPreparing()) cancelSelectedThreadTailReveal();
+    },
     canReadBefore: () => Boolean(selectedThread()?.history_window?.has_before),
     onScrollIntent: direction => requestHistoryReading(direction),
     onViewportResize: viewport => {
@@ -4721,6 +4726,55 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     detailLoader.retain([...cache.views.keys(), ...(cache.selectedId ? [cache.selectedId] : [])]);
   });
   const beginThreadDetailDisplayCycle = (threadID: string) => detailLoader.invalidate(threadID);
+  const resetHistoryReading = (threadID: string, input: FlowerHistoryRequest = {}) => {
+    historyHandoff = undefined;
+    historyAcceptedReadingRevision = 0;
+    historyPendingEnvelopes.clear();
+    releaseHistoryInterest(historyReadingThreadID, ++historyReadingRevision);
+    historyReadingInput = input;
+    historyReadingThreadID = threadID;
+    historyEdgeKey = '';
+    historyReadingPending = false;
+    explicitHistoryRead = undefined;
+    historyScrollDirection = undefined;
+    historyRecoveryUsed = false;
+    setHistoryBusy(false);
+    setHistoryError('');
+    beginThreadDetailDisplayCycle(threadID);
+  };
+  // Sending and explicit Latest share one reading-window transition. Merely
+  // enabling scroll follow cannot advance an installed historical interest.
+  const followLatestThread = () => {
+    const threadID = selectedThreadID();
+    const sequence = threadLoadSequence;
+    const needsWindow = threadID && props.adapter.loadHistory && (selectedThread()?.history_window?.has_after
+      || historyReadingInput.anchor_id || historyReadingInput.item_ids || historyBusy());
+    if (needsWindow) {
+      mainGroupCompletion.reset();
+      releaseNavigationReads();
+      batch(() => {
+        resetHistoryReading(threadID);
+        setThreadLoadError('');
+      });
+      // Until the new window is installed, the user can still read/select the
+      // retained document. Their newer intent owns its exact membership.
+      interruptLatestReading = () => {
+        const itemIDs = threadCache().readingItemIDs(threadID);
+        releaseNavigationReads();
+        batch(() => resetHistoryReading(threadID, { item_ids: itemIDs }));
+        void requestThreadDetail(threadID, 'user_action', true);
+      };
+    }
+    transcriptScroll.startFollowing();
+    transcriptScroll.measureAfterLayout();
+    if (needsWindow) {
+      const interruption = transcriptScroll.userInterruptionRevision();
+      void requestThreadDetail(threadID, 'user_action', true).then(() => {
+        if (sequence === threadLoadSequence && threadID === selectedThreadID()
+          && interruption === transcriptScroll.userInterruptionRevision()) transcriptScroll.scheduleTailScroll();
+      });
+    }
+  };
   const requestThreadDetail = (
     threadID: string,
     source: ThreadDetailSource,
@@ -5096,10 +5150,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       closeSubagentOverlays();
       cancelPresentedSelectionSchedule();
       setPresentedSelection(null);
-      historyRecoveryUsed = false;
-      historyAcceptedReadingRevision = 0; historyPendingEnvelopes.clear();
-      releaseHistoryInterest(historyReadingThreadID, ++historyReadingRevision); historyReadingInput = {}; historyReadingThreadID = tid; historyEdgeKey = ''; historyReadingPending = false; explicitHistoryRead = undefined; historyScrollDirection = undefined; setHistoryBusy(false); setHistoryError('');
-      beginThreadDetailDisplayCycle(tid);
+      resetHistoryReading(tid);
       setThreadLoadError('');
       transcriptScroll.startFollowing();
       beginSelectedThreadTailReveal(tid, sequence, !refreshNeeded);
@@ -6527,6 +6578,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // Preserve focus ownership while preparing this immutable submission.
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     const focusSelectionSequence = threadLoadSequence;
+    const followInterruption = transcriptScroll.userInterruptionRevision();
     const inspection = inspectFlowerText(promptInput);
     if (!inspection) {
       notifyComposerError(attachmentCopy().invalidText);
@@ -6780,7 +6832,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       consumedAttachmentLocalIDs = readyItems.map((item) => item.local_id);
       if (!submissionCurrent() || !settingsReady() || surfaceReadOnly()) return;
-      transcriptScroll.startFollowing();
       try {
         const referenceItems: ContextActionEnvelope['context'] = frozenReferences.map(flowerDraftReferenceContextItem);
         const contextAction: ContextActionEnvelope | undefined = frozenContextAction
@@ -6843,6 +6894,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           scopeBinding,
           settle: settleAcceptedComposerDraft,
         });
+        if (threadLoadSequence === focusSelectionSequence
+          && transcriptScroll.userInterruptionRevision() === followInterruption) followLatestThread();
         let durableOutbox = transportOutbox();
         setTransportOutbox((outbox) => {
           durableOutbox = outbox.put({
@@ -6913,7 +6966,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           }));
         }
       }
-      if (threadLoadSequence === focusSelectionSequence) {
+      if (threadLoadSequence === focusSelectionSequence
+        && transcriptScroll.userInterruptionRevision() === followInterruption) {
         requestComposerFocus(focusOwner);
       }
     }
@@ -7094,8 +7148,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       presentation: 'queue', preparation: 'pending', requestId: requestID, threadId: threadID,
       input: launchInput, attachmentLabels: [], createdAtMs: Date.now(), delivery: 'pending',
     }));
+    followLatestThread();
     await transportOutbox().flushPersistence();
-    transcriptScroll.startFollowing();
     return true;
   };
 
@@ -7341,7 +7395,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         subagentDetailScroll.startFollowing();
         void refreshActiveSubagentDetail(true, {});
       } else if (thread) {
-        void loadAndSelectThread(thread.thread_id);
+        followLatestThread();
       }
       return;
     }

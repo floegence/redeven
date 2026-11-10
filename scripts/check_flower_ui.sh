@@ -220,6 +220,8 @@ main() {
         src/ui/FlowerSurface.history.browser.test.tsx
         src/ui/FlowerSurface.historySyncRecovery.browser.test.tsx
         src/ui/FlowerSurface.continuousHistory.browser.test.tsx
+        src/ui/FlowerSurface.sendLatest.browser.test.tsx
+        src/ui/FlowerSurface.sendFeedback.browser.test.tsx
         src/ui/FlowerSurface.coldHistory.browser.test.tsx
         src/ui/FlowerSurface.activityFields.browser.test.tsx
         src/ui/ActivityFieldRows.browser.test.tsx

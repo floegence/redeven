@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import { DesktopWelcomeShell, type DesktopWelcomeRuntime } from '../../src/welcome/App';
 import type { DesktopWelcomeSnapshot } from '../../src/shared/desktopLauncherIPC';
 import type { RuntimeFlowerStreamEvent } from '../../src/shared/runtimeFlowerIPC';
-import type { FlowerGoal, FlowerGoalInput, FlowerRuntimeCurrentView } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerGoal, FlowerGoalInput, FlowerHistoryRequest, FlowerRuntimeCurrentView } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 import { flowerLiveWireFixture } from '../../../internal/flower_ui/src/test/flowerLiveWireFixture';
 import '../../src/welcome/index.css';
 import { INTERFACE_DENSITY_MARKDOWN } from '../../../internal/envapp/ui_src/src/ui/FlowerSurface.interfaceDensity.fixture';
@@ -29,6 +29,8 @@ declare global {
       releaseFirstPage: () => void;
       refreshHealth: () => void;
       publishHTML: (text: string, generating: boolean) => void;
+      historyRequests: FlowerHistoryRequest[];
+      growSentReply: () => void;
       publish: (patch: Partial<DesktopWelcomeSnapshot>) => void;
       dispose: () => void;
     };
@@ -47,6 +49,8 @@ const progressiveMode = new URLSearchParams(location.search).has('progressive');
 const delayedFirstPage = new URLSearchParams(location.search).has('delayed-first-page');
 const settledHistory = new URLSearchParams(location.search).has('settled-history');
 const activeTail = new URLSearchParams(location.search).has('active-tail');
+const sendLatest = new URLSearchParams(location.search).has('send-latest');
+let readingInterest: FlowerHistoryRequest = {};
 let goal: FlowerGoal = { version: 1, text: 'Confirm the release and preserve every requirement.', actor: 'user', status: 'active' };
 let releaseGoalRead: ((fail: boolean) => void) | undefined;
 const unavailable = () => ({ ok: false as const, error: { code: 'AI_SERVICE_UNAVAILABLE', status: 503,
@@ -54,6 +58,15 @@ const unavailable = () => ({ ok: false as const, error: { code: 'AI_SERVICE_UNAV
 const fixture = window.navigationFixture = {
   turnRequests: [] as unknown[], uploads: [] as RuntimeFlowerAttachmentPrepareRequest[],
   requests: [] as string[], streams: 0, cancellations: 0, prematureRequests: 0, dispose: () => {},
+  historyRequests: [] as FlowerHistoryRequest[],
+  growSentReply() {
+    current = { ...current, view_version: current.view_version + 1,
+      items: [...current.items ?? [], { id: 'sent-growth', ordinal: 333, kind: 'assistant', turn_id: 'sent-turn', run_id: 'sent-run', text: 'Further live output.\n\n'.repeat(20), live: true }] };
+    const next = selectReadingWindow(readingInterest);
+    for (const frame of flowerLiveWireFixture({ schema_version: 3, kind: 'thread.batch', thread_id: thread.thread_id,
+      reading_revision: readingInterest.reading_revision, current: next, window: next.window }, 'send-' + current.view_version))
+      receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: ' + frame.data + '\n\n') });
+  },
   goalReads: 0, goalRequests: [] as FlowerGoalInput[], holdGoalReads: false,
   releaseGoalRead(fail = false) { releaseGoalRead?.(fail); releaseGoalRead = undefined; },
   publishGoal(text: string, live = true) {
@@ -64,7 +77,7 @@ const fixture = window.navigationFixture = {
       receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: ' + frame.data + '\n\n') });
   },
   releaseFirstPage() {
-    for (const frame of flowerLiveWireFixture({ schema_version: 3, kind: 'ready', baseline_complete: !progressiveMode, summaries: [thread] }, 'navigation-ready'))
+    for (const frame of flowerLiveWireFixture({ schema_version: 3, kind: 'ready', baseline_complete: !progressiveMode, summaries: [thread], ...(sendLatest ? { observer_id: 'desktop-send-observer' } : {}) }, 'navigation-ready'))
       receiveStream?.({ stream_id: receiveStreamID, kind: 'chunk', chunk: new TextEncoder().encode('data: ' + frame.data + '\n\n') });
   },
   releaseBaseline() {
@@ -114,6 +127,19 @@ const mediaRef = `computer://browser-main/${'a'.repeat(64)}`;
 const mediaHTML = '<h1>Daily brief</h1><input aria-label="Reading note"><button onclick="this.textContent=\'Updated\'">Update report</button><a href="#economy">Economy</a><a href="https://example.com/news">News source</a><a href="javascript:alert(1)">Unsupported link</a><section id="economy" style="margin-top:1200px">Economy section</section>';
 
 let current: FlowerRuntimeCurrentView = { thread_id: thread.thread_id, view_version: 1, activity: 'idle', items: [{ id: 'navigation-input', kind: 'user', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 1, text: 'Inspect this workspace' }, { id: 'density-reading', kind: 'assistant', turn_id: 'navigation-turn', run_id: 'navigation-run', ordinal: 2, text: mediaMode ? `Here is the workspace preview.\n\n![Workspace](${mediaRef})\n\n\`\`\`html preview\n${mediaHTML}\n\`\`\`\n\nReady for your next step.` : INTERFACE_DENSITY_MARKDOWN }], queue: [], interactions: [] };
+if (sendLatest) current = { ...current, items: Array.from({ length: 330 }, (_, index) => ({
+  id: `history-${index}`, ordinal: index + 1, kind: 'assistant', turn_id: 'navigation-turn', run_id: 'navigation-run',
+  text: `Historical response ${index}\n\nA paragraph for reading earlier conversation messages.`,
+})) };
+function selectReadingWindow(input: FlowerHistoryRequest): FlowerRuntimeCurrentView {
+  const items = current.items ?? [];
+  const anchor = input.anchor_id ? items.findIndex(item => item.id === input.anchor_id) : items.length;
+  const limit = input.limit ?? 150;
+  const selected = input.item_ids ? items.filter(item => input.item_ids!.includes(item.id))
+    : input.direction === 'after' ? items.slice(anchor + 1, anchor + 1 + limit) : items.slice(Math.max(0, anchor - limit), anchor);
+  return { ...current, items: selected, window: { first_item_id: selected[0]?.id, last_item_id: selected.at(-1)?.id,
+    has_before: selected[0]?.id !== items[0]?.id, has_after: selected.at(-1)?.id !== items.at(-1)?.id } };
+}
 if (settledHistory) current = { ...current, last_outcome: 'completed',
   items: current.items?.map(item => item.id === 'density-reading' ? { ...item, text: `${item.text}\n\n${'Completed historical paragraph.\n\n'.repeat(60)}` } : item),
   turns: [{
@@ -171,6 +197,12 @@ const settings: DesktopWelcomeRuntime['settings'] = {
       return { ok: true, data: { client_request_id: input.client_request_id, thread_id: thread.thread_id, goal, current, conflict } };
     }
     if (route === `ai/threads/${thread.thread_id}` || route === `ai/threads/${thread.thread_id}/history`) {
+      if (sendLatest) {
+        const input = request.body as FlowerHistoryRequest ?? {};
+        fixture.historyRequests.push(input);
+        if (input.observer_id) readingInterest = input;
+        return { ok: true, data: { thread, current: selectReadingWindow(input) } };
+      }
       fixture.goalReads++;
       if (fixture.holdGoalReads) {
         const failed = await new Promise<boolean>(resolve => { releaseGoalRead = resolve; });
@@ -197,10 +229,20 @@ const settings: DesktopWelcomeRuntime['settings'] = {
       supports_long_text: true, max_count: 10, max_item_bytes: 1000000, max_turn_bytes: 5000000, media_types: [] } };
     if (route === 'ai/upload-staging-scopes') return { ok: true, stagingCapability: 'fixture-capability', data: {
       staging_scope_id: 'scope-1', target_id: (request.body as { target_id: string }).target_id, expires_at_unix_ms: Date.now() + 60000 } };
-    if (route === 'ai/turns') {
+    if (route === 'ai/turns' || sendLatest && route === `ai/threads/${thread.thread_id}/turns`) {
       fixture.turnRequests.push(request.body);
+      if (sendLatest) {
+        const input = request.body as { client_request_id: string; input: { text: string } };
+        thread.run_status = 'running';
+        current = { ...current, view_version: current.view_version + 1, activity: 'active', turn_id: 'sent-turn', run_id: 'sent-run',
+          run_progress: { phase: 'streaming' }, items: [...current.items ?? [],
+            { id: `user:${input.client_request_id}`, ordinal: 331, kind: 'user', turn_id: 'sent-turn', run_id: 'sent-run', text: input.input.text },
+            { id: 'sent-reply', ordinal: 332, kind: 'assistant', turn_id: 'sent-turn', run_id: 'sent-run', text: 'New reply after sending.\n\n'.repeat(24), live: true }] };
+        return { ok: true, data: { client_request_id: input.client_request_id, thread_id: thread.thread_id } };
+      }
       return { ok: false, failureKind: 'transport_unknown', error: { message: 'Delivery is still being confirmed.' } };
     }
+    if (sendLatest && route === `ai/threads/${thread.thread_id}/history-release`) return { ok: true, data: {} };
     return { ok: false, error: { code: 'fixture_unexpected_route', message: `Unexpected fixture route: ${route}` } };
   },
   async prepareRuntimeFlowerAttachment(request) {

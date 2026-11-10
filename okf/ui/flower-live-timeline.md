@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower incremental live state
 tags: [ui, flower, live, threads]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -15,6 +15,8 @@ Floret owns canonical history/versions; Redeven authorizes one workspace stream 
 ThreadFactsSource publishes body-free workspace/account/Computer facts. Independent root/child windows use one worker coalescing<=64 dirty parents without blocking facts. The [adapter](../ai/floret-redeven-adapter-and-projection.md) authorizes. Register before freezing navigation-ordered roots;publish Ready,<=25-summary pages,baseline_complete,private states. Facts wait;accepted reads bypass sidebar preparation. Cancel drains queues/budgets without Next;broken observation invalidates rather than skipping pinned roots.
 
 HTTP:25rows/page,retain partial success; cancellation owns pending pages. Desktop cancels history/item POSTs. Baseline precedes shared loading;coalesce except command confirmation. Navigation/disposal/transport cancel waiters,reconnect retains content/draft/scroll.
+
+[Explicit sends](flower-turn-launcher.md#immediate-send-feedback) and Latest share bounded tail-interest installation. Superseded history cannot reinstall old membership; pre-admission reads cannot satisfy later command confirmation. Same-thread transitions retain content and composer ownership instead of replaying thread selection.
 
 Root/child revisions fence replacement;baseline/delta share subscription. Initial50items/1KiB previews/Activity summaries/existing byte cap. Paging150items/512KiB;POST64KiB/150IDs;locator8KiB;exact membership448KiB previews excluding hydrated bodies. Viewer/current-only events prove no coverage. Equal versions compare membership/coverage,not bounds. Duplicate receipts reuse records;same-leaf handoff uses bounded observations/indexed owners,archived bodies,order/file-target enrichment.
 

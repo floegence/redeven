@@ -265,7 +265,7 @@ describe('Flower composer reference browser interaction', () => {
     expect((await page.screenshot({ save: false })).length).toBeGreaterThan(1_000);
   });
 
-  it('keeps attachment and More ordered and touch-sized in the compact companion', async () => {
+  it('keeps the leftmost attachment and trailing More touch-sized in the compact companion', async () => {
     await page.viewport(1280, 900);
     document.documentElement.style.zoom = '4';
     const runtime = renderSurfaceWithAdapterProps({
@@ -309,9 +309,19 @@ describe('Flower composer reference browser interaction', () => {
       expect(attachment.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
       expect(more.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
       expect(more.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-      const normalizedGap = more.getBoundingClientRect().left - attachment.getBoundingClientRect().right;
-      expect(normalizedGap).toBeGreaterThanOrEqual(-0.5);
-      expect(normalizedGap).toBeLessThanOrEqual(2);
+      // The upload-first toolbar keeps Plus at the leading edge; More belongs
+      // to trailing actions, immediately before Submit when no turn is active.
+      const leading = runtime.querySelector('.flower-model-stack') as HTMLElement;
+      const actions = runtime.querySelector('.flower-composer-actions') as HTMLElement;
+      const submit = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement;
+      expect(leading.firstElementChild).toBe(attachment);
+      expect(actions.contains(more)).toBe(true);
+      expect(Math.abs(attachment.getBoundingClientRect().left - leading.getBoundingClientRect().left)).toBeLessThanOrEqual(1);
+      expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(attachment.getBoundingClientRect().right);
+      const actionGap = (submit.getBoundingClientRect().left - more.getBoundingClientRect().right)
+        / Number.parseFloat(getComputedStyle(document.documentElement).zoom);
+      expect(actionGap).toBeGreaterThanOrEqual(-0.5);
+      expect(actionGap).toBeLessThanOrEqual(8.5);
       await userEvent.click(more);
       await waitFor(() => document.querySelector('[data-flower-composer-more-panel="true"]') !== null);
       await userEvent.click(more);
