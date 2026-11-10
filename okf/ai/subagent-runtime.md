@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Floret owns canonical child threads, reports and parent events. Its flat provider schema requires spawn(task_name,task_description,message), send_input(target,message), close(target) and wait(ids); status/inspect deduplicate target then ids.
+Floret owns canonical child threads, reports and parent events. Its flat provider schema requires spawn(task_name,task_description,message), send_input(target,message), close(target) and wait(ids); status/inspect deduplicate target then ids. Admission and settled child outcomes remain distinct.
 
 # Contract
 

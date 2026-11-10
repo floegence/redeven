@@ -7,7 +7,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Redeven owns retained Center navigation/search/filter/selection/scroll; Floe owns dialogs/presence/input. Authoring starts with centered composer and quiet canvas.
+Redeven owns retained Center navigation/search/filter/selection/scroll; Floe owns dialogs/presence/input. Authoring starts with centered composer and quiet canvas. Existing search, selection and preview state survive navigation. Installing and configuring a plugin keep distinct owners and explicit resource identity.
 
 # Contract
 

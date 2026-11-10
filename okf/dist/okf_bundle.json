@@ -7,7 +7,7 @@
     "frontmatter": {
       "okf_version": "0.2"
     },
-    "body": "# Redeven OKF Bundle\n\nRepository knowledge derived from current source, generated contracts and release automation. Concepts own maintained contracts; Git retains their history.\n\n## Architecture\n\n- [Scheduled workflows and shared Flower work](architecture/automation-workflows.md)\n- [Product storage placement and lifecycle](architecture/storage-ownership.md)\n\n- [Applications keyboard, pointer and composition](architecture/host-application-input.md)\n- [Applications viewing, display and resource lifetime](architecture/host-application-viewer.md)\n- [service release discovery and version selection](architecture/managed-service-release-discovery.md)\n- [service template publication, acquisition and formats](architecture/managed-web-service-templates.md)\n- [Service template marketplace discovery and acquisition](architecture/service-template-marketplace.md)\n- [Personal service templates and pinned source derivation](architecture/personal-service-templates.md)\n- [Service management recovery and resource ownership](architecture/service-management-recovery.md)\n- [Web service browser routing and authorization](architecture/web-service-browser-sessions.md)\n- [Independent Web Environment Center](architecture/web-environment-center.md)\n- [startup and recovery presentation](architecture/flower-startup-presentation.md)\n- [Tessiven canvas contract](architecture/tessiven-canvas-contract.md)\n- [Native bridge](architecture/native-runtime-bridge.md)\n- [browser source ownership](architecture/flower-browser-sources.md)\n- [browser Linux preparation](architecture/flower-browser-linux-preparation.md)\n- [Database schema migration ownership](architecture/database-schema-migrations.md)\n- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md)\n- [startup presentation](architecture/runtime-startup-presentation.md)\n- [Observation and target action events](architecture/observation-events.md)\n- [Local UI surface](architecture/local-ui-surface.md)\n- [Env App session event transport](architecture/env-event-transport.md)\n- [Web Services interface](architecture/web-services-interface.md)\n- [Desktop sessions](architecture/remote-desktop.md)\n- [Deploy remote desktop through SSH](architecture/remote-desktop-ssh-deployment.md)\n- [Restore remote desktop sharing approval](architecture/remote-desktop-authorization.md)\n- [Desktop connection launcher](architecture/remote-desktop-launcher.md)\n- [Graphical window transport](architecture/graphical-window-transport.md)\n- [Desktop viewer interaction](architecture/remote-desktop-viewer.md)\n- [Desktop media and input scheduling](architecture/remote-desktop-media.md)\n- [Host Applications](architecture/host-applications.md)\n- [Cross-platform application behavior](architecture/host-application-behavior.md)\n- [Native macOS Applications](architecture/macos-host-applications.md)\n- [Binary Portability](architecture/runtime-binary-portability.md)\n- [Web Service opening](architecture/managed-web-service-opening.md)\n- [Independent Host service lifecycle](architecture/independent-host-services.md)\n- [Web Services](architecture/managed-web-services.md)\n- [Service operation progress](architecture/managed-service-operation-progress.md)\n- [Service instance configuration](architecture/managed-service-instance-configuration.md)\n- [Service snapshot](architecture/runtime-service-snapshot.md)\n- [session permission gates](architecture/runtime-session-permission-gates.md)\n- [system monitoring](architecture/runtime-system-monitoring.md)\n- [transport dependencies](architecture/runtime-transport-dependencies.md)\n- [artifact spend and control pool](architecture/runtime-artifact-spend-and-control-pool.md)\n- [terminal lifecycle](architecture/runtime-terminal-lifecycle.md)\n- [Product RPC request encoding](architecture/product-rpc-request-encoding.md)\n- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md)\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md)\n- [Env App terminal and surface composition](architecture/env-app-terminal-and-surface-composition.md)\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md)\n- [ReDevPlugin Redeven adapters](architecture/redevplugin-redeven-adapters.md)\n- [Plugin platform integration](architecture/plugin-platform-integration.md)\n- [Plugin process sessions](architecture/plugin-process-sessions.md)\n- [Plugin background entries](architecture/plugin-background-entries.md)\n- [Plugin package and runtime lifecycle](architecture/redevplugin-package-lifecycle.md)\n- [Plugin surface recovery and permissions](architecture/redevplugin-surface-recovery.md)\n- [Plugin market consumption](architecture/plugin-market-consumption.md)\n- [Native container operation observation](architecture/containers-operation-observation.md)\n- [Native container resources](architecture/container-resources-capability.md)\n- [Container service management](architecture/container-service-management.md)\n\n## Security\n\n- [Web Center access security](security/web-center-access.md)\n- [access sessions](security/runtime-access-sessions.md)\n- [two-factor authentication](security/runtime-two-factor-authentication.md)\n- [Local UI network exposure](security/local-ui-network-exposure.md)\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md)\n- [Plugin platform integration security](security/plugin-platform-integration-security.md)\n\n## Desktop\n\n- [Verified Environment access routes](desktop/desktop-environment-access.md)\n- [Applications component cache](desktop/host-application-component-cache.md)\n- [qualification lifecycle](desktop/desktop-test-lifecycle.md)\n- [development sessions and bundles](desktop/desktop-development-bundles.md)\n- [Web Service browser window](desktop/web-service-browser-window.md)\n- [host application titlebar](desktop/host-application-titlebar.md)\n- [shell theme state](desktop/desktop-shell-theme-state.md)\n- [Environment library](desktop/desktop-environment-library.md)\n- [Preserve interaction sessions](desktop/desktop-interaction-continuity.md)\n- [Welcome navigation](desktop/desktop-welcome-navigation.md)\n- [transport recovery](desktop/desktop-transport-recovery.md)\n- [SSH runtime operations](desktop/desktop-ssh-runtime-operations.md)\n- [WSL runtime operations](desktop/desktop-wsl-runtime-operations.md)\n- [environment settings](desktop/desktop-environment-settings.md)\n- [SSH environment settings](desktop/desktop-ssh-environment-settings.md)\n- [runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md)\n- [managed Environment reinstall](desktop/desktop-reinstall-operations.md)\n- [application updates](desktop/desktop-application-updates.md)\n- [CodeSpace system-browser access](desktop/codespace-system-browser.md)\n- [Native CodeSpace access](desktop/codespace-native-access.md)\n\n## Gateway\n\n- [Optional Cloud egress](gateway/gateway-cloud-access.md)\n- [Gateway client access](gateway/gateway-client-access.md)\n- [Gateway service](gateway/gateway-service.md)\n- [Gateway network settings](gateway/gateway-network-settings.md)\n- [Gateway interactions](gateway/gateway-desktop-interactions.md)\n- [Gateway access sessions](gateway/gateway-access-sessions.md)\n- [Gateway deployment qualification](gateway/gateway-deployment-qualification.md)\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md)\n\n## UI\n\n- [File preview rendering, formats and viewport](ui/file-preview-viewport-and-rendering.md)\n- [File preview actions and dismissal](ui/file-preview-window-actions.md)\n- [companion presence, composer and motion](ui/flower-companion-presence.md)\n- [conversation selection and detail reads](ui/flower-thread-selection.md)\n- [Activity navigation restoration](ui/activity-navigation-restoration.md)\n- [Env App resource snapshots](ui/env-resource-cache.md)\n- [Redeven loading and layout continuity](ui/page-loading-continuity.md)\n- [Whole-window status surfaces](ui/window-status-surfaces.md)\n- [Tessiven canvas](ui/tessiven-canvas.md)\n- [settings](ui/runtime-settings.md)\n- [extensions](ui/flower-extensions.md)\n- [UI presentation transactions](ui/ui-presentation-transactions.md)\n- [Env App floating layer order](ui/env-app-floating-layer-order.md)\n- [Dialog content placement](ui/dialog-content.md)\n- [Adaptive desktop layout](ui/adaptive-desktop-layout.md)\n- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md)\n- [Shared surface material](ui/surface-material.md)\n- [Product accessibility for AI agents](ui/agent-accessibility.md)\n- [Input focus boundaries](ui/input-focus-boundaries.md)\n- [Workbench composition surfaces and editing](ui/workbench-composition.md)\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md)\n- [Terminal fonts across client devices](ui/terminal-fonts.md)\n- [Terminal session groups](ui/terminal-session-groups.md)\n- [Plugin package review](ui/plugin-package-review.md)\n- [File icon presentation](ui/file-icon-presentation.md)\n- [Files context menus](ui/files-context-menu.md)\n- [Plugin Center interaction](ui/plugin-center-interaction.md)\n- [Plugin surfaces](ui/plugin-surfaces.md)\n- [turn launcher](ui/flower-turn-launcher.md)\n- [composer references](ui/flower-composer-references.md)\n- [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md)\n- [Personal directory favorites](ui/directory-favorites.md)\n- [working directory navigation](ui/flower-working-directory-navigation.md)\n- [Activity companion](ui/flower-activity-companion.md)\n- [read state](ui/flower-read-state.md)\n- [live timeline](ui/flower-live-timeline.md)\n- [timeline ordering](ui/flower-timeline-ordering.md)\n- [terminal turn process disclosure](ui/flower-turn-process-disclosure.md)\n- [personal conversation preferences](ui/flower-conversation-preferences.md)\n- [model and navigation presentation](ui/flower-model-navigation.md)\n- [setup and settings](ui/flower-setup-and-settings.md)\n- [provider configuration](ui/flower-provider-configuration.md)\n- [failure recovery](ui/flower-failure-recovery.md)\n- [composer attachments](ui/flower-composer-attachments.md)\n- [consecutive tool sequences](ui/flower-tool-sequences.md)\n- [activity disclosure interaction](ui/flower-activity-interaction.md)\n- [conversation sidebar](ui/flower-thread-sidebar.md)\n- [inline media](ui/flower-inline-media.md)\n- [streaming stability](ui/flower-streaming-stability.md)\n- [received output progress](ui/flower-output-progress.md)\n- [Markdown diagrams](ui/markdown-diagrams.md)\n- [code highlighting](ui/flower-code-highlighting.md)\n- [message appearance](ui/flower-message-appearance.md)\n- [terminal activity presentation](ui/flower-terminal-activity.md)\n- [Shared interface scale](ui/interface-scale.md)\n- [approval surface](ui/flower-approval-surface.md)\n- [citations](ui/flower-citations.md)\n- [subagent detail presentation](ui/flower-subagent-detail.md)\n- [parent event timeline](ui/flower-parent-events.md)\n- [computer viewer presentation](ui/flower-computer-viewer.md)\n\n## AI\n\n- [working files and deliverables](ai/flower-task-files.md)\n- [MCP runtime](ai/mcp-runtime.md)\n- [Agent Plugins](ai/flower-agent-plugins.md)\n- [plugin catalog integration](ai/flower-plugin-catalogs.md)\n- [thread Goals](ai/flower-goals.md)\n- [Tessiven discovery and operations](ai/tessiven-runtime-operations.md)\n- [Authorized platform model gateway](ai/platform-model-gateway.md)\n- [Model directory and selection](ai/model-directory-and-selection.md)\n- [Model web search](ai/model-web-search.md)\n- [ChatGPT account lifecycle](ai/chatgpt-account-lifecycle.md)\n- [Provider configuration validation](ai/provider-configuration-validation.md)\n- [Provider API and catalog review](ai/provider-api-catalog-review.md)\n- [Direct image reading and retention](ai/image-read-and-retention.md)\n- [AI tool runtime](ai/ai-tool-runtime.md)\n- [storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md)\n- [backup and recovery](ai/flower-backup-and-recovery.md)\n- [historical writer acceptance](ai/flower-upgrade-compatibility.md)\n- [attachment resources](ai/flower-attachment-resources.md)\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md)\n- [Computer and browser use runtime](ai/computer-use-runtime.md)\n- [Computer semantic snapshots](ai/computer-use-semantics.md)\n- [Computer script execution](ai/computer-use-scripts.md)\n- [Computer script read and validation boundaries](ai/computer-script-read-contract.md)\n- [Computer source detail and continuation reads](ai/computer-source-reads.md)\n- [Optional built-in browser installation](ai/computer-use-browser-installation.md)\n- [Built-in browser Linux system preparation](ai/computer-use-browser-system.md)\n- [Browser and desktop settings](ai/computer-use-environment-settings.md)\n- [Guided Chrome connection](ai/computer-use-browser-connection.md)\n- [Chrome connection diagnostics and recovery](ai/computer-use-chrome-diagnostics.md)\n- [browsers and authorized Chrome tabs](ai/computer-use-browser.md)\n- [Semantic desktop operations](ai/computer-use-desktop.md)\n- [Computer target selection across threads](ai/computer-use-target-selection.md)\n- [Computer use safety pauses and user control](ai/computer-use-takeover.md)\n- [Private browser observation and input](ai/computer-use-private-browser-control.md)\n- [Computer use media and visual requests](ai/computer-use-media.md)\n- [Computer use qualification](ai/computer-use-qualification.md)\n- [Computer use provider qualification evidence](ai/computer-use-provider-evidence.md)\n- [Computer use qualification evidence](ai/computer-use-qualification-evidence.md)\n- [Browser drag timing qualification](ai/computer-drag-qualification.md)\n- [Media contention and native read qualification](ai/computer-media-read-qualification.md)\n- [Computer use paired model measurements](ai/computer-use-performance.md)\n- [Codex design evidence](ai/computer-use-design-evidence.md)\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md)\n- [Model reasoning capabilities and transport](ai/model-reasoning-runtime.md)\n- [prompt and rule sources](ai/flower-prompt-and-rule-sources.md)\n- [AI model and context runtime](ai/model-context-runtime.md)\n- [Model provider surface and history](ai/model-provider-surface-and-history.md)\n- [Model request recovery](ai/model-request-recovery.md)\n- [Model request reuse](ai/model-request-reuse.md)\n- [Model context usage and compaction](ai/model-context-usage-and-compaction.md)\n- [DeepSeek Responses](ai/deepseek-responses.md)\n- [canonical thread queries](ai/flower-thread-queries.md)\n- [Floret thread runtime integration](ai/floret-thread-runtime.md)\n- [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md)\n- [subagent runtime](ai/subagent-runtime.md)\n- [thread fork coordination](ai/flower-thread-fork-coordination.md)\n- [plugin generation](ai/flower-plugin-generation.md)\n- [Plugin build visibility proposal](ui/plugin-build-visibility.md)\n- [Redeven environment operations](ai/redeven-env-operations.md)\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md)\n- [OKF tool suite](ai/okf-search-tool.md)\n- [runtime facts](ai/flower-managed-model-context.md)\n\n## Protocol\n\n- [Gateway v6 protocol](protocol/gateway-v6-protocol.md)\n- [RCPP v5 Cloud API](protocol/rcpp-v5-cloud-api.md)\n\n## Release\n\n- [Self-contained installer distribution](release/self-contained-installer.md)\n- [CI and release gates](release/ci-and-release-gates.md)\n- [ReDevPlugin release artifact gate](release/redevplugin-release-gates.md)\n- [Plugin integration gate](release/plugin-integration-gates.md)\n- [OKF release assets](release/okf-release-assets.md)\n- [Automated service-template catalog updates](release/service-template-updates.md)\n\n## Operations\n\n- [Web Center deployment](operations/web-center-deployment.md)\n- [startup performance acceptance](operations/flower-startup-performance.md)\n- [Control-plane capacity qualification](operations/controlplane-capacity-qualification.md)\n- [ReDevPlugin target build toolchain](operations/redevplugin-cross-build.md)\n- [Graphical window transport qualification](operations/graphical-window-transport-results.md)\n- [Desktop validation](operations/remote-desktop-validation.md)\n- [Desktop acceptance results](operations/remote-desktop-results.md)\n- [Published LAN C05 outcomes](operations/remote-desktop-lan-c05-results.md)\n- [Wayland desktop qualification](operations/remote-desktop-wayland-results.md)\n- [Host Application Setup](operations/host-application-setup.md)\n- [Host Application Validation](operations/host-application-validation.md)\n- [Applications picture performance](operations/host-application-performance.md)\n- [ReDevPlugin performance qualification](operations/redevplugin-performance-qualification.md)\n- [explicit long-thread qualification](operations/flower-long-thread-gate.md)\n- [live queue CPU qualification](operations/flower-live-queue-performance.md)\n- [context compaction qualification](operations/flower-compaction-qualification.md)\n- [Ollama task qualification](operations/flower-ollama-task-qualification.md)",
+    "body": "# Redeven OKF Bundle\n\nRepository knowledge derived from current source, generated contracts and release automation. Concepts own maintained contracts; Git retains their history.\n\n## Architecture\n\n- [Scheduled workflows and shared Flower work](architecture/automation-workflows.md)\n- [Product storage placement and lifecycle](architecture/storage-ownership.md)\n\n- [Applications keyboard, pointer and composition](architecture/host-application-input.md)\n- [Applications viewing, display and resource lifetime](architecture/host-application-viewer.md)\n- [service release discovery and version selection](architecture/managed-service-release-discovery.md)\n- [service template publication, acquisition and formats](architecture/managed-web-service-templates.md)\n- [Service template marketplace discovery and acquisition](architecture/service-template-marketplace.md)\n- [Personal service templates and pinned source derivation](architecture/personal-service-templates.md)\n- [Service management recovery and resource ownership](architecture/service-management-recovery.md)\n- [Web service browser routing and authorization](architecture/web-service-browser-sessions.md)\n- [Independent Web Environment Center](architecture/web-environment-center.md)\n- [startup and recovery presentation](architecture/flower-startup-presentation.md)\n- [Tessiven canvas contract](architecture/tessiven-canvas-contract.md)\n- [Native bridge](architecture/native-runtime-bridge.md)\n- [browser source ownership](architecture/flower-browser-sources.md)\n- [browser Linux preparation](architecture/flower-browser-linux-preparation.md)\n- [Database schema migration ownership](architecture/database-schema-migrations.md)\n- [AI readiness and service generation lifecycle](architecture/ai-readiness-lifecycle.md)\n- [startup presentation](architecture/runtime-startup-presentation.md)\n- [Observation and target action events](architecture/observation-events.md)\n- [Local UI surface](architecture/local-ui-surface.md)\n- [Env App session event transport](architecture/env-event-transport.md)\n- [Web Services interface](architecture/web-services-interface.md)\n- [Desktop sessions](architecture/remote-desktop.md)\n- [Deploy remote desktop through SSH](architecture/remote-desktop-ssh-deployment.md)\n- [Restore remote desktop sharing approval](architecture/remote-desktop-authorization.md)\n- [Desktop connection launcher](architecture/remote-desktop-launcher.md)\n- [Graphical window transport](architecture/graphical-window-transport.md)\n- [Desktop viewer interaction](architecture/remote-desktop-viewer.md)\n- [Desktop media and input scheduling](architecture/remote-desktop-media.md)\n- [Host Applications](architecture/host-applications.md)\n- [Cross-platform application behavior](architecture/host-application-behavior.md)\n- [Native macOS Applications](architecture/macos-host-applications.md)\n- [Binary Portability](architecture/runtime-binary-portability.md)\n- [Web Service opening](architecture/managed-web-service-opening.md)\n- [Independent Host service lifecycle](architecture/independent-host-services.md)\n- [Web Services](architecture/managed-web-services.md)\n- [Service operation progress](architecture/managed-service-operation-progress.md)\n- [Service instance configuration](architecture/managed-service-instance-configuration.md)\n- [Service snapshot](architecture/runtime-service-snapshot.md)\n- [session permission gates](architecture/runtime-session-permission-gates.md)\n- [system monitoring](architecture/runtime-system-monitoring.md)\n- [transport dependencies](architecture/runtime-transport-dependencies.md)\n- [artifact spend and control pool](architecture/runtime-artifact-spend-and-control-pool.md)\n- [terminal lifecycle](architecture/runtime-terminal-lifecycle.md)\n- [Product RPC request encoding](architecture/product-rpc-request-encoding.md)\n- [Git workspace inventory lifecycle](architecture/git-workspace-inventory-lifecycle.md)\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md)\n- [Env App terminal and surface composition](architecture/env-app-terminal-and-surface-composition.md)\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md)\n- [ReDevPlugin Redeven adapters](architecture/redevplugin-redeven-adapters.md)\n- [Plugin platform integration](architecture/plugin-platform-integration.md)\n- [Plugin process sessions](architecture/plugin-process-sessions.md)\n- [Plugin background entries](architecture/plugin-background-entries.md)\n- [Plugin package and runtime lifecycle](architecture/redevplugin-package-lifecycle.md)\n- [Plugin surface recovery and permissions](architecture/redevplugin-surface-recovery.md)\n- [Plugin market consumption](architecture/plugin-market-consumption.md)\n- [Native container operation observation](architecture/containers-operation-observation.md)\n- [Native container resources](architecture/container-resources-capability.md)\n- [Container service management](architecture/container-service-management.md)\n\n## Security\n\n- [Web Center access security](security/web-center-access.md)\n- [access sessions](security/runtime-access-sessions.md)\n- [two-factor authentication](security/runtime-two-factor-authentication.md)\n- [Local UI network exposure](security/local-ui-network-exposure.md)\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md)\n- [Plugin platform integration security](security/plugin-platform-integration-security.md)\n\n## Desktop\n\n- [Verified Environment access routes](desktop/desktop-environment-access.md)\n- [Applications component cache](desktop/host-application-component-cache.md)\n- [qualification lifecycle](desktop/desktop-test-lifecycle.md)\n- [development sessions and bundles](desktop/desktop-development-bundles.md)\n- [Web Service browser window](desktop/web-service-browser-window.md)\n- [host application titlebar](desktop/host-application-titlebar.md)\n- [shell theme state](desktop/desktop-shell-theme-state.md)\n- [Environment library](desktop/desktop-environment-library.md)\n- [Preserve interaction sessions](desktop/desktop-interaction-continuity.md)\n- [Welcome navigation](desktop/desktop-welcome-navigation.md)\n- [transport recovery](desktop/desktop-transport-recovery.md)\n- [SSH runtime operations](desktop/desktop-ssh-runtime-operations.md)\n- [WSL runtime operations](desktop/desktop-wsl-runtime-operations.md)\n- [environment settings](desktop/desktop-environment-settings.md)\n- [SSH environment settings](desktop/desktop-ssh-environment-settings.md)\n- [runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md)\n- [managed Environment reinstall](desktop/desktop-reinstall-operations.md)\n- [application updates](desktop/desktop-application-updates.md)\n- [CodeSpace system-browser access](desktop/codespace-system-browser.md)\n- [Native CodeSpace access](desktop/codespace-native-access.md)\n\n## Gateway\n\n- [Optional Cloud egress](gateway/gateway-cloud-access.md)\n- [Gateway client access](gateway/gateway-client-access.md)\n- [Gateway service](gateway/gateway-service.md)\n- [Gateway network settings](gateway/gateway-network-settings.md)\n- [Gateway interactions](gateway/gateway-desktop-interactions.md)\n- [Gateway access sessions](gateway/gateway-access-sessions.md)\n- [Gateway deployment qualification](gateway/gateway-deployment-qualification.md)\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md)\n\n## UI\n\n- [File preview rendering, formats and viewport](ui/file-preview-viewport-and-rendering.md)\n- [File preview actions and dismissal](ui/file-preview-window-actions.md)\n- [companion presence, composer and motion](ui/flower-companion-presence.md)\n- [conversation selection and detail reads](ui/flower-thread-selection.md)\n- [Activity navigation restoration](ui/activity-navigation-restoration.md)\n- [Env App resource snapshots](ui/env-resource-cache.md)\n- [Redeven loading and layout continuity](ui/page-loading-continuity.md)\n- [Whole-window status surfaces](ui/window-status-surfaces.md)\n- [Tessiven canvas](ui/tessiven-canvas.md)\n- [settings](ui/runtime-settings.md)\n- [extensions](ui/flower-extensions.md)\n- [UI presentation transactions](ui/ui-presentation-transactions.md)\n- [Env App floating layer order](ui/env-app-floating-layer-order.md)\n- [Dialog content placement](ui/dialog-content.md)\n- [Adaptive desktop layout](ui/adaptive-desktop-layout.md)\n- [Git workspace generation and Files decoration](ui/git-workspace-generation-and-decoration.md)\n- [Shared surface material](ui/surface-material.md)\n- [Product accessibility for AI agents](ui/agent-accessibility.md)\n- [Input focus boundaries](ui/input-focus-boundaries.md)\n- [Workbench composition surfaces and editing](ui/workbench-composition.md)\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md)\n- [Terminal fonts across client devices](ui/terminal-fonts.md)\n- [Terminal session groups](ui/terminal-session-groups.md)\n- [Plugin package review](ui/plugin-package-review.md)\n- [File icon presentation](ui/file-icon-presentation.md)\n- [Files context menus](ui/files-context-menu.md)\n- [Plugin Center interaction](ui/plugin-center-interaction.md)\n- [Plugin surfaces](ui/plugin-surfaces.md)\n- [turn launcher](ui/flower-turn-launcher.md)\n- [composer references](ui/flower-composer-references.md)\n- [Absolute filesystem directory selection](ui/filesystem-picker-navigation.md)\n- [Personal directory favorites](ui/directory-favorites.md)\n- [working directory navigation](ui/flower-working-directory-navigation.md)\n- [Activity companion](ui/flower-activity-companion.md)\n- [read state](ui/flower-read-state.md)\n- [live timeline](ui/flower-live-timeline.md)\n- [timeline ordering](ui/flower-timeline-ordering.md)\n- [terminal turn process disclosure](ui/flower-turn-process-disclosure.md)\n- [latest user message editing](ui/flower-message-editing.md)\n- [personal conversation preferences](ui/flower-conversation-preferences.md)\n- [model and navigation presentation](ui/flower-model-navigation.md)\n- [setup and settings](ui/flower-setup-and-settings.md)\n- [provider configuration](ui/flower-provider-configuration.md)\n- [failure recovery](ui/flower-failure-recovery.md)\n- [composer attachments](ui/flower-composer-attachments.md)\n- [consecutive tool sequences](ui/flower-tool-sequences.md)\n- [activity disclosure interaction](ui/flower-activity-interaction.md)\n- [conversation sidebar](ui/flower-thread-sidebar.md)\n- [inline media](ui/flower-inline-media.md)\n- [streaming stability](ui/flower-streaming-stability.md)\n- [received output progress](ui/flower-output-progress.md)\n- [Markdown diagrams](ui/markdown-diagrams.md)\n- [code highlighting](ui/flower-code-highlighting.md)\n- [message appearance](ui/flower-message-appearance.md)\n- [terminal activity presentation](ui/flower-terminal-activity.md)\n- [Shared interface scale](ui/interface-scale.md)\n- [approval surface](ui/flower-approval-surface.md)\n- [citations](ui/flower-citations.md)\n- [subagent detail presentation](ui/flower-subagent-detail.md)\n- [parent event timeline](ui/flower-parent-events.md)\n- [computer viewer presentation](ui/flower-computer-viewer.md)\n\n## AI\n\n- [working files and deliverables](ai/flower-task-files.md)\n- [MCP runtime](ai/mcp-runtime.md)\n- [Agent Plugins](ai/flower-agent-plugins.md)\n- [plugin catalog integration](ai/flower-plugin-catalogs.md)\n- [thread Goals](ai/flower-goals.md)\n- [Tessiven discovery and operations](ai/tessiven-runtime-operations.md)\n- [Authorized platform model gateway](ai/platform-model-gateway.md)\n- [Model directory and selection](ai/model-directory-and-selection.md)\n- [Model web search](ai/model-web-search.md)\n- [ChatGPT account lifecycle](ai/chatgpt-account-lifecycle.md)\n- [Provider configuration validation](ai/provider-configuration-validation.md)\n- [Provider API and catalog review](ai/provider-api-catalog-review.md)\n- [Direct image reading and retention](ai/image-read-and-retention.md)\n- [AI tool runtime](ai/ai-tool-runtime.md)\n- [storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md)\n- [backup and recovery](ai/flower-backup-and-recovery.md)\n- [historical writer acceptance](ai/flower-upgrade-compatibility.md)\n- [attachment resources](ai/flower-attachment-resources.md)\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md)\n- [Computer and browser use runtime](ai/computer-use-runtime.md)\n- [Computer semantic snapshots](ai/computer-use-semantics.md)\n- [Computer script execution](ai/computer-use-scripts.md)\n- [Computer script read and validation boundaries](ai/computer-script-read-contract.md)\n- [Computer source detail and continuation reads](ai/computer-source-reads.md)\n- [Optional built-in browser installation](ai/computer-use-browser-installation.md)\n- [Built-in browser Linux system preparation](ai/computer-use-browser-system.md)\n- [Browser and desktop settings](ai/computer-use-environment-settings.md)\n- [Guided Chrome connection](ai/computer-use-browser-connection.md)\n- [Chrome connection diagnostics and recovery](ai/computer-use-chrome-diagnostics.md)\n- [browsers and authorized Chrome tabs](ai/computer-use-browser.md)\n- [Semantic desktop operations](ai/computer-use-desktop.md)\n- [Computer target selection across threads](ai/computer-use-target-selection.md)\n- [Computer use safety pauses and user control](ai/computer-use-takeover.md)\n- [Private browser observation and input](ai/computer-use-private-browser-control.md)\n- [Computer use media and visual requests](ai/computer-use-media.md)\n- [Computer use qualification](ai/computer-use-qualification.md)\n- [Computer use provider qualification evidence](ai/computer-use-provider-evidence.md)\n- [Computer use qualification evidence](ai/computer-use-qualification-evidence.md)\n- [Browser drag timing qualification](ai/computer-drag-qualification.md)\n- [Media contention and native read qualification](ai/computer-media-read-qualification.md)\n- [Computer use paired model measurements](ai/computer-use-performance.md)\n- [Codex design evidence](ai/computer-use-design-evidence.md)\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md)\n- [Model reasoning capabilities and transport](ai/model-reasoning-runtime.md)\n- [prompt and rule sources](ai/flower-prompt-and-rule-sources.md)\n- [AI model and context runtime](ai/model-context-runtime.md)\n- [Model provider surface and history](ai/model-provider-surface-and-history.md)\n- [Model request recovery](ai/model-request-recovery.md)\n- [Model request reuse](ai/model-request-reuse.md)\n- [Model context usage and compaction](ai/model-context-usage-and-compaction.md)\n- [DeepSeek Responses](ai/deepseek-responses.md)\n- [canonical thread queries](ai/flower-thread-queries.md)\n- [Floret thread runtime integration](ai/floret-thread-runtime.md)\n- [Floret Redeven adapter and projection](ai/floret-redeven-adapter-and-projection.md)\n- [subagent runtime](ai/subagent-runtime.md)\n- [thread fork coordination](ai/flower-thread-fork-coordination.md)\n- [plugin generation](ai/flower-plugin-generation.md)\n- [Plugin build visibility proposal](ui/plugin-build-visibility.md)\n- [Redeven environment operations](ai/redeven-env-operations.md)\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md)\n- [OKF tool suite](ai/okf-search-tool.md)\n- [runtime facts](ai/flower-managed-model-context.md)\n\n## Protocol\n\n- [Gateway v6 protocol](protocol/gateway-v6-protocol.md)\n- [RCPP v5 Cloud API](protocol/rcpp-v5-cloud-api.md)\n\n## Release\n\n- [Self-contained installer distribution](release/self-contained-installer.md)\n- [CI and release gates](release/ci-and-release-gates.md)\n- [ReDevPlugin release artifact gate](release/redevplugin-release-gates.md)\n- [Plugin integration gate](release/plugin-integration-gates.md)\n- [OKF release assets](release/okf-release-assets.md)\n- [Automated service-template catalog updates](release/service-template-updates.md)\n\n## Operations\n\n- [Web Center deployment](operations/web-center-deployment.md)\n- [startup performance acceptance](operations/flower-startup-performance.md)\n- [Control-plane capacity qualification](operations/controlplane-capacity-qualification.md)\n- [ReDevPlugin target build toolchain](operations/redevplugin-cross-build.md)\n- [Graphical window transport qualification](operations/graphical-window-transport-results.md)\n- [Desktop validation](operations/remote-desktop-validation.md)\n- [Desktop acceptance results](operations/remote-desktop-results.md)\n- [Published LAN C05 outcomes](operations/remote-desktop-lan-c05-results.md)\n- [Wayland desktop qualification](operations/remote-desktop-wayland-results.md)\n- [Host Application Setup](operations/host-application-setup.md)\n- [Host Application Validation](operations/host-application-validation.md)\n- [Applications picture performance](operations/host-application-performance.md)\n- [ReDevPlugin performance qualification](operations/redevplugin-performance-qualification.md)\n- [explicit long-thread qualification](operations/flower-long-thread-gate.md)\n- [live queue CPU qualification](operations/flower-live-queue-performance.md)\n- [context compaction qualification](operations/flower-compaction-qualification.md)\n- [Ollama task qualification](operations/flower-ollama-task-qualification.md)",
     "sections": [
       {
         "title": "Architecture",
@@ -115,7 +115,7 @@
               "marketplace",
               "templates"
             ],
-            "summary": "The market discovers passive evidence. Deployment requires exact originals acquired through Desktop or Runtime.",
+            "summary": "The market discovers passive evidence. Deployment requires exact originals acquired through Desktop or Runtime. Discovery never grants deployment authority. Pinned source review verifies the exact selected files; unavailable or changed sources remain explicit, and no second template format or registry is introduced.",
             "section_count": 3
           },
           {
@@ -129,8 +129,8 @@
               "persistence",
               "templates"
             ],
-            "summary": "Personal service templates combine an independently editable product definition with verified immutable upstream files. They preserve source provenance without mutating the source library or existing instances.",
-            "section_count": 2
+            "summary": "Personal service templates combine an independently editable product definition with verified immutable upstream files. They preserve source provenance without mutating the source library or existing instances. Copies retain verified source provenance while keeping their own identity and editable definition.",
+            "section_count": 3
           },
           {
             "concept_id": "architecture.service-management-recovery",
@@ -842,7 +842,7 @@
               "operations",
               "reconciliation"
             ],
-            "summary": "Container operations bind exact engine/endpoint/resource. Public terminal taxonomy distinguishes storage, registry availability, rate limit, missing and denied; UI maps known codes to localized guidance with durable timeline.",
+            "summary": "Container operations bind exact engine/endpoint/resource. Public terminal taxonomy distinguishes storage, registry availability, rate limit, missing and denied; UI maps known codes to localized guidance with durable timeline. Uncertain admission retains its exact request identity without replay.",
             "section_count": 3
           },
           {
@@ -936,7 +936,7 @@
               "local-ui",
               "security"
             ],
-            "summary": "Runtime owns public listeners, saved HTTPS identity and admission; Desktop presents explicit next-start settings. Signing failure retains only addresses covered by the prior valid leaf, reports certificate_refresh_failed and retries recovery.",
+            "summary": "Runtime owns public listeners, saved HTTPS identity and admission; Desktop presents explicit next-start settings. Signing failure retains only addresses covered by the prior valid leaf, reports certificate_refresh_failed and retries recovery. Startup cannot create identity or fall back to HTTP.",
             "section_count": 3
           },
           {
@@ -1027,7 +1027,7 @@
               "retention",
               "storage"
             ],
-            "summary": "Launcher owns source-bound Desktop/Runtime/Gateway bundles and checkout-stable profile; shared build tooling owns dependency preparation.",
+            "summary": "Launcher owns source-bound Desktop/Runtime/Gateway bundles and checkout-stable profile; shared build tooling owns dependency preparation. Reuse requires matching source, dependencies, tools, target and settings together with intact outputs. Stale or drifted inputs require rebuilding before launch.",
             "section_count": 3
           },
           {
@@ -1082,7 +1082,7 @@
               "environment",
               "welcome"
             ],
-            "summary": "Welcome projects registration owners into stable Environment cards. Title/description/search/refresh/create lead; categories carry counts, cards Runtime/window state. Snapshot errors appear only when present, without empty reserved rows.",
+            "summary": "Welcome projects registration owners into stable Environment cards. Title/description/search/refresh/create lead; categories carry counts, cards Runtime/window state. Snapshot errors appear only when present, without empty reserved rows. Current runtime health takes precedence over stale window reports.",
             "section_count": 3
           },
           {
@@ -1110,7 +1110,7 @@
               "navigation",
               "welcome"
             ],
-            "summary": "Welcome navigation is local and immediate, independent of IPC/Runtime preparation. Each popup has one published Floe presence owner. Closing immediately revokes input/accessibility, freezes placement and retains DOM through exit.",
+            "summary": "Welcome navigation is local and immediate, independent of IPC/Runtime preparation. Each popup has one published Floe presence owner. Closing immediately revokes input/accessibility, freezes placement and retains DOM through exit. Async health updates cannot replace the user-selected destination.",
             "section_count": 3
           },
           {
@@ -1382,7 +1382,7 @@
               "desktop",
               "local-ui"
             ],
-            "summary": "Code App owns Browser Editor runtime. Local UI `/cs/\u003cid\u003e/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions.",
+            "summary": "Code App owns Browser Editor runtime. Local UI `/cs/\u003cid\u003e/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions. Setup is single-flight, and exact operation identities fence late progress, cancellation and transferred chunks.",
             "section_count": 3
           }
         ]
@@ -1490,7 +1490,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Initial loads occupy final geometry. Refresh retains successful same-resource content, including empty results, with stable item DOM/focus/expansion/scroll. Pagination feedback stays at the end.",
+            "summary": "Initial loads occupy final geometry. Refresh retains successful same-resource content, including empty results, with stable item DOM/focus/expansion/scroll. Pagination feedback stays at the end. Resource identity fences late responses, while actionable failures preserve usable drafts and controls.",
             "section_count": 3
           },
           {
@@ -1517,7 +1517,7 @@
               "tessiven",
               "ui"
             ],
-            "summary": "Published Floe owns graph layout/routing/paint; Tessiven supplies canonical topology and details. Browser popup and native opening failures remain visible; never silently choose another route.",
+            "summary": "Published Floe owns graph layout/routing/paint; Tessiven supplies canonical topology and details. Browser popup and native opening failures remain visible; never silently choose another route. Read-only document inspection preserves exact saved bytes and never changes canvas versions or navigation authority.",
             "section_count": 3
           },
           {
@@ -1530,7 +1530,7 @@
               "settings",
               "ui"
             ],
-            "summary": "Env owns destinations/drafts/adapters; Floe owns layout/navigation/modal presence/focus. Retain work surfaces and usable narrow controls.",
+            "summary": "Env owns destinations/drafts/adapters; Floe owns layout/navigation/modal presence/focus. Retain work surfaces and usable narrow controls. One global dialog retains the work surface and exact resource selection. Opening settings does not start a runtime, and resource Back actions preserve unsaved drafts.",
             "section_count": 3
           },
           {
@@ -1784,7 +1784,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Redeven owns retained Center navigation/search/filter/selection/scroll; Floe owns dialogs/presence/input. Authoring starts with centered composer and quiet canvas.",
+            "summary": "Redeven owns retained Center navigation/search/filter/selection/scroll; Floe owns dialogs/presence/input. Authoring starts with centered composer and quiet canvas. Existing search, selection and preview state survive navigation. Installing and configuring a plugin keep distinct owners and explicit resource identity.",
             "section_count": 3
           },
           {
@@ -1828,7 +1828,7 @@
               "references",
               "ui"
             ],
-            "summary": "Connection-local file/directory/page/thread chips retain ordered IDs/labels in memory until explicit Send. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission.",
+            "summary": "Connection-local file/directory/page/thread chips retain ordered IDs/labels in memory until explicit Send. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission. Only explicit user actions admit references; changing pages adds no hidden context.",
             "section_count": 3
           },
           {
@@ -1947,8 +1947,22 @@
               "turns",
               "ui"
             ],
-            "summary": "Floret owns exact TurnID/RunID, optional control kind, lifecycle/timing, intermediate/final IDs and complete-final boundary. Typed structure alone permits folding; prompts/summaries/time heuristics do not.",
+            "summary": "Floret owns exact TurnID/RunID, optional control kind, lifecycle/timing, intermediate/final IDs and complete-final boundary. Typed structure alone permits folding; prompts/summaries/time heuristics do not. Historical error details open only on demand in an accessible dialog without changing timeline geometry.",
             "section_count": 3
+          },
+          {
+            "concept_id": "ui.flower-message-editing",
+            "path": "ui/flower-message-editing.md",
+            "type": "UI Contract",
+            "title": "Flower latest user message editing",
+            "tags": [
+              "composer",
+              "flower",
+              "history",
+              "revisions"
+            ],
+            "summary": "Edit the latest eligible user message in the existing composer. Opening the editor is read-only. Sending creates an immutable replacement branch inside the same thread, preserving the original version. Floret owns conversation admission and history; Redeven owns authorization, resource preparation and presentation.",
+            "section_count": 4
           },
           {
             "concept_id": "ui.flower-conversation-preferences",
@@ -2499,8 +2513,8 @@
               "recovery",
               "storage"
             ],
-            "summary": "Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls.",
-            "section_count": 2
+            "summary": "Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls. Cleanup retires only verified unprotected automatic snapshots; unknown records and live conversations remain untouched.",
+            "section_count": 3
           },
           {
             "concept_id": "ai.flower-upgrade-compatibility",
@@ -2542,7 +2556,7 @@
               "permissions",
               "tools"
             ],
-            "summary": "Redeven owns visibility/policy/prompts/approval UI; Floret owns invocation and neutral tools. Retired Todo remains readable but unavailable; [Goals](flower-goals.md) retains its own owner. File inspection shares current scope across modes.",
+            "summary": "Redeven owns visibility/policy/prompts/approval UI; Floret owns invocation and neutral tools. Retired Todo remains readable but unavailable; [Goals](flower-goals.md) retains its own owner. File inspection shares current scope across modes. Typed validation precedes dispatch and never authorizes replay.",
             "section_count": 3
           },
           {
@@ -2980,7 +2994,7 @@
               "context",
               "models"
             ],
-            "summary": "Floret owns confirmed usage, pressure, bounded compaction and canonical installation. Redeven projects independent token/byte/image evidence; exact image counts/decoded bytes retain preparation/response stage and never occupy another unit's fields.",
+            "summary": "Floret owns confirmed usage, pressure, bounded compaction and canonical installation. Redeven projects independent token/byte/image evidence; exact image counts/decoded bytes retain preparation/response stage and never occupy another unit's fields. Failed compaction never installs a partial checkpoint.",
             "section_count": 3
           },
           {
@@ -3050,7 +3064,7 @@
               "permissions",
               "subagent_manage"
             ],
-            "summary": "Floret owns canonical child threads, reports and parent events. Its flat provider schema requires spawn(task_name,task_description,message), send_input(target,message), close(target) and wait(ids); status/inspect deduplicate target then ids.",
+            "summary": "Floret owns canonical child threads, reports and parent events. Its flat provider schema requires spawn(task_name,task_description,message), send_input(target,message), close(target) and wait(ids); status/inspect deduplicate target then ids. Admission and settled child outcomes remain distinct.",
             "section_count": 3
           },
           {
@@ -3078,7 +3092,7 @@
               "flower",
               "plugins"
             ],
-            "summary": "Flower authors through released ReDevPlugin CLI/SDK and version-matched guidance. Plugin Center owns authoring conversations; ordinary Flower keeps its tools/navigation. Canonical streaming, approvals and dispatch stay shared.",
+            "summary": "Flower authors through released ReDevPlugin CLI/SDK and version-matched guidance. Plugin Center owns authoring conversations; ordinary Flower keeps its tools/navigation. Canonical streaming, approvals and dispatch stay shared. Preview publication uses verified build reports and retains the existing frame on failure.",
             "section_count": 3
           },
           {
@@ -3202,7 +3216,7 @@
               "runtime",
               "security"
             ],
-            "summary": "Release produces CGO-free macOS/Linux amd64/arm64 self-contained installers, renders bootstrap from exact binary digests and signs SHA256SUMS. Receiver needs shell/HTTPS downloader/SHA256, not Go/Cosign/Python/OpenSSL/package manager.",
+            "summary": "Release produces CGO-free macOS/Linux amd64/arm64 self-contained installers, renders bootstrap from exact binary digests and signs SHA256SUMS. Receiver needs shell/HTTPS downloader/SHA256, not Go/Cosign/Python/OpenSSL/package manager. Verification failures never execute an untrusted payload.",
             "section_count": 3
           },
           {
@@ -3449,7 +3463,7 @@
               "performance",
               "validation"
             ],
-            "summary": "Floe Native Apps owns picture capture/codec; Redeven forwards/qualifies display choices. Measure actual pixels/bytes and retain failed budgets; these workloads certify no video/WAN/physical-display/universal parity.",
+            "summary": "Floe Native Apps owns picture capture/codec; Redeven forwards/qualifies display choices. Measure actual pixels/bytes and retain failed budgets; these workloads certify no video/WAN/physical-display/universal parity. Qualification records workload, source dimensions and observed budgets.",
             "section_count": 3
           },
           {
@@ -4768,6 +4782,12 @@
         "path": "ui/flower-message-appearance.md",
         "concept_id": "ui.flower-message-appearance",
         "title": "Flower message appearance"
+      },
+      {
+        "label": "latest user message editing",
+        "path": "ui/flower-message-editing.md",
+        "concept_id": "ui.flower-message-editing",
+        "title": "Flower latest user message editing"
       },
       {
         "label": "model and navigation presentation",
@@ -7484,8 +7504,8 @@
         "title": "Flower storage recovery and retired backups",
         "type": "Recovery Contract"
       },
-      "body_length": 1696,
-      "summary": "Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls.",
+      "body_length": 2056,
+      "summary": "Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls. Cleanup retires only verified unprotected automatic snapshots; unknown records and live conversations remain untouched.",
       "sections": [
         {
           "id": "contract",
@@ -7493,6 +7513,13 @@
           "level": 1,
           "body": "## Retired automatic snapshots\nThe public snapshot-list and restore APIs are removed. Successful activation and startup preparation admit one background cleanup of checksum-verified, unprotected automatic snapshots only. Cleanup checks cancellation, refuses a pending replacement journal, pins the snapshot directory, and never traverses links. Unknown, damaged, protected and before-restore records remain unchanged. Cleanup failure cannot block healthy conversations.\n\nNo cleanup targets live conversations, uploads, read state, extension configuration, or opaque upstream stores. Filesystem statistics do not certify backups.\n\n## Durable recovery and diagnostics\nPreviously admitted durable replacements must finish and verify before opening another generation. A failed generation close fences recovery. Abandoned staging retires only after replacement completes.\n\nThe diagnostic settings category retains actual runtime status, safe retry/stop, sanitized diagnostics and explicit orphan ownership review. Diagnostics omit conversations, credentials, database contents and uploads. There is no generic deletion API or backup-success claim.",
           "char_count": 1143
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Cleanup is limited to verified, unprotected automatic snapshots. It does not target live conversations, uploads, read state, extension configuration or opaque upstream stores. Diagnostics do not certify a recoverable backup.",
+          "char_count": 224
         },
         {
           "id": "evidence",
@@ -7514,7 +7541,7 @@
           "description": "Runtime diagnostic surface."
         }
       ],
-      "snippet": "Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls.",
+      "snippet": "Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls. Cleanup retires only verified unprotected automatic snapshots; unknown r",
       "backlinks": [
         {
           "label": "Flower storage ownership and migrations",
@@ -7807,8 +7834,8 @@
         "title": "Flower plugin generation",
         "type": "AI Product Contract"
       },
-      "body_length": 8917,
-      "summary": "Flower authors through released ReDevPlugin CLI/SDK and version-matched guidance. Plugin Center owns authoring conversations; ordinary Flower keeps its tools/navigation. Canonical streaming, approvals and dispatch stay shared.",
+      "body_length": 9008,
+      "summary": "Flower authors through released ReDevPlugin CLI/SDK and version-matched guidance. Plugin Center owns authoring conversations; ordinary Flower keeps its tools/navigation. Canonical streaming, approvals and dispatch stay shared. Preview publication uses verified build reports and retains the existing frame on failure.",
       "sections": [
         {
           "id": "contract",
@@ -7832,7 +7859,7 @@
           "char_count": 810
         }
       ],
-      "snippet": "Flower authors through released ReDevPlugin CLI/SDK and version-matched guidance. Plugin Center owns authoring conversations; ordinary Flower keeps its tools/navigation. Canonical streaming, approvals and dispatch stay shared.",
+      "snippet": "Flower authors through released ReDevPlugin CLI/SDK and version-matched guidance. Plugin Center owns authoring conversations; ordinary Flower keeps its tools/navigation. Canonical streaming, approvals and dispatch stay shared. Preview publi",
       "links": [
         {
           "label": "Build visibility",
@@ -8664,8 +8691,8 @@
         "title": "Context usage, measurement and compaction",
         "type": "AI Runtime Contract"
       },
-      "body_length": 4309,
-      "summary": "Floret owns confirmed usage, pressure, bounded compaction and canonical installation. Redeven projects independent token/byte/image evidence; exact image counts/decoded bytes retain preparation/response stage and never occupy another unit's fields.",
+      "body_length": 4364,
+      "summary": "Floret owns confirmed usage, pressure, bounded compaction and canonical installation. Redeven projects independent token/byte/image evidence; exact image counts/decoded bytes retain preparation/response stage and never occupy another unit's fields. Failed compaction never installs a partial checkpoint.",
       "sections": [
         {
           "id": "contract",
@@ -9682,8 +9709,8 @@
         "title": "Flower child runtime and parent event boundary",
         "type": "AI Tool Contract"
       },
-      "body_length": 4033,
-      "summary": "Floret owns canonical child threads, reports and parent events. Its flat provider schema requires spawn(task_name,task_description,message), send_input(target,message), close(target) and wait(ids); status/inspect deduplicate target then ids.",
+      "body_length": 4087,
+      "summary": "Floret owns canonical child threads, reports and parent events. Its flat provider schema requires spawn(task_name,task_description,message), send_input(target,message), close(target) and wait(ids); status/inspect deduplicate target then ids. Admission and settled child outcomes remain distinct.",
       "sections": [
         {
           "id": "contract",
@@ -9913,8 +9940,8 @@
         "title": "AI tool permissions and dispatch",
         "type": "AI Tool Contract"
       },
-      "body_length": 7333,
-      "summary": "Redeven owns visibility/policy/prompts/approval UI; Floret owns invocation and neutral tools. Retired Todo remains readable but unavailable; [Goals](flower-goals.md) retains its own owner. File inspection shares current scope across modes.",
+      "body_length": 7397,
+      "summary": "Redeven owns visibility/policy/prompts/approval UI; Floret owns invocation and neutral tools. Retired Todo remains readable but unavailable; [Goals](flower-goals.md) retains its own owner. File inspection shares current scope across modes. Typed validation precedes dispatch and never authorizes replay.",
       "sections": [
         {
           "id": "contract",
@@ -9938,7 +9965,7 @@
           "char_count": 1226
         }
       ],
-      "snippet": "Redeven owns visibility/policy/prompts/approval UI; Floret owns invocation and neutral tools. Retired Todo remains readable but unavailable; [Goals](flower-goals.md) retains its own owner. File inspection shares current scope across modes.",
+      "snippet": "Redeven owns visibility/policy/prompts/approval UI; Floret owns invocation and neutral tools. Retired Todo remains readable but unavailable; [Goals](flower-goals.md) retains its own owner. File inspection shares current scope across modes. ",
       "links": [
         {
           "label": "Goals",
@@ -10322,8 +10349,8 @@
         "title": "Container execution and operation observation",
         "type": "Architecture Contract"
       },
-      "body_length": 3835,
-      "summary": "Container operations bind exact engine/endpoint/resource. Public terminal taxonomy distinguishes storage, registry availability, rate limit, missing and denied; UI maps known codes to localized guidance with durable timeline.",
+      "body_length": 3906,
+      "summary": "Container operations bind exact engine/endpoint/resource. Public terminal taxonomy distinguishes storage, registry availability, rate limit, missing and denied; UI maps known codes to localized guidance with durable timeline. Uncertain admission retains its exact request identity without replay.",
       "sections": [
         {
           "id": "contract",
@@ -10347,7 +10374,7 @@
           "char_count": 252
         }
       ],
-      "snippet": "Container operations bind exact engine/endpoint/resource. Public terminal taxonomy distinguishes storage, registry availability, rate limit, missing and denied; UI maps known codes to localized guidance with durable timeline.",
+      "snippet": "Container operations bind exact engine/endpoint/resource. Public terminal taxonomy distinguishes storage, registry availability, rate limit, missing and denied; UI maps known codes to localized guidance with durable timeline. Uncertain admi",
       "links": [
         {
           "label": "Native authority",
@@ -12432,8 +12459,8 @@
         "title": "Personal service templates and pinned source derivation",
         "type": "Runtime Contract"
       },
-      "body_length": 3332,
-      "summary": "Personal service templates combine an independently editable product definition with verified immutable upstream files. They preserve source provenance without mutating the source library or existing instances.",
+      "body_length": 3703,
+      "summary": "Personal service templates combine an independently editable product definition with verified immutable upstream files. They preserve source provenance without mutating the source library or existing instances. Copies retain verified source provenance while keeping their own identity and editable definition.",
       "sections": [
         {
           "id": "contract",
@@ -12441,6 +12468,13 @@
           "level": 1,
           "body": "Redeven owns personal definitions and their immutable base references; published upstream readers, formats and runtime policies remain authoritative. No new GitHub repository or format fork is required. Official/community detail actions expose **Create my template**. A remote selection passes through the same owner-scoped pinned source review, then naming, creation, and immediate editing in My templates. Accepted Git sources and personal templates support the same copy action. Cancellation releases the preview; environment changes fence the response without sending cleanup to another environment. Copies have independent template/family IDs and workspaces; they never copy instances, secrets or application data.\n\nRegistry migration v7-to-v8 adds a foreign-keyed personal-template base reference. Definition, retained source version, reference and request receipt commit atomically. Replay reads the receipt even after the review expires. Original files, executable modes, notices/translations, icons, access defaults and runtime-file identity survive source-library update/deletion, copying a copy and restart. User names/descriptions override original display translations. The custom spec remains editable while immutable auxiliary source files are verified on every load; external tampering fails closed. Garbage collection protects personal references until their final owner is deleted.\n\nInteractive-desktop copies retain the exact audited runtime definition and capability. Only name/description are editable in their template editor, with a visible explanation and disabled runtime fields; instance settings remain the existing customization path. Edited images/scripts cannot inherit the reserved capability. Other Host, Container and Compose copies preserve undisplayed spec fields during form edits, including startup rules, multi-argument entrypoints and resource identities. Plain script Host templates do not require npm fields.",
           "char_count": 1949
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Personal definitions remain independent of source libraries and existing instances. Copying preserves verified immutable files and provenance, never instance secrets or application data; published upstream formats and runtime policies remain authoritative.",
+          "char_count": 256
         },
         {
           "id": "evidence",
@@ -12467,7 +12501,7 @@
           "description": "responsive source review, naming, editing, saving and reopening for all three deployments."
         }
       ],
-      "snippet": "Personal service templates combine an independently editable product definition with verified immutable upstream files. They preserve source provenance without mutating the source library or existing instances.",
+      "snippet": "Personal service templates combine an independently editable product definition with verified immutable upstream files. They preserve source provenance without mutating the source library or existing instances. Copies retain verified source",
       "links": [
         {
           "label": "official native qualification",
@@ -14571,8 +14605,8 @@
         "title": "Service template marketplace discovery and acquisition",
         "type": "Runtime Contract"
       },
-      "body_length": 7640,
-      "summary": "The market discovers passive evidence. Deployment requires exact originals acquired through Desktop or Runtime.",
+      "body_length": 7846,
+      "summary": "The market discovers passive evidence. Deployment requires exact originals acquired through Desktop or Runtime. Discovery never grants deployment authority. Pinned source review verifies the exact selected files; unavailable or changed sources remain explicit, and no second template format or registry is introduced.",
       "sections": [
         {
           "id": "contract",
@@ -14596,7 +14630,7 @@
           "char_count": 2475
         }
       ],
-      "snippet": "The market discovers passive evidence. Deployment requires exact originals acquired through Desktop or Runtime.",
+      "snippet": "The market discovers passive evidence. Deployment requires exact originals acquired through Desktop or Runtime. Discovery never grants deployment authority. Pinned source review verifies the exact selected files; unavailable or changed sour",
       "links": [
         {
           "label": "Template publication",
@@ -15066,8 +15100,8 @@
         "title": "Browser Editor runtime",
         "type": "Runtime Contract"
       },
-      "body_length": 1106,
-      "summary": "Code App owns Browser Editor runtime. Local UI `/cs/\u003cid\u003e/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions.",
+      "body_length": 1219,
+      "summary": "Code App owns Browser Editor runtime. Local UI `/cs/\u003cid\u003e/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions. Setup is single-flight, and exact operation identities fence late progress, cancellation and transferred chunks.",
       "sections": [
         {
           "id": "contract",
@@ -15099,7 +15133,7 @@
           "description": "Source."
         }
       ],
-      "snippet": "Code App owns Browser Editor runtime. Local UI `/cs/\u003cid\u003e/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions.",
+      "snippet": "Code App owns Browser Editor runtime. Local UI `/cs/\u003cid\u003e/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions. Setup is single-flight, and exact operation identities fence late prog",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -15354,8 +15388,8 @@
         "title": "Desktop development sessions and bundles",
         "type": "Development Contract"
       },
-      "body_length": 6886,
-      "summary": "Launcher owns source-bound Desktop/Runtime/Gateway bundles and checkout-stable profile; shared build tooling owns dependency preparation.",
+      "body_length": 7047,
+      "summary": "Launcher owns source-bound Desktop/Runtime/Gateway bundles and checkout-stable profile; shared build tooling owns dependency preparation. Reuse requires matching source, dependencies, tools, target and settings together with intact outputs. Stale or drifted inputs require rebuilding before launch.",
       "sections": [
         {
           "id": "contract",
@@ -15379,7 +15413,7 @@
           "char_count": 734
         }
       ],
-      "snippet": "Launcher owns source-bound Desktop/Runtime/Gateway bundles and checkout-stable profile; shared build tooling owns dependency preparation.",
+      "snippet": "Launcher owns source-bound Desktop/Runtime/Gateway bundles and checkout-stable profile; shared build tooling owns dependency preparation. Reuse requires matching source, dependencies, tools, target and settings together with intact outputs.",
       "links": [
         {
           "label": "install",
@@ -15534,8 +15568,8 @@
         "title": "Environment library, registrations and card presentation",
         "type": "Desktop Contract"
       },
-      "body_length": 4048,
-      "summary": "Welcome projects registration owners into stable Environment cards. Title/description/search/refresh/create lead; categories carry counts, cards Runtime/window state. Snapshot errors appear only when present, without empty reserved rows.",
+      "body_length": 4115,
+      "summary": "Welcome projects registration owners into stable Environment cards. Title/description/search/refresh/create lead; categories carry counts, cards Runtime/window state. Snapshot errors appear only when present, without empty reserved rows. Current runtime health takes precedence over stale window reports.",
       "sections": [
         {
           "id": "contract",
@@ -15559,7 +15593,7 @@
           "char_count": 105
         }
       ],
-      "snippet": "Welcome projects registration owners into stable Environment cards. Title/description/search/refresh/create lead; categories carry counts, cards Runtime/window state. Snapshot errors appear only when present, without empty reserved rows.",
+      "snippet": "Welcome projects registration owners into stable Environment cards. Title/description/search/refresh/create lead; categories carry counts, cards Runtime/window state. Snapshot errors appear only when present, without empty reserved rows. Cu",
       "links": [
         {
           "label": "continuity",
@@ -16410,8 +16444,8 @@
         "title": "Desktop Welcome navigation",
         "type": "UI Contract"
       },
-      "body_length": 3993,
-      "summary": "Welcome navigation is local and immediate, independent of IPC/Runtime preparation. Each popup has one published Floe presence owner. Closing immediately revokes input/accessibility, freezes placement and retains DOM through exit.",
+      "body_length": 4060,
+      "summary": "Welcome navigation is local and immediate, independent of IPC/Runtime preparation. Each popup has one published Floe presence owner. Closing immediately revokes input/accessibility, freezes placement and retains DOM through exit. Async health updates cannot replace the user-selected destination.",
       "sections": [
         {
           "id": "contract",
@@ -16435,7 +16469,7 @@
           "char_count": 400
         }
       ],
-      "snippet": "Welcome navigation is local and immediate, independent of IPC/Runtime preparation. Each popup has one published Floe presence owner. Closing immediately revokes input/accessibility, freezes placement and retains DOM through exit.",
+      "snippet": "Welcome navigation is local and immediate, independent of IPC/Runtime preparation. Each popup has one published Floe presence owner. Closing immediately revokes input/accessibility, freezes placement and retains DOM through exit. Async heal",
       "links": [
         {
           "label": "library",
@@ -17783,8 +17817,8 @@
         "title": "Host application picture performance",
         "type": "Validation Guide"
       },
-      "body_length": 2207,
-      "summary": "Floe Native Apps owns picture capture/codec; Redeven forwards/qualifies display choices. Measure actual pixels/bytes and retain failed budgets; these workloads certify no video/WAN/physical-display/universal parity.",
+      "body_length": 2279,
+      "summary": "Floe Native Apps owns picture capture/codec; Redeven forwards/qualifies display choices. Measure actual pixels/bytes and retain failed budgets; these workloads certify no video/WAN/physical-display/universal parity. Qualification records workload, source dimensions and observed budgets.",
       "sections": [
         {
           "id": "contract",
@@ -17808,7 +17842,7 @@
           "char_count": 270
         }
       ],
-      "snippet": "Floe Native Apps owns picture capture/codec; Redeven forwards/qualifies display choices. Measure actual pixels/bytes and retain failed budgets; these workloads certify no video/WAN/physical-display/universal parity.",
+      "snippet": "Floe Native Apps owns picture capture/codec; Redeven forwards/qualifies display choices. Measure actual pixels/bytes and retain failed budgets; these workloads certify no video/WAN/physical-display/universal parity. Qualification records wo",
       "backlinks": [
         {
           "label": "Host application viewing, display and resource lifetime",
@@ -18984,8 +19018,8 @@
         "title": "Self-contained installer distribution",
         "type": "Release Contract"
       },
-      "body_length": 4188,
-      "summary": "Release produces CGO-free macOS/Linux amd64/arm64 self-contained installers, renders bootstrap from exact binary digests and signs SHA256SUMS. Receiver needs shell/HTTPS downloader/SHA256, not Go/Cosign/Python/OpenSSL/package manager.",
+      "body_length": 4246,
+      "summary": "Release produces CGO-free macOS/Linux amd64/arm64 self-contained installers, renders bootstrap from exact binary digests and signs SHA256SUMS. Receiver needs shell/HTTPS downloader/SHA256, not Go/Cosign/Python/OpenSSL/package manager. Verification failures never execute an untrusted payload.",
       "sections": [
         {
           "id": "contract",
@@ -19009,7 +19043,7 @@
           "char_count": 138
         }
       ],
-      "snippet": "Release produces CGO-free macOS/Linux amd64/arm64 self-contained installers, renders bootstrap from exact binary digests and signs SHA256SUMS. Receiver needs shell/HTTPS downloader/SHA256, not Go/Cosign/Python/OpenSSL/package manager.",
+      "snippet": "Release produces CGO-free macOS/Linux amd64/arm64 self-contained installers, renders bootstrap from exact binary digests and signs SHA256SUMS. Receiver needs shell/HTTPS downloader/SHA256, not Go/Cosign/Python/OpenSSL/package manager. Verif",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -19139,8 +19173,8 @@
         "title": "Local UI exposure, HTTPS identity and explicit certificate changes",
         "type": "Security Contract"
       },
-      "body_length": 3675,
-      "summary": "Runtime owns public listeners, saved HTTPS identity and admission; Desktop presents explicit next-start settings. Signing failure retains only addresses covered by the prior valid leaf, reports certificate_refresh_failed and retries recovery.",
+      "body_length": 3728,
+      "summary": "Runtime owns public listeners, saved HTTPS identity and admission; Desktop presents explicit next-start settings. Signing failure retains only addresses covered by the prior valid leaf, reports certificate_refresh_failed and retries recovery. Startup cannot create identity or fall back to HTTP.",
       "sections": [
         {
           "id": "contract",
@@ -21190,8 +21224,8 @@
         "title": "Flower references, origin context and canonical admission",
         "type": "UI Contract"
       },
-      "body_length": 6993,
-      "summary": "Connection-local file/directory/page/thread chips retain ordered IDs/labels in memory until explicit Send. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission.",
+      "body_length": 7077,
+      "summary": "Connection-local file/directory/page/thread chips retain ordered IDs/labels in memory until explicit Send. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission. Only explicit user actions admit references; changing pages adds no hidden context.",
       "sections": [
         {
           "id": "contract",
@@ -21215,7 +21249,7 @@
           "char_count": 717
         }
       ],
-      "snippet": "Connection-local file/directory/page/thread chips retain ordered IDs/labels in memory until explicit Send. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission.",
+      "snippet": "Connection-local file/directory/page/thread chips retain ordered IDs/labels in memory until explicit Send. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission. Only explicit user actio",
       "links": [
         {
           "label": "Tool runtime",
@@ -21952,7 +21986,7 @@
         "title": "Flower latest user message editing",
         "type": "UI Contract"
       },
-      "body_length": 7960,
+      "body_length": 8231,
       "summary": "Edit the latest eligible user message in the existing composer. Opening the editor is read-only. Sending creates an immutable replacement branch inside the same thread, preserving the original version. Floret owns conversation admission and history; Redeven owns authorization, resource preparation and presentation.",
       "sections": [
         {
@@ -21968,6 +22002,13 @@
           "level": 1,
           "body": "The comparison uses pinned source snapshots, not a claim about the latest binaries:\n\n- Codex `ba0d0e1f74ee0f41c27ef24b37ed5fc030b487e7`, `codex-rs/tui/src/app_backtrack.rs`: backtrack previews select a user prompt, request revert-before-turn, and restore the prompt into the composer. Flower adopts composer reuse and explicit selection, while postponing canonical mutation until Send so cancel is genuinely local.\n- OpenCode v2.0.32 `843a6c514e606b436a7fe713422ace0a93ad3d61`, `packages/core/src/session.ts`: separates revert stage, clear and commit. Flower uses one atomic revision admission instead of adding an independently durable staged-revert lifecycle.\n- DeepSeek Harness `ce7073d51254c26cd63b22a60835b8f948deb447`, `packages/client/ui-chat/src/client/apply.ts`: branches at an explicit sequence and opens the child session. Flower retains immutable historical provenance but keeps latest-message editing in the existing thread; explicit Fork remains a separate user action.\n\nNon-goals: editing arbitrary older messages, undoing real tool side effects, branch trees in the composer, automatically replaying failed tools, or changing Goal/queue semantics. These would require independent product decisions.",
           "char_count": 1214
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Opening, inspecting or cancelling an edit is read-only. Only explicit Send stops the exact source execution and submits an immutable replacement. Floret owns conversation history; Redeven never rewrites canonical records or silently resubmits stale edits.",
+          "char_count": 255
         },
         {
           "id": "evidence",
@@ -21993,6 +22034,11 @@
         }
       ],
       "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        },
         {
           "label": "Flower turn submission, outbox and input recall",
           "path": "ui/flower-turn-launcher.md",
@@ -23297,8 +23343,8 @@
         "title": "Flower turn status and process disclosure",
         "type": "UI Contract"
       },
-      "body_length": 5761,
-      "summary": "Floret owns exact TurnID/RunID, optional control kind, lifecycle/timing, intermediate/final IDs and complete-final boundary. Typed structure alone permits folding; prompts/summaries/time heuristics do not.",
+      "body_length": 5866,
+      "summary": "Floret owns exact TurnID/RunID, optional control kind, lifecycle/timing, intermediate/final IDs and complete-final boundary. Typed structure alone permits folding; prompts/summaries/time heuristics do not. Historical error details open only on demand in an accessible dialog without changing timeline geometry.",
       "sections": [
         {
           "id": "contract",
@@ -23322,7 +23368,7 @@
           "char_count": 584
         }
       ],
-      "snippet": "Floret owns exact TurnID/RunID, optional control kind, lifecycle/timing, intermediate/final IDs and complete-final boundary. Typed structure alone permits folding; prompts/summaries/time heuristics do not.",
+      "snippet": "Floret owns exact TurnID/RunID, optional control kind, lifecycle/timing, intermediate/final IDs and complete-final boundary. Typed structure alone permits folding; prompts/summaries/time heuristics do not. Historical error details open only",
       "links": [
         {
           "label": "Published turn kinds",
@@ -23776,8 +23822,8 @@
         "title": "Page loading, asynchronous feedback and document recovery",
         "type": "UI Contract"
       },
-      "body_length": 4093,
-      "summary": "Initial loads occupy final geometry. Refresh retains successful same-resource content, including empty results, with stable item DOM/focus/expansion/scroll. Pagination feedback stays at the end.",
+      "body_length": 4197,
+      "summary": "Initial loads occupy final geometry. Refresh retains successful same-resource content, including empty results, with stable item DOM/focus/expansion/scroll. Pagination feedback stays at the end. Resource identity fences late responses, while actionable failures preserve usable drafts and controls.",
       "sections": [
         {
           "id": "contract",
@@ -23801,7 +23847,7 @@
           "char_count": 421
         }
       ],
-      "snippet": "Initial loads occupy final geometry. Refresh retains successful same-resource content, including empty results, with stable item DOM/focus/expansion/scroll. Pagination feedback stays at the end.",
+      "snippet": "Initial loads occupy final geometry. Refresh retains successful same-resource content, including empty results, with stable item DOM/focus/expansion/scroll. Pagination feedback stays at the end. Resource identity fences late responses, whil",
       "links": [
         {
           "label": "Activity restoration",
@@ -23954,8 +24000,8 @@
         "title": "Plugin Center interaction",
         "type": "UI Contract"
       },
-      "body_length": 10474,
-      "summary": "Redeven owns retained Center navigation/search/filter/selection/scroll; Floe owns dialogs/presence/input. Authoring starts with centered composer and quiet canvas.",
+      "body_length": 10628,
+      "summary": "Redeven owns retained Center navigation/search/filter/selection/scroll; Floe owns dialogs/presence/input. Authoring starts with centered composer and quiet canvas. Existing search, selection and preview state survive navigation. Installing and configuring a plugin keep distinct owners and explicit resource identity.",
       "sections": [
         {
           "id": "contract",
@@ -23979,7 +24025,7 @@
           "char_count": 1896
         }
       ],
-      "snippet": "Redeven owns retained Center navigation/search/filter/selection/scroll; Floe owns dialogs/presence/input. Authoring starts with centered composer and quiet canvas.",
+      "snippet": "Redeven owns retained Center navigation/search/filter/selection/scroll; Floe owns dialogs/presence/input. Authoring starts with centered composer and quiet canvas. Existing search, selection and preview state survive navigation. Installing ",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -24177,8 +24223,8 @@
         "title": "Runtime settings",
         "type": "UI Contract"
       },
-      "body_length": 8421,
-      "summary": "Env owns destinations/drafts/adapters; Floe owns layout/navigation/modal presence/focus. Retain work surfaces and usable narrow controls.",
+      "body_length": 8588,
+      "summary": "Env owns destinations/drafts/adapters; Floe owns layout/navigation/modal presence/focus. Retain work surfaces and usable narrow controls. One global dialog retains the work surface and exact resource selection. Opening settings does not start a runtime, and resource Back actions preserve unsaved drafts.",
       "sections": [
         {
           "id": "contract",
@@ -24202,7 +24248,7 @@
           "char_count": 473
         }
       ],
-      "snippet": "Env owns destinations/drafts/adapters; Floe owns layout/navigation/modal presence/focus. Retain work surfaces and usable narrow controls.",
+      "snippet": "Env owns destinations/drafts/adapters; Floe owns layout/navigation/modal presence/focus. Retain work surfaces and usable narrow controls. One global dialog retains the work surface and exact resource selection. Opening settings does not sta",
       "links": [
         {
           "label": "Extensions",
@@ -24508,8 +24554,8 @@
         "title": "Tessiven canvas navigation, relationships and Flower reading",
         "type": "UI Contract"
       },
-      "body_length": 4461,
-      "summary": "Published Floe owns graph layout/routing/paint; Tessiven supplies canonical topology and details. Browser popup and native opening failures remain visible; never silently choose another route.",
+      "body_length": 4578,
+      "summary": "Published Floe owns graph layout/routing/paint; Tessiven supplies canonical topology and details. Browser popup and native opening failures remain visible; never silently choose another route. Read-only document inspection preserves exact saved bytes and never changes canvas versions or navigation authority.",
       "sections": [
         {
           "id": "contract",
@@ -24533,7 +24579,7 @@
           "char_count": 319
         }
       ],
-      "snippet": "Published Floe owns graph layout/routing/paint; Tessiven supplies canonical topology and details. Browser popup and native opening failures remain visible; never silently choose another route.",
+      "snippet": "Published Floe owns graph layout/routing/paint; Tessiven supplies canonical topology and details. Browser popup and native opening failures remain visible; never silently choose another route. Read-only document inspection preserves exact s",
       "links": [
         {
           "label": "scoped operations",
@@ -24867,5 +24913,5 @@
       ]
     }
   ],
-  "source_sha256": "7e4d8d8cf1c14dc96190d9160887f034498d8247b53c4c0eddf18998157a06f7"
+  "source_sha256": "f829f2ff44c26b58f4573d5d88ef289f4994ee9f3ffa4dc13b25418c6f28536c"
 }

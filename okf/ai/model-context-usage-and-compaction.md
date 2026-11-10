@@ -7,7 +7,7 @@ reviewed_at: "2026-11-06"
 ---
 # Summary
 
-Floret owns confirmed usage, pressure, bounded compaction and canonical installation. Redeven projects independent token/byte/image evidence; exact image counts/decoded bytes retain preparation/response stage and never occupy another unit's fields.
+Floret owns confirmed usage, pressure, bounded compaction and canonical installation. Redeven projects independent token/byte/image evidence; exact image counts/decoded bytes retain preparation/response stage and never occupy another unit's fields. Failed compaction never installs a partial checkpoint.
 
 # Contract
 

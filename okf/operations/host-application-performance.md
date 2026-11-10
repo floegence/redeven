@@ -7,7 +7,7 @@ reviewed_at: "2026-10-22"
 ---
 # Summary
 
-Floe Native Apps owns picture capture/codec; Redeven forwards/qualifies display choices. Measure actual pixels/bytes and retain failed budgets; these workloads certify no video/WAN/physical-display/universal parity.
+Floe Native Apps owns picture capture/codec; Redeven forwards/qualifies display choices. Measure actual pixels/bytes and retain failed budgets; these workloads certify no video/WAN/physical-display/universal parity. Qualification records workload, source dimensions and observed budgets.
 
 # Contract
 

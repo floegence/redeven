@@ -53,6 +53,10 @@ The comparison uses pinned source snapshots, not a claim about the latest binari
 
 Non-goals: editing arbitrary older messages, undoing real tool side effects, branch trees in the composer, automatically replaying failed tools, or changing Goal/queue semantics. These would require independent product decisions.
 
+# Boundaries
+
+Opening, inspecting or cancelling an edit is read-only. Only explicit Send stops the exact source execution and submits an immutable replacement. Floret owns conversation history; Redeven never rewrites canonical records or silently resubmits stale edits.
+
 # Evidence
 
 - [Product service and source validation](../../internal/ai/message_edit.go), [service regressions](../../internal/ai/message_edit_test.go).

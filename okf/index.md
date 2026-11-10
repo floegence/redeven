@@ -156,6 +156,7 @@ Repository knowledge derived from current source, generated contracts and releas
 - [live timeline](ui/flower-live-timeline.md)
 - [timeline ordering](ui/flower-timeline-ordering.md)
 - [terminal turn process disclosure](ui/flower-turn-process-disclosure.md)
+- [latest user message editing](ui/flower-message-editing.md)
 - [personal conversation preferences](ui/flower-conversation-preferences.md)
 - [model and navigation presentation](ui/flower-model-navigation.md)
 - [setup and settings](ui/flower-setup-and-settings.md)

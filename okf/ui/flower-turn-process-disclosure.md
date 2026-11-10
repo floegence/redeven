@@ -7,7 +7,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Floret owns exact TurnID/RunID, optional control kind, lifecycle/timing, intermediate/final IDs and complete-final boundary. Typed structure alone permits folding; prompts/summaries/time heuristics do not.
+Floret owns exact TurnID/RunID, optional control kind, lifecycle/timing, intermediate/final IDs and complete-final boundary. Typed structure alone permits folding; prompts/summaries/time heuristics do not. Historical error details open only on demand in an accessible dialog without changing timeline geometry.
 
 # Contract
 

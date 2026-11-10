@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Published Floe owns graph layout/routing/paint; Tessiven supplies canonical topology and details. Browser popup and native opening failures remain visible; never silently choose another route.
+Published Floe owns graph layout/routing/paint; Tessiven supplies canonical topology and details. Browser popup and native opening failures remain visible; never silently choose another route. Read-only document inspection preserves exact saved bytes and never changes canvas versions or navigation authority.
 
 # Contract
 

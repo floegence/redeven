@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Launcher owns source-bound Desktop/Runtime/Gateway bundles and checkout-stable profile; shared build tooling owns dependency preparation.
+Launcher owns source-bound Desktop/Runtime/Gateway bundles and checkout-stable profile; shared build tooling owns dependency preparation. Reuse requires matching source, dependencies, tools, target and settings together with intact outputs. Stale or drifted inputs require rebuilding before launch.
 
 # Contract
 

@@ -8,7 +8,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Code App owns Browser Editor runtime. Local UI `/cs/<id>/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions.
+Code App owns Browser Editor runtime. Local UI `/cs/<id>/` and remote `cs-*` hosts open codespaces; Desktop/Env App use workspace-engine APIs to prepare/update versions. Setup is single-flight, and exact operation identities fence late progress, cancellation and transferred chunks.
 
 # Contract
 

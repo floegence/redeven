@@ -7,7 +7,7 @@ reviewed_at: "2026-11-04"
 ---
 # Summary
 
-Runtime owns public listeners, saved HTTPS identity and admission; Desktop presents explicit next-start settings. Signing failure retains only addresses covered by the prior valid leaf, reports certificate_refresh_failed and retries recovery.
+Runtime owns public listeners, saved HTTPS identity and admission; Desktop presents explicit next-start settings. Signing failure retains only addresses covered by the prior valid leaf, reports certificate_refresh_failed and retries recovery. Startup cannot create identity or fall back to HTTP.
 
 # Contract
 

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Env owns destinations/drafts/adapters; Floe owns layout/navigation/modal presence/focus. Retain work surfaces and usable narrow controls.
+Env owns destinations/drafts/adapters; Floe owns layout/navigation/modal presence/focus. Retain work surfaces and usable narrow controls. One global dialog retains the work surface and exact resource selection. Opening settings does not start a runtime, and resource Back actions preserve unsaved drafts.
 
 # Contract
 

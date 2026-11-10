@@ -7,7 +7,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-The market discovers passive evidence. Deployment requires exact originals acquired through Desktop or Runtime.
+The market discovers passive evidence. Deployment requires exact originals acquired through Desktop or Runtime. Discovery never grants deployment authority. Pinned source review verifies the exact selected files; unavailable or changed sources remain explicit, and no second template format or registry is introduced.
 
 # Contract
 

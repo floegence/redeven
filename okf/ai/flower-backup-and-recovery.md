@@ -7,7 +7,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls.
+Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls. Cleanup retires only verified unprotected automatic snapshots; unknown records and live conversations remain untouched.
 
 # Contract
 
@@ -20,6 +20,10 @@ No cleanup targets live conversations, uploads, read state, extension configurat
 Previously admitted durable replacements must finish and verify before opening another generation. A failed generation close fences recovery. Abandoned staging retires only after replacement completes.
 
 The diagnostic settings category retains actual runtime status, safe retry/stop, sanitized diagnostics and explicit orphan ownership review. Diagnostics omit conversations, credentials, database contents and uploads. There is no generic deletion API or backup-success claim.
+
+# Boundaries
+
+Cleanup is limited to verified, unprotected automatic snapshots. It does not target live conversations, uploads, read state, extension configuration or opaque upstream stores. Diagnostics do not certify a recoverable backup.
 
 # Evidence
 

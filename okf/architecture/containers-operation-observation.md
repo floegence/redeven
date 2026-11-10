@@ -7,7 +7,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Container operations bind exact engine/endpoint/resource. Public terminal taxonomy distinguishes storage, registry availability, rate limit, missing and denied; UI maps known codes to localized guidance with durable timeline.
+Container operations bind exact engine/endpoint/resource. Public terminal taxonomy distinguishes storage, registry availability, rate limit, missing and denied; UI maps known codes to localized guidance with durable timeline. Uncertain admission retains its exact request identity without replay.
 
 # Contract
 

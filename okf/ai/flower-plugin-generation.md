@@ -7,7 +7,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Flower authors through released ReDevPlugin CLI/SDK and version-matched guidance. Plugin Center owns authoring conversations; ordinary Flower keeps its tools/navigation. Canonical streaming, approvals and dispatch stay shared.
+Flower authors through released ReDevPlugin CLI/SDK and version-matched guidance. Plugin Center owns authoring conversations; ordinary Flower keeps its tools/navigation. Canonical streaming, approvals and dispatch stay shared. Preview publication uses verified build reports and retains the existing frame on failure.
 
 # Contract
 

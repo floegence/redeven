@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Redeven owns visibility/policy/prompts/approval UI; Floret owns invocation and neutral tools. Retired Todo remains readable but unavailable; [Goals](flower-goals.md) retains its own owner. File inspection shares current scope across modes.
+Redeven owns visibility/policy/prompts/approval UI; Floret owns invocation and neutral tools. Retired Todo remains readable but unavailable; [Goals](flower-goals.md) retains its own owner. File inspection shares current scope across modes. Typed validation precedes dispatch and never authorizes replay.
 
 # Contract
 

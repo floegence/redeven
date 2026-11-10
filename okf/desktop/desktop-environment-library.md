@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Welcome projects registration owners into stable Environment cards. Title/description/search/refresh/create lead; categories carry counts, cards Runtime/window state. Snapshot errors appear only when present, without empty reserved rows.
+Welcome projects registration owners into stable Environment cards. Title/description/search/refresh/create lead; categories carry counts, cards Runtime/window state. Snapshot errors appear only when present, without empty reserved rows. Current runtime health takes precedence over stale window reports.
 
 # Contract
 

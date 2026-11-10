@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Personal service templates combine an independently editable product definition with verified immutable upstream files. They preserve source provenance without mutating the source library or existing instances.
+Personal service templates combine an independently editable product definition with verified immutable upstream files. They preserve source provenance without mutating the source library or existing instances. Copies retain verified source provenance while keeping their own identity and editable definition.
 
 # Contract
 
@@ -16,6 +16,10 @@ Redeven owns personal definitions and their immutable base references; published
 Registry migration v7-to-v8 adds a foreign-keyed personal-template base reference. Definition, retained source version, reference and request receipt commit atomically. Replay reads the receipt even after the review expires. Original files, executable modes, notices/translations, icons, access defaults and runtime-file identity survive source-library update/deletion, copying a copy and restart. User names/descriptions override original display translations. The custom spec remains editable while immutable auxiliary source files are verified on every load; external tampering fails closed. Garbage collection protects personal references until their final owner is deleted.
 
 Interactive-desktop copies retain the exact audited runtime definition and capability. Only name/description are editable in their template editor, with a visible explanation and disabled runtime fields; instance settings remain the existing customization path. Edited images/scripts cannot inherit the reserved capability. Other Host, Container and Compose copies preserve undisplayed spec fields during form edits, including startup rules, multi-argument entrypoints and resource identities. Plain script Host templates do not require npm fields.
+
+# Boundaries
+
+Personal definitions remain independent of source libraries and existing instances. Copying preserves verified immutable files and provenance, never instance secrets or application data; published upstream formats and runtime policies remain authoritative.
 
 # Evidence
 

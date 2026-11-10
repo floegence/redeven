@@ -7,7 +7,7 @@ reviewed_at: "2026-11-08"
 ---
 # Summary
 
-Connection-local file/directory/page/thread chips retain ordered IDs/labels in memory until explicit Send. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission.
+Connection-local file/directory/page/thread chips retain ordered IDs/labels in memory until explicit Send. [Tool runtime](../ai/ai-tool-runtime.md#runtime) owns one-pass canonical MessageReference/context admission. Only explicit user actions admit references; changing pages adds no hidden context.
 
 # Contract
 

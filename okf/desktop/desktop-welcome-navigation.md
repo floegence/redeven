@@ -7,7 +7,7 @@ reviewed_at: "2026-11-05"
 ---
 # Summary
 
-Welcome navigation is local and immediate, independent of IPC/Runtime preparation. Each popup has one published Floe presence owner. Closing immediately revokes input/accessibility, freezes placement and retains DOM through exit.
+Welcome navigation is local and immediate, independent of IPC/Runtime preparation. Each popup has one published Floe presence owner. Closing immediately revokes input/accessibility, freezes placement and retains DOM through exit. Async health updates cannot replace the user-selected destination.
 
 # Contract
 

@@ -7,7 +7,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Initial loads occupy final geometry. Refresh retains successful same-resource content, including empty results, with stable item DOM/focus/expansion/scroll. Pagination feedback stays at the end.
+Initial loads occupy final geometry. Refresh retains successful same-resource content, including empty results, with stable item DOM/focus/expansion/scroll. Pagination feedback stays at the end. Resource identity fences late responses, while actionable failures preserve usable drafts and controls.
 
 # Contract
 

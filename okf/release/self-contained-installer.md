@@ -7,7 +7,7 @@ reviewed_at: "2026-11-01"
 ---
 # Summary
 
-Release produces CGO-free macOS/Linux amd64/arm64 self-contained installers, renders bootstrap from exact binary digests and signs SHA256SUMS. Receiver needs shell/HTTPS downloader/SHA256, not Go/Cosign/Python/OpenSSL/package manager.
+Release produces CGO-free macOS/Linux amd64/arm64 self-contained installers, renders bootstrap from exact binary digests and signs SHA256SUMS. Receiver needs shell/HTTPS downloader/SHA256, not Go/Cosign/Python/OpenSSL/package manager. Verification failures never execute an untrusted payload.
 
 # Contract
 
