@@ -43,7 +43,7 @@ export function PluginPinButton(props: {
     disabled={pending() || props.disabled}
     class={cn(
       'h-11 w-11 shrink-0 sm:h-8 sm:w-8',
-      props.pinned && 'bg-[var(--floe-state-selected)] text-primary',
+      props.pinned && 'text-primary',
       props.class,
     )}
     on:pointerdown={(event) => event.stopPropagation()}

@@ -24,7 +24,11 @@ const item: PluginInventoryItem = {
 };
 
 let dispose: (() => void) | undefined;
-afterEach(() => { dispose?.(); document.body.replaceChildren(); });
+afterEach(() => {
+  dispose?.();
+  document.body.replaceChildren();
+  document.documentElement.classList.remove('light', 'dark');
+});
 
 function mountLauncher(placement: PluginPinPlacement, mobile = false) {
   const host = document.createElement('div');
@@ -108,8 +112,13 @@ it.each([320, 390, 768])('keeps the mobile launcher uncluttered and context menu
   await page.screenshot({ path: '../../../.vitest-attachments/plugin-quick-pin-mobile-' + width + '.png' });
 });
 
-it.each([390, 1024, 1440])('keeps Plugin Center card and detail pin actions reachable at %ipx', async (width) => {
+it.each([
+  [390, 'light'], [390, 'dark'],
+  [1024, 'light'], [1024, 'dark'],
+  [1440, 'light'], [1440, 'dark'],
+] as const)('keeps Plugin Center pins unframed and reachable at %ipx in %s', async (width, theme) => {
   await page.viewport(width, 900);
+  document.documentElement.classList.add(theme);
   const host = document.createElement('div');
   host.style.height = '100vh';
   document.body.append(host);
@@ -120,16 +129,38 @@ it.each([390, 1024, 1440])('keeps Plugin Center card and detail pin actions reac
     onRefresh={() => undefined} onCommand={onCommand} activityPinnedInventoryKeys={pins()}
     onSetActivityPin={(key, pinned) => { setPins(pinned ? [key] : []); }}
   /></NotificationProvider>, host);
-  await page.getByRole('button', { name: 'Weather: Pin to Activity Bar', exact: true }).click();
   const card = document.querySelector<HTMLElement>('[data-plugin-directory-card]')!;
+  const cardPin = card.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
+  const expectUnframedPin = async (pin: HTMLButtonElement, pinned: boolean) => {
+    // Move the pointer away so transient hover feedback is not mistaken for state.
+    const away = pin.closest('[data-plugin-center-details]')?.querySelector('[data-plugin-center-detail-heading]')
+      ?? document.querySelector('[data-plugin-center-item]')!;
+    await page.elementLocator(away).hover();
+    await expect.poll(() => getComputedStyle(pin).backgroundColor).toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(pin).borderWidth).toBe('0px');
+    expect(getComputedStyle(pin).boxShadow).toBe('none');
+    expect(pin.getAttribute('aria-pressed')).toBe(String(pinned));
+    expect(getComputedStyle(pin.querySelector('svg')!).fill === 'none').toBe(!pinned);
+    expect(pin.getBoundingClientRect().width).toBeGreaterThanOrEqual(width < 640 ? 44 : 32);
+  };
+  await expectUnframedPin(cardPin, false);
+  await page.elementLocator(cardPin).click();
+  await expectUnframedPin(cardPin, true);
   expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+  await page.screenshot({ path: '../../../.vitest-attachments/plugin-quick-pin-card-' + width + '-' + theme + '.png' });
   await page.elementLocator(document.querySelector('[data-plugin-center-item]')!).click();
   const details = document.querySelector<HTMLElement>('[data-plugin-center-details]')!;
   const pin = details.querySelector<HTMLButtonElement>('[data-plugin-quick-pin]')!;
-  expect(pin.getAttribute('aria-pressed')).toBe('true');
+  await expectUnframedPin(pin, true);
+  await page.screenshot({ path: '../../../.vitest-attachments/plugin-quick-pin-detail-' + width + '-' + theme + '.png' });
   await page.elementLocator(pin).click();
+  await expectUnframedPin(pin, false);
   expect(pins()).toEqual([]);
   expect(onCommand).not.toHaveBeenCalled();
   expect(details.scrollWidth).toBeLessThanOrEqual(details.clientWidth);
-  await page.screenshot({ path: '../../../.vitest-attachments/plugin-quick-pin-center-' + width + '.png' });
+  // The shared Floe button keeps the normal keyboard focus and toggle behavior.
+  pin.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(pins()).toEqual([item.inventoryKey]);
+  expect(document.activeElement).toBe(pin);
 });
