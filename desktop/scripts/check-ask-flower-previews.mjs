@@ -246,10 +246,16 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
         return target && element.contains(target);
       }, marker);
       const references = (detail.current.items ?? []).flatMap(item => item.references ?? []);
-      assert.ok(references.some(reference => reference.text === facts), 'Canonical admitted reference exactly matches the preview');
+      if (sourceFile !== facts) assert.ok(references.some(reference => reference.text === facts), 'Canonical admitted reference exactly matches the preview');
       if (sourceFile) {
         assert.equal(references.length, sourceFile === facts ? 1 : 2, 'Only the selected file and explicit text enter canonical history');
-        assert.ok(references.some(reference => reference.kind === 'file' && reference.text === sourceFile), 'Canonical file identity matches the selected source');
+        const source = detail.current.items.find(item => item.references?.some(reference => reference.kind === 'file'));
+        const reference = source?.references.find(reference => reference.kind === 'file');
+        assert.ok(reference, 'Canonical history contains the source file');
+        assert.equal(reference.text, undefined, 'Public references keep resource locators behind authorized resolution');
+        const target = await api(`/_redeven_proxy/api/ai/threads/${threadID}/reference-open-target`, 'POST', { turn_id: source.turn_id, reference_id: reference.reference_id });
+        assert.equal(target.kind, 'file');
+        assert.equal(target.path, sourceFile, 'Authorized canonical reference resolves the exact source file');
         if (sourceFile !== facts) assert.ok(references.some(reference => reference.kind === 'text' && reference.text === facts && !reference.truncated), 'Canonical selection preserves whitespace without truncation');
       }
       assert.ok(!report.sends.some(previous => previous.threadID === threadID), 'Every Ask creates a new task');
@@ -423,7 +429,8 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     assert.ok((await card.innerText()).includes('reading.md'));
     await sendAndVerify('QUALIFY_ASK_FILE_TITLE', markdownPath, markdownPath);
     await fileWindow.locator('[data-floe-floating-window-control="close"]').click();
-    const standalone = new URL(startup.local_ui_url);
+    const standalone = new URL(page.url());
+    standalone.search = ''; standalone.hash = '';
     standalone.searchParams.set('window', 'file-preview'); standalone.searchParams.set('path', codePath);
     await page.goto(standalone.href);
     const standaloneEditor = page.locator('[data-file-preview-standalone] .monaco-editor');
