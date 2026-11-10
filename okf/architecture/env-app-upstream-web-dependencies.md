@@ -12,7 +12,7 @@ Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floet
 
 # Contract
 
-Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal, stationary contrasting ink and accessible labels for compact icon-only presentation. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.
+Floe Select sizes option popups to their content, bounded by the trigger width and viewport. Floe SegmentedControl owns the moving selected face, perceptible travel, production-safe CSS time units, interrupted reversal, stationary contrasting ink and one shared native/painted label slot for compact icon-only presentation. Host container queries own the breakpoint; products do not target decorative ink internals. [Asset recovery](../ui/page-loading-continuity.md#asset-recovery) uses Floe monitoring and per-view isolation.
 
 ## Mechanism
 

@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower conversation sidebar
 tags: [flower, sidebar, navigation, pins, interaction]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -33,7 +33,7 @@ Localized labels sit beside title within bounded progress width; updates require
 Stable .flower-thread-rows owns actual/skeleton inline size; movable cards are not size containers. Keyboard/search/overlay order matches. Both views have one globally ranked pin region spanning directories; never duplicate pins. Heading identifies pins without permanent decorative pin. Leading slot remains for work/unread; hover/focus/touch exposes pin. Retain row/focus, expand required batches; failure reverses only its own presentation and reconciles via stream/one command read.
 
 ## Directory view
-One title row has time/directory control, workspace and refresh; slow/settle selection and narrow icon labels remain visible. Groups contain unpinned rows; pin-only directories still support New. Fixed folder slot reflects aria-expanded without arrows/tree rails. Full-path search distinguishes names; counts/loading align. Six initial/six more/reset on collapse. One summary pass aggregates collapsed unpinned running/stopping waves, including unloaded batches, without header scans/polls/history. New uses directory without changing personal defaults.
+One title row has time/directory control, workspace and refresh. At header content widths up to18rem (22.5rem for coarse pointers), both modes show only centered icons; wider headers restore localized labels. The published SegmentedControl label slot controls native and selected ink together. Full accessible names/tooltips, focus, selection and44px touch targets remain. Thresholds reserve title space and follow the local container, never window width. Groups contain unpinned rows; pin-only directories still support New. Fixed folder slot reflects aria-expanded without arrows/tree rails. Full-path search distinguishes names; counts/loading align. Six initial/six more/reset on collapse. One summary pass aggregates collapsed unpinned running/stopping waves, including unloaded batches, without header scans/polls/history. New uses directory without changing personal defaults.
 
 Disclosure moves one measured edge through height/opacity using280ms Floe motion, correctly handling minified ms/s; early/middle frames travel and following groups stay below. Departing rows retain slots but immediately inert/hidden, then unmount. Reversal reuses height/opacity/identity; reorder motion is independent. Retain work/focus. Search/removals are immediate; mode change only brief opacity/no remount; reduced motion disables transitions.
 
@@ -50,4 +50,4 @@ Key rows by ThreadID/labels separately. Publish each summary batch once under re
 
 # Evidence
 
-FlowerThreadList.directory.browser.test.tsx covers native pointer/touch/cancel/disclosure/focus/pins/locales/persistence; FlowerSurface.mobile covers deferred reveal. check_flower_sidebar_responsiveness.mjs verifies production Electron motion/minification/reduced motion/resize/one save/content/no extra fetch. check_flower_directory_persistence.mjs verifies restart and ephemeral partitions. Context-action browser/Electron checks cover immediate menus/edit/exact copy; runners clean owned resources.
+FlowerThreadList.directory.browser.test.tsx covers native pointer/touch/cancel/disclosure/focus/pins/locales/persistence, both painted label layers, breakpoint resize and interrupted selection; FlowerSurface.mobile covers deferred reveal. check_flower_sidebar_responsiveness.mjs verifies production Electron compact native/painted labels, motion/minification/reduced motion/resize/one save/content/no extra fetch. check_flower_directory_persistence.mjs verifies restart and ephemeral partitions. Context-action browser/Electron checks cover immediate menus/edit/exact copy; runners clean owned resources.

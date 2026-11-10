@@ -19,6 +19,30 @@ const media = commands as unknown as { dragFlowerDirectoryWithMouse: () => Promi
 let scopeID = 0;
 afterEach(async () => { while (disposers.length) disposers.pop()?.(); document.body.replaceChildren(); document.documentElement.removeAttribute('style'); document.documentElement.removeAttribute('data-floe-shell-theme'); document.documentElement.classList.remove('light', 'dark'); await media.emulateMediaPreferences({ reducedMotion: 'no-preference' }); await media.emulateTouchInput(false); });
 async function frame() { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); }
+function expectViewSwitchPresentation(host: HTMLElement, compact: boolean) {
+  const rail = host.querySelector<HTMLElement>('.flower-thread-view-switch')!;
+  const buttons = [...rail.querySelectorAll<HTMLButtonElement>('button[role="radio"]')];
+  for (const button of buttons) {
+    const nativeLabel = button.querySelector<HTMLElement>('.floe-segmented-control__label')!;
+    const ink = [...rail.querySelectorAll<HTMLElement>('[data-segmented-label]')]
+      .find(node => node.textContent === button.getAttribute('aria-label'))!;
+    const paintedLabel = ink.querySelector<HTMLElement>('.floe-segmented-control__label')!;
+    expect(paintedLabel, 'selected ink exposes the shared label contract').not.toBeNull();
+    expect(getComputedStyle(nativeLabel).display === 'none').toBe(compact);
+    expect(getComputedStyle(paintedLabel).display === 'none').toBe(compact);
+    expect(button.title).toBe(button.getAttribute('aria-label'));
+    expect(ink.closest('[aria-hidden="true"]')).not.toBeNull();
+    const nativeIcon = button.querySelector('svg')!.getBoundingClientRect();
+    const paintedIcon = ink.querySelector('svg')!.getBoundingClientRect();
+    expect(Math.abs(nativeIcon.x - paintedIcon.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(nativeIcon.y - paintedIcon.y)).toBeLessThanOrEqual(1);
+    if (compact) {
+      const bounds = button.getBoundingClientRect();
+      expect(Math.abs((nativeIcon.left + nativeIcon.right - bounds.left - bounds.right) / 2)).toBeLessThanOrEqual(1);
+      expect(Math.abs((nativeIcon.top + nativeIcon.bottom - bounds.top - bounds.bottom) / 2)).toBeLessThanOrEqual(1);
+    }
+  }
+}
 function item(id: string, path: string, index: number, pinned = false): FlowerThreadListItem {
   return { thread_id: id, title: id, title_status: 'ready', model_id: 'model', working_dir: path, pinned, pin_rank: pinned ? 10 : 0,
     created_at_ms: 1000 - index, updated_at_ms: 1000 - index, preview: '', status: 'idle', source_label: '', target_labels: [],
@@ -911,10 +935,16 @@ describe('Flower directory navigation', () => {
       const localized = createLocalizedFlowerSurfaceCopy({ locale, t: (key, params) => i18n.t(key as EnvAppTranslationKey, params), tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params) }).threadList;
       const ui = mount(undefined, undefined, undefined, localized);
       const header = ui.host.querySelector<HTMLElement>('.flower-thread-list-header')!;
-      for (const width of [220, 272, 300, 380]) {
+      for (const width of [220, 272, 284, 300, 312, 313, 340, 380]) {
         ui.host.style.width = `${width}px`; await frame();
         const bounds = header.getBoundingClientRect();
-        expect(ui.host.querySelector('.flower-thread-list-heading')!.getBoundingClientRect().width, `${locale} ${width}`).toBeGreaterThan(24);
+        await frame();
+        for (const button of header.querySelectorAll<HTMLButtonElement>('button[role="radio"]')) {
+          button.click(); document.getAnimations().forEach(animation => animation.finish());
+          await frame(); await frame();
+          expectViewSwitchPresentation(ui.host, width <= 312);
+        }
+        expect(ui.host.querySelector('.flower-thread-list-heading')!.getBoundingClientRect().width, `${locale} ${width}`).toBeGreaterThanOrEqual(48);
         for (const button of header.querySelectorAll<HTMLButtonElement>('button')) {
           expect(button.getBoundingClientRect().right, `${locale} ${width}`).toBeLessThanOrEqual(bounds.right + 1);
           const label = button.querySelector<HTMLElement>('.floe-segmented-control__label');
@@ -927,7 +957,7 @@ describe('Flower directory navigation', () => {
       }
       disposers.pop()?.(); ui.host.remove();
     }
-  });
+  }, 15000);
 
   it.each([272, 300])('keeps inline controls usable by touch in a %ipx rail', async width => {
     await media.emulateTouchInput(true);
@@ -944,7 +974,53 @@ describe('Flower directory navigation', () => {
       if (index) expect(bounds.left).toBeGreaterThanOrEqual(buttons[index - 1].getBoundingClientRect().right);
     }
     for (const button of buttons.filter(button => button.getAttribute('role') === 'radio')) {
-      expect(button.title).toBe(button.getAttribute('aria-label'));
+      button.click(); document.getAnimations().forEach(animation => animation.finish());
+      await frame(); await frame();
+      expectViewSwitchPresentation(ui.host, true);
+    }
+  });
+
+  it.each(['light', 'dark'])('retains compact focus and painted icons through resize and reversal in %s mode', async mode => {
+    const ui = mount(undefined, undefined, `porcelain-${mode}`);
+    ui.host.style.transform = 'scale(.85)';
+    ui.host.style.transformOrigin = 'top left';
+    const buttons = [...ui.host.querySelectorAll<HTMLButtonElement>('button[role="radio"]')];
+    buttons[0].focus();
+    for (const width of [272, 312, 313, 380, 272]) {
+      ui.host.style.width = `${width}px`; await frame(); await frame();
+      expect(document.activeElement).toBe(buttons[0]);
+      const height = ui.host.querySelector('.flower-thread-list-header')!.getBoundingClientRect().height;
+      buttons[1].click();
+      document.getAnimations().forEach(animation => { animation.pause(); animation.currentTime = 140; });
+      expectViewSwitchPresentation(ui.host, width <= 312);
+      buttons[0].click();
+      document.getAnimations().forEach(animation => animation.finish());
+      await frame(); await frame();
+      expectViewSwitchPresentation(ui.host, width <= 312);
+      expect(ui.host.querySelector('.flower-thread-list-header')!.getBoundingClientRect().height).toBe(height);
+      expect(buttons[0].getAttribute('aria-checked')).toBe('true');
+    }
+    await page.screenshot({ element: ui.host, path: `__screenshots__/flower-compact-view-${mode}.png` });
+    await media.emulateMediaPreferences({ reducedMotion: 'reduce' });
+    buttons[1].focus(); await userEvent.keyboard(' '); await frame();
+    expect(buttons[1].getAttribute('aria-checked')).toBe('true');
+    expectViewSwitchPresentation(ui.host, true);
+    expect(document.getAnimations().filter(animation => animation.id.startsWith('floe-segmented-'))).toHaveLength(0);
+  });
+
+  it('keeps icon presentation and focus when text scale increases', async () => {
+    const ui = mount();
+    document.documentElement.style.fontSize = '20px';
+    const button = ui.host.querySelector<HTMLButtonElement>('button[role="radio"]')!;
+    button.focus();
+    for (const width of [272, 340, 380]) {
+      ui.host.style.width = `${width}px`; await frame(); await frame();
+      expectViewSwitchPresentation(ui.host, true);
+      expect(document.activeElement).toBe(button);
+      const header = ui.host.querySelector<HTMLElement>('.flower-thread-list-header')!;
+      for (const control of header.querySelectorAll('button')) {
+        expect(control.getBoundingClientRect().right).toBeLessThanOrEqual(header.getBoundingClientRect().right);
+      }
     }
   });
 

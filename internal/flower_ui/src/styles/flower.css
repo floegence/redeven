@@ -8062,8 +8062,10 @@ button.flower-composer-context-source:focus-visible,
 .flower-thread-view-switch { flex: 0 0 auto; min-width: 0; }
 .flower-thread-view-switch button { flex: 1 0 auto; min-width: 0; }
 /* Keep controls in the title row at narrow rail widths. Accessible option
- * names and native tooltips remain available when only their icons fit. */
-@container flower-thread-header (max-width: 260px) {
+ * names and native tooltips remain available when only their icons fit. Reserve
+ * enough title space before restoring localized labels; query the header, not
+ * the window, so resized desktop rails and embedded surfaces behave alike. */
+@container flower-thread-header (max-width: 18rem) {
   .flower-thread-view-switch .floe-segmented-control__label { display: none; }
 }
 .flower-thread-workspaces-button, .flower-directory-new {
@@ -8183,7 +8185,7 @@ button.flower-composer-context-source:focus-visible,
   .flower-workspace-thread-select { min-height: 44px; }
   .flower-thread-view-switch button { min-width: 44px; min-height: 44px; }
   .flower-thread-list-header .flower-thread-refresh-button { width: 44px; height: 44px; flex: 0 0 44px; }
-  @container flower-thread-header (max-width: 360px) {
+  @container flower-thread-header (max-width: 22.5rem) {
     .flower-thread-view-switch .floe-segmented-control__label { display: none; }
   }
 }

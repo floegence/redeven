@@ -4,6 +4,7 @@
 
 Current contracts and qualification outcomes live in their indexed concepts. Git preserves chronological changes; this log does not duplicate them.
 
+- 2026-11-09: Keep Flower view modes icon-only in compact headers through the published shared label contract; verify both painted layers, localization, resizing, focus and touch targets.
 - 2026-11-09: Unify Flower native reading-offset accounting across scroll/layout delivery, preserve momentum through offscreen range contraction, and require per-frame downward-wheel continuity for both transcript surfaces.
 
 - 2026-11-08: Unify callable names across providers, reject invalid/duplicate registrations, migrate product allowlists once, preserve historical presentation and signed tool exchanges, and adopt published Floret restart recovery.
