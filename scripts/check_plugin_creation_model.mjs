@@ -370,6 +370,23 @@ try {
   await page.locator('[data-plugin-draft-library]').getByRole('button', { name: 'Back to Plugin Center', exact: true }).click();
   await page.getByRole('tab', { name: /^Installed/ }).click();
   const installedCard = page.locator('[data-plugin-directory-card]').filter({ hasText: 'Focus Timer' });
+  const pin = installedCard.locator('[data-plugin-quick-pin]');
+  await expect(pin).toHaveAttribute('aria-pressed', 'false');
+  await pin.click();
+  await expect(pin).toHaveAttribute('aria-pressed', 'true');
+  await installedCard.locator('[data-plugin-center-item]').hover();
+  await expect.poll(() => pin.evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+  assert.deepEqual(await pin.evaluate(element => ({
+    border: getComputedStyle(element).borderWidth,
+    shadow: getComputedStyle(element).boxShadow,
+    filled: getComputedStyle(element.querySelector('svg')).fill !== 'none',
+  })), { border: '0px', shadow: 'none', filled: true });
+  await page.reload();
+  await expect(pin).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: path.join(reportRoot, 'installed-pinned-icon.png') });
+  await pin.click();
+  await expect(pin).toHaveAttribute('aria-pressed', 'false');
+  report.assertions.push('Installed plugin pin persists across reload and uses only a filled icon, without a resting button enclosure');
   await installedCard.getByRole('button', { name: 'Open', exact: true }).click();
   const reopenedFrame = page.frameLocator('iframe').last();
   await reopenedFrame.getByRole('button', { name: 'Begin focus', exact: true }).click();
