@@ -15,9 +15,10 @@ import { installReDevPluginRuntimeFixture } from '../../internal/envapp/ui_src/s
 
 const args = process.argv.slice(2);
 const argument = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
-const binary = argument('--binary');
+const bundleArgument = argument('--desktop-bundle');
+const binary = argument('--binary') ?? (bundleArgument ? path.join(bundleArgument, 'redeven') : undefined);
 const output = argument('--output');
-if (!binary || !output) throw new Error('Required: --binary <built runtime> --output <evidence directory>');
+if (!binary || !output) throw new Error('Required: --binary <built runtime> or --desktop-bundle <built Desktop bundle>, and --output <evidence directory>');
 const root = path.resolve(import.meta.dirname, '../..');
 const session = await createDesktopTestSession(import.meta.url, { timeoutMs: 240000 });
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -83,8 +84,10 @@ await session.run(async () => {
   execFileSync(path.join(root, 'scripts/check_desktop_electron_test_runtime.sh'), [path.join(root, 'desktop')], { stdio: 'inherit' });
   const state = await session.directory(await mkdtemp(path.join(os.homedir(), '.redeven-ask-preview-')));
   await session.target(path.resolve(binary), state);
-  await installReDevPluginRuntimeFixture(state);
-  await copyFile(binary, path.join(state, 'redeven'));
+  if (!bundleArgument) {
+    await installReDevPluginRuntimeFixture(state);
+    await copyFile(binary, path.join(state, 'redeven'));
+  }
   const directory = path.join(state, 'files');
   await mkdir(directory);
   proofPath = path.join(directory, 'preview-evidence.txt');
@@ -92,27 +95,87 @@ await session.run(async () => {
   const selectedCode = '  const selected = "quoted context";\n\treturn selected;';
   const codePath = path.join(directory, 'selection.ts');
   const markdownPath = path.join(directory, 'reading.md');
+  const modulePath = path.join(directory, 'go.mod');
+  const moduleBody = 'module example.test/preview\n\ngo 1.26\n\nrequire (\n' + Array.from({ length: 70 }, (_, index) => `\texample.test/dependency-${String(index + 1).padStart(2, '0')} v1.2.${index}\n`).join('') + ')\n';
+  await writeFile(modulePath, moduleBody);
   await writeFile(codePath, 'const unrelated = "outside selection";\n' + selectedCode + '\nconst tail = true;\n');
   await writeFile(markdownPath, '# Preview reading\n\nOnly this selected paragraph.\n\nDo not include the other paragraph.\n');
-  for (const file of [proofPath, codePath, markdownPath]) fixtureBodies.set(file, await readFile(file, 'utf8'));
-  const startupFile = path.join(state, 'startup.json');
-  const runtime = await session.spawn(path.join(state, 'redeven'), ['run', '--mode', 'desktop', '--state-root', path.join(state, 'state'),
-    '--local-ui-bind', '127.0.0.1:0', '--local-ui-protocol', 'http', '--presentation', 'machine', '--startup-report-file', startupFile],
-  { cwd: state, env: { ...process.env, GOWORK: 'off' }, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'service' });
-  let logs = '';
-  runtime.stdout.on('data', chunk => { logs += chunk; }); runtime.stderr.on('data', chunk => { logs += chunk; });
-  let startup;
-  for (let attempt = 0; attempt < 600; attempt++) {
-    try { const value = JSON.parse(await readFile(startupFile, 'utf8')); if (value.status === 'ready') { startup = value; break; } }
-    catch (error) { if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
-    if (runtime.exitCode !== null) throw new Error(logs);
-    await delay(50);
+  for (const file of [proofPath, codePath, markdownPath, modulePath]) fixtureBodies.set(file, await readFile(file, 'utf8'));
+  let logs = '', startup, app, page, api;
+  const bundle = bundleArgument;
+  if (bundle) {
+    const manifest = JSON.parse(await readFile(path.join(bundle, 'desktop-bundle-manifest.json'), 'utf8'));
+    assert.equal(path.resolve(binary), path.resolve(bundle, 'redeven'), 'Full Desktop must use the qualified bundle runtime');
+    const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+    assert.ok(commit.startsWith(manifest.commit), 'Acceptance bundle must match the source commit');
+    app = await session.launchElectron(_electron, {
+      executablePath: electron, cwd: state,
+      args: [path.join(root, 'desktop'), '--user-data-dir=' + path.join(state, 'profile')],
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, REDEVEN_STATE_ROOT: path.join(state, 'state'),
+        REDEVEN_DESKTOP_USER_DATA_ROOT: path.join(state, 'profile'), REDEVEN_DESKTOP_CACHE_ROOT: path.join(state, 'cache'), REDEVEN_DESKTOP_TEMP_ROOT: path.join(state, 'temp'),
+        REDEVEN_DESKTOP_AUTO_START_RUNTIME: '1', REDEVEN_DESKTOP_OPEN_DEVTOOLS: '0', REDEVEN_DESKTOP_LOCAL_UI_BIND: '127.0.0.1:0',
+        REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT: bundle, REDEVEN_DESKTOP_BUNDLE_VERSION: manifest.version, REDEVEN_DESKTOP_BUNDLE_COMMIT: manifest.commit },
+    });
+    const welcome = await app.firstWindow();
+    await welcome.waitForFunction(() => Boolean(window.redevenDesktopLanguage));
+    await welcome.evaluate(() => window.redevenDesktopLanguage.setPreference('en-US'));
+    await welcome.waitForFunction(async () => (await window.redevenDesktopSettings.requestRuntimeFlower({ method: 'GET', path: '/_redeven_proxy/api/ai/readiness' })).ok, undefined, { timeout: 60000 });
+    api = async (route, method = 'GET', body) => {
+      const result = await welcome.evaluate(request => window.redevenDesktopSettings.requestRuntimeFlower(request), { path: route, method, body });
+      assert.equal(result.ok, true, JSON.stringify(result)); return result.data;
+    };
+    await welcome.getByRole('button', { name: /^(Open|Show) window$/ }).first().click({ timeout: 60000 });
+    for (let attempt = 0; attempt < 600; attempt++) {
+      page = app.context().pages().find(candidate => candidate.url().includes('/_redeven_proxy/env/'));
+      if (page) break;
+      await delay(50);
+    }
+    assert.ok(page, 'Desktop opens its Env App');
+    await app.evaluate(({ BrowserWindow }, { url, output }) => {
+      const win = BrowserWindow.getAllWindows().find(win => win.webContents.getURL() === url);
+      win.setContentSize(1440, 960);
+      const capturePage = win.webContents.capturePage.bind(win.webContents);
+      global.captures = 0;
+      // Observe real native capture bytes without replacing product authorization or IPC.
+      win.webContents.capturePage = async (...args) => {
+        const image = await capturePage(...args);
+        global.captures++;
+        require('node:fs').writeFileSync(output, image.toPNG());
+        return image;
+      };
+    }, { url: page.url(), output: path.join(output, 'captured.png') });
+  } else {
+    const startupFile = path.join(state, 'startup.json');
+    const runtime = await session.spawn(path.join(state, 'redeven'), ['run', '--mode', 'desktop', '--state-root', path.join(state, 'state'),
+      '--local-ui-bind', '127.0.0.1:0', '--local-ui-protocol', 'http', '--presentation', 'machine', '--startup-report-file', startupFile],
+    { cwd: state, env: { ...process.env, GOWORK: 'off' }, stdio: ['ignore', 'pipe', 'pipe'] }, { kind: 'service' });
+    runtime.stdout.on('data', chunk => { logs += chunk; }); runtime.stderr.on('data', chunk => { logs += chunk; });
+    for (let attempt = 0; attempt < 600; attempt++) {
+      try { const value = JSON.parse(await readFile(startupFile, 'utf8')); if (value.status === 'ready') { startup = value; break; } }
+      catch (error) { if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
+      if (runtime.exitCode !== null) throw new Error(logs);
+      await delay(50);
+    }
+    assert.ok(startup, logs);
+    api = async (route, method = 'GET', body) => {
+      const response = await fetch(new URL(route, startup.local_ui_url), { method, headers: { 'Content-Type': 'application/json', Origin: new URL(startup.local_ui_url).origin }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      const result = await response.json(); assert.ok(response.ok && result.ok !== false, JSON.stringify(result)); return result.data ?? result;
+    };
+    await build({ stdin: { contents: "import { bootstrapDesktopShellBridge } from './desktop/src/preload/desktopShell'; bootstrapDesktopShellBridge();", resolveDir: root, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: path.join(state, 'preload.cjs') });
+    await build({ entryPoints: [path.join(root, 'desktop/src/main/manualScreenshot.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(state, 'capture.cjs') });
+    await writeFile(path.join(state, 'main.cjs'), `const { app, BrowserWindow, ipcMain } = require('electron');
+const { captureAuthorizedPage } = require('./capture.cjs');
+app.commandLine.appendSwitch('lang', 'en-US');
+app.whenReady().then(() => { const win = new BrowserWindow({ width: 1440, height: 960, useContentSize: true,
+webPreferences: { preload: ${JSON.stringify(path.join(state, 'preload.cjs'))}, contextIsolation: true, sandbox: true } });
+global.captures = 0; ipcMain.handle('redeven-desktop:manual-screenshot', async (event, input) => {
+ if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Wrong capture source');
+ global.captures++; const image = await captureAuthorizedPage(event.sender, { ...input, valid: () => event.sender === win.webContents });
+ require('fs').writeFileSync(${JSON.stringify(path.join(output, 'captured.png'))}, image.png); return image; });
+win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`);
+    app = await session.launchElectron(_electron, { executablePath: electron, args: [path.join(state, 'main.cjs'), `--user-data-dir=${state}/profile`], cwd: state, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
+    page = await app.firstWindow();
   }
-  assert.ok(startup, logs);
-  const api = async (route, method = 'GET', body) => {
-    const response = await fetch(new URL(route, startup.local_ui_url), { method, headers: { 'Content-Type': 'application/json', Origin: new URL(startup.local_ui_url).origin }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-    const result = await response.json(); assert.ok(response.ok && result.ok !== false, JSON.stringify(result)); return result.data ?? result;
-  };
   // Runtime HTTP readiness precedes the asynchronously prepared Flower host.
   // Observe readiness before configuring the isolated provider; never replay writes.
   let readiness;
@@ -125,21 +188,8 @@ await session.run(async () => {
   assert.equal(readiness.state, 'ready', JSON.stringify(readiness));
   await api('/_redeven_proxy/api/ai/provider_bundle', 'PUT', { model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Ask Flower qualification', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini', input_modalities: ['text', 'image'], context_window: 128000, max_output_tokens: 8192 }] }] }, provider_api_key_patches: [{ provider_id: 'fixture', api_key: 'qualification-only' }], web_search_provider_key_patches: [] });
   await api('/_redeven_proxy/api/ai/default_permission', 'PUT', { permission_type: 'readonly' });
-  await build({ stdin: { contents: "import { bootstrapDesktopShellBridge } from './desktop/src/preload/desktopShell'; bootstrapDesktopShellBridge();", resolveDir: root, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: path.join(state, 'preload.cjs') });
-  await build({ entryPoints: [path.join(root, 'desktop/src/main/manualScreenshot.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(state, 'capture.cjs') });
-  await writeFile(path.join(state, 'main.cjs'), `const { app, BrowserWindow, ipcMain } = require('electron');
-const { captureAuthorizedPage } = require('./capture.cjs');
-app.commandLine.appendSwitch('lang', 'en-US');
-app.whenReady().then(() => { const win = new BrowserWindow({ width: 1440, height: 960, useContentSize: true,
-webPreferences: { preload: ${JSON.stringify(path.join(state, 'preload.cjs'))}, contextIsolation: true, sandbox: true } });
-global.captures = 0; ipcMain.handle('redeven-desktop:manual-screenshot', async (event, input) => {
- if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Wrong capture source');
- global.captures++; const image = await captureAuthorizedPage(event.sender, { ...input, valid: () => event.sender === win.webContents });
- require('fs').writeFileSync(${JSON.stringify(path.join(output, 'captured.png'))}, image.png); return image; });
-win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`);
-  const app = await session.launchElectron(_electron, { executablePath: electron, args: [path.join(state, 'main.cjs'), `--user-data-dir=${state}/profile`], cwd: state, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
-  const page = await app.firstWindow(); page.setDefaultTimeout(15000);
-  const report = { passed: false, carriers: 'Electron with built Env App and real local runtime',
+  page.setDefaultTimeout(15000);
+  const report = { passed: false, carriers: bundle ? 'Full Desktop with published Floe and isolated bundled runtime' : 'Electron with built Env App and real local runtime',
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
     tree: execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: root, encoding: 'utf8' }).trim(),
     workingTreeClean: execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim() === '',
@@ -148,7 +198,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     previews: [], targets: [], sends: [], providerRequests };
   try {
     await page.addInitScript(() => localStorage.setItem('redeven_ui_language_preference', 'en-US'));
-    await page.goto(startup.local_ui_url);
+    if (!bundle) await page.goto(startup.local_ui_url);
     await page.getByRole('tab', { name: 'Activity', exact: true }).click();
     assert.equal(await page.getByRole('button', { name: 'Ask Flower', exact: true }).count(), 0, 'No extra Ask Flower header icon');
     report.extraHeaderAction = false;
@@ -157,14 +207,137 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     await page.getByRole('textbox', { name: 'Go to path', exact: true }).fill(directory);
     await page.getByRole('textbox', { name: 'Go to path', exact: true }).press('Enter');
     await page.getByText('preview-evidence.txt', { exact: true }).filter({ visible: true }).last().waitFor();
+
+    let card = page.locator('[data-floe-prompt-card]');
+    let preview = page.locator('.flower-context-preview-window');
+    let text = preview.locator('[data-flower-context-preview-text]');
+    const fileWindow = page.locator('.file-preview-floating-window').filter({ has: page.locator('.redeven-file-preview') });
+    const openFile = async name => {
+      await page.getByText(name, { exact: true }).filter({ visible: true }).last().dblclick();
+      await fileWindow.waitFor();
+    };
+    const askAt = async (target, position) => {
+      await target.click({ button: 'right', ...(position ? { position } : {}) });
+      const action = page.getByRole('menuitem', { name: 'Ask Flower', exact: true });
+      const actionBox = await action.boundingBox();
+      await page.mouse.move(actionBox.x + actionBox.width / 2, actionBox.y + actionBox.height / 2, { steps: 16 });
+      // Preserve a real press/release interval: instant automation clicks hide menu blur.
+      await action.click({ delay: 80 });
+      await card.waitFor();
+      assert.equal(await card.count(), 1, 'One menu action owns one prompt');
+      await card.locator('textarea').evaluate(async element => {
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const rect = element.getBoundingClientRect();
+        if (element !== document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)) throw new Error('Ask Flower is covered by its source window');
+        if (document.activeElement !== element) throw new Error('Ask Flower does not own typing focus');
+      });
+    };
+    const closeCard = async () => { await card.locator('.floe-prompt-card-close').click(); await card.waitFor({ state: 'hidden' }); };
+    const inspectSelection = async (selection, file) => {
+      const chips = card.locator('.flower-composer-context-source');
+      assert.equal(await chips.count(), 2, 'Only the file and explicit selection are attached');
+      await chips.nth(1).click(); await text.waitFor();
+      assert.equal(await text.textContent(), selection, 'Preview preserves the exact selected text');
+      await preview.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
+      await page.waitForFunction(() => document.querySelector('.flower-context-preview-window')?.getAttribute('data-floating-presence') === 'open');
+      await page.screenshot({ path: path.join(output, `selection-${path.basename(file)}.png`) });
+      await preview.locator('[data-floe-floating-window-control="close"]').click(); await preview.waitFor({ state: 'hidden' });
+      report.previews.push({ type: 'file-selection', file, selection, exact: true });
+    };
+    const sendAndVerify = async (marker, facts, sourceFile) => {
+      if (sourceFile) expectedFiles.set(marker, sourceFile);
+      expected.set(marker, facts);
+      const previous = new Set((await api('/_redeven_proxy/api/ai/threads?limit=100')).threads.map(thread => thread.thread_id));
+      await card.locator('textarea').fill(`${marker}: inspect the attached context and read ${sourceFile ?? proofPath}.`);
+      await card.locator('.floe-prompt-card-submit').click();
+      // The real renderer sends over the authenticated session, not page fetch.
+      let threadID;
+      for (let attempt = 0; attempt < 600; attempt++) {
+        assert.ok(!providerError, providerError);
+        const created = (await api('/_redeven_proxy/api/ai/threads?limit=100')).threads.filter(thread => !previous.has(thread.thread_id));
+        assert.ok(created.length <= 1, 'One click creates exactly one task');
+        if (created.length) { threadID = created[0].thread_id; break; }
+        await delay(50);
+      }
+      assert.ok(threadID, await card.innerText());
+      let detail;
+      for (let attempt = 0; attempt < 600; attempt++) {
+        assert.ok(!providerError, providerError);
+        detail = await api(`/_redeven_proxy/api/ai/threads/${threadID}`);
+        assert.notEqual(detail.current.last_outcome, 'failed', JSON.stringify(detail.current));
+        if (detail.current.activity === 'idle' && detail.current.last_outcome === 'completed') break;
+        await delay(50);
+      }
+      assert.equal(detail.current.last_outcome, 'completed');
+      await card.waitFor({ state: 'hidden' });
+      const answer = page.getByText(`ASK_FLOWER_COMPLETE_${marker}: context verified and fixture read successfully.`, { exact: true }).filter({ visible: true });
+      await answer.waitFor();
+      await page.waitForFunction(marker => {
+        const element = [...document.querySelectorAll('[data-flower-message-role="assistant"]')].find(node => node.textContent?.includes(`ASK_FLOWER_COMPLETE_${marker}:`));
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const target = document.elementFromPoint(Math.min(innerWidth - 1, rect.x + rect.width / 2), Math.min(innerHeight - 1, rect.y + rect.height / 2));
+        return target && element.contains(target);
+      }, marker);
+      const references = (detail.current.items ?? []).flatMap(item => item.references ?? []);
+      if (sourceFile !== facts) assert.ok(references.some(reference => reference.text === facts), 'Canonical admitted reference exactly matches the preview');
+      if (sourceFile) {
+        assert.equal(references.length, sourceFile === facts ? 1 : 2, 'Only the selected file and explicit text enter canonical history');
+        const source = detail.current.items.find(item => item.references?.some(reference => reference.kind === 'file'));
+        const reference = source?.references.find(reference => reference.kind === 'file');
+        assert.ok(reference, 'Canonical history contains the source file');
+        assert.equal(reference.text, undefined, 'Public references keep resource locators behind authorized resolution');
+        const target = await api(`/_redeven_proxy/api/ai/threads/${threadID}/reference-open-target`, 'POST', { turn_id: source.turn_id, reference_id: reference.reference_id });
+        assert.equal(target.kind, 'file');
+        assert.equal(target.path, sourceFile, 'Authorized canonical reference resolves the exact source file');
+        if (sourceFile !== facts) assert.ok(references.some(reference => reference.kind === 'text' && reference.text === facts && !reference.truncated), 'Canonical selection preserves whitespace without truncation');
+      }
+      assert.ok(!report.sends.some(previous => previous.threadID === threadID), 'Every Ask creates a new task');
+      report.sends.push({ marker, threadID, outcome: detail.current.last_outcome, previewEqualsSubmission: true, answerVisible: true, references: references.map(({ kind, label, text, truncated }) => ({ kind, label, text, truncated: !!truncated })) });
+      await page.screenshot({ path: path.join(output, `completed-${marker}.png`) });
+      console.log(`${marker}: exact references, real file read and visible completion passed`);
+    };
+    await openFile('go.mod');
+    const longEditor = fileWindow.locator('.monaco-editor');
+    await longEditor.locator('.view-line').filter({ hasText: 'dependency-01' }).click();
+    await longEditor.locator('.view-line').filter({ hasText: 'dependency-01' }).hover({ position: { x: 10, y: 9 } });
+    await page.mouse.wheel(0, 180);
+    await page.waitForFunction(() => ![...document.querySelectorAll('.file-preview-floating-window .view-lines .view-line')].some(element => element.textContent.includes('module')));
+    const startLine = longEditor.locator('.view-line').filter({ hasText: 'dependency-10' });
+    const endLine = longEditor.locator('.view-line').filter({ hasText: 'dependency-24' });
+    await startLine.waitFor(); await endLine.waitFor();
+    await startLine.hover({ position: { x: 1, y: 9 } });
+    const startBounds = await startLine.boundingBox();
+    const endBounds = await endLine.boundingBox();
+    await page.mouse.move(startBounds.x + 1, startBounds.y + 9);
+    await page.mouse.down();
+    await page.mouse.move(endBounds.x + 400, endBounds.y + 9, { steps: 36 });
+    await page.mouse.up();
+    assert.ok(await longEditor.locator('.selected-text').count(), 'Mouse drag selects multiple editor lines');
+    await page.screenshot({ path: path.join(output, 'drag-selection-before-menu.png') });
+    await askAt(startLine, { x: 100, y: 9 });
+    await page.screenshot({ path: path.join(output, 'drag-selection-card.png') });
+    const selectionChips = card.locator('.flower-composer-context-source');
+    assert.equal(await selectionChips.count(), 2);
+    await selectionChips.nth(1).click(); await text.waitFor();
+    const draggedText = await text.textContent();
+    const expectedSelection = Array.from({ length: 15 }, (_, index) => `\texample.test/dependency-${String(index + 10).padStart(2, '0')} v1.2.${index + 9}`).join('\n');
+    assert.equal(draggedText, expectedSelection, 'Dragged reference preserves exact lines and whitespace');
+    await preview.locator('[data-floe-floating-window-control="close"]').click();
+    await preview.waitFor({ state: 'hidden' });
+    report.previews.push({ type: 'dragged-file-selection', file: modulePath, selection: draggedText, exact: true });
+    await sendAndVerify('QUALIFY_ASK_DRAG_SELECTION', draggedText, modulePath);
+    await fileWindow.locator('[data-floe-floating-window-control="close"]').click();
+    await fileWindow.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
+    await page.locator('#redeven-activity-flower-product[data-presentation="collapsed"]').waitFor({ state: 'attached' });
+    report.firstPreview = { normalPointerPressMs: 80, exactDraggedSelection: true, cardHitTested: true, typingFocus: true };
     await page.getByRole('textbox', { name: 'Filter files', exact: true }).click({ button: 'right' });
-    await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
-    const card = page.locator('[data-floe-prompt-card]'); await card.waitFor();
+    await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click({ delay: 80 });
+    await card.waitFor();
     await card.locator('textarea').fill('Inspect this file browser context');
     assert.equal(await app.evaluate(() => global.captures), 0);
     await card.locator('.flower-composer-context-source').first().click();
-    const preview = page.locator('.flower-context-preview-window');
-    const text = preview.locator('[data-flower-context-preview-text]');
     await text.waitFor();
     const context = await text.textContent();
     assert.ok(context.includes('File Browser (files)'));
@@ -220,58 +393,6 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     await page.screenshot({ path: path.join(output, 'image-reopened.png') });
     await preview.locator('[data-floe-floating-window-control="close"]').click();
     await preview.waitFor({ state: 'hidden' });
-    const sendAndVerify = async (marker, facts, sourceFile) => {
-      if (sourceFile) expectedFiles.set(marker, sourceFile);
-      expected.set(marker, facts);
-      const previous = new Set((await api('/_redeven_proxy/api/ai/threads?limit=100')).threads.map(thread => thread.thread_id));
-      await card.locator('textarea').fill(`${marker}: inspect the attached context and read ${sourceFile ?? proofPath}.`);
-      await card.locator('.floe-prompt-card-submit').click();
-      // The real renderer sends over the authenticated session, not page fetch.
-      let threadID;
-      for (let attempt = 0; attempt < 600; attempt++) {
-        assert.ok(!providerError, providerError);
-        const created = (await api('/_redeven_proxy/api/ai/threads?limit=100')).threads.filter(thread => !previous.has(thread.thread_id));
-        assert.ok(created.length <= 1, 'One click creates exactly one task');
-        if (created.length) { threadID = created[0].thread_id; break; }
-        await delay(50);
-      }
-      assert.ok(threadID, await card.innerText());
-      let detail;
-      for (let attempt = 0; attempt < 600; attempt++) {
-        assert.ok(!providerError, providerError);
-        detail = await api(`/_redeven_proxy/api/ai/threads/${threadID}`);
-        assert.notEqual(detail.current.last_outcome, 'failed', JSON.stringify(detail.current));
-        if (detail.current.activity === 'idle' && detail.current.last_outcome === 'completed') break;
-        await delay(50);
-      }
-      assert.equal(detail.current.last_outcome, 'completed');
-      await card.waitFor({ state: 'hidden' });
-      const answer = page.getByText(`ASK_FLOWER_COMPLETE_${marker}: context verified and fixture read successfully.`, { exact: true }).filter({ visible: true });
-      await answer.waitFor();
-      await page.waitForFunction(marker => {
-        const element = [...document.querySelectorAll('[data-flower-message-role="assistant"]')].find(node => node.textContent?.includes(`ASK_FLOWER_COMPLETE_${marker}:`));
-        if (!element) return false;
-        const rect = element.getBoundingClientRect();
-        const target = document.elementFromPoint(Math.min(innerWidth - 1, rect.x + rect.width / 2), Math.min(innerHeight - 1, rect.y + rect.height / 2));
-        return target && element.contains(target);
-      }, marker);
-      const references = (detail.current.items ?? []).flatMap(item => item.references ?? []);
-      if (sourceFile !== facts) assert.ok(references.some(reference => reference.text === facts), 'Canonical admitted reference exactly matches the preview');
-      if (sourceFile) {
-        assert.equal(references.length, sourceFile === facts ? 1 : 2, 'Only the selected file and explicit text enter canonical history');
-        const source = detail.current.items.find(item => item.references?.some(reference => reference.kind === 'file'));
-        const reference = source?.references.find(reference => reference.kind === 'file');
-        assert.ok(reference, 'Canonical history contains the source file');
-        assert.equal(reference.text, undefined, 'Public references keep resource locators behind authorized resolution');
-        const target = await api(`/_redeven_proxy/api/ai/threads/${threadID}/reference-open-target`, 'POST', { turn_id: source.turn_id, reference_id: reference.reference_id });
-        assert.equal(target.kind, 'file');
-        assert.equal(target.path, sourceFile, 'Authorized canonical reference resolves the exact source file');
-        if (sourceFile !== facts) assert.ok(references.some(reference => reference.kind === 'text' && reference.text === facts && !reference.truncated), 'Canonical selection preserves whitespace without truncation');
-      }
-      assert.ok(!report.sends.some(previous => previous.threadID === threadID), 'Every Ask creates a new task');
-      report.sends.push({ marker, threadID, outcome: detail.current.last_outcome, previewEqualsSubmission: true, answerVisible: true, references: references.map(({ kind, label, text, truncated }) => ({ kind, label, text, truncated: !!truncated })) });
-      await page.screenshot({ path: path.join(output, `completed-${marker}.png`) });
-    };
     await sendAndVerify('QUALIFY_ASK_IMAGE', context);
     const rail = page.locator('[data-floe-shell-slot="activity-bar"]');
     const navigation = identity => rail.locator(`[data-floe-rail-icon="${identity}"]`).locator('xpath=ancestor::button[1]');
@@ -295,7 +416,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       assert.ok((await slot.boundingBox()).width <= 14);
       assert.ok((await slot.locator('svg').boundingBox()).height <= 14);
       if (identity === 'files') await page.screenshot({ path: path.join(output, 'compact-context-menu.png') });
-      await action.click(); await card.waitFor();
+      await action.click({ delay: 80 }); await card.waitFor();
       if (identity === 'flower') await card.locator('textarea').fill('Keep this question across targets');
       assert.equal(await card.locator('textarea').inputValue(), 'Keep this question across targets');
       const chip = card.locator('.flower-composer-context-source').first();
@@ -347,7 +468,11 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     };
     const openFromMessage = async () => {
       await product.locator('[data-flower-message-role="user"]').last().click({ button: 'right' });
-      await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+      const action = page.getByRole('menuitem', { name: 'Ask Flower', exact: true });
+      const actionBox = await action.boundingBox();
+      await page.mouse.move(actionBox.x + actionBox.width / 2, actionBox.y + actionBox.height / 2, { steps: 16 });
+      // Preserve a real press/release interval: instant automation clicks hide menu blur.
+      await action.click({ delay: 80 });
       await card.waitFor();
       await assertOriginalPage();
     };
@@ -379,36 +504,6 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     report.flowerPage = { originalThreadID, newThreadID: report.sends.at(-1).threadID, pageRetained: true, draftRetained: true, contextPreviewed: true, dismissals: ['close', 'escape'], newTaskAnswerVisible: true };
     assert.equal(await app.evaluate(() => global.captures), 1);
     await navigation('files').click();
-    const fileWindow = page.locator('.file-preview-floating-window').filter({ has: page.locator('.redeven-file-preview') });
-    const openFile = async name => {
-      await page.getByText(name, { exact: true }).filter({ visible: true }).last().dblclick();
-      await fileWindow.waitFor();
-    };
-    const askAt = async (target, position) => {
-      await target.click({ button: 'right', ...(position ? { position } : {}) });
-      // Monaco arms pointer selection after its native menu appears.
-      await page.waitForTimeout(120);
-      await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
-      await card.waitFor();
-      await card.locator('textarea').evaluate(async element => {
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        const rect = element.getBoundingClientRect();
-        if (element !== document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)) throw new Error('Ask Flower is covered by its source window');
-        if (document.activeElement !== element) throw new Error('Ask Flower does not own typing focus');
-      });
-    };
-    const closeCard = async () => { await card.locator('.floe-prompt-card-close').click(); await card.waitFor({ state: 'hidden' }); };
-    const inspectSelection = async (selection, file) => {
-      const chips = card.locator('.flower-composer-context-source');
-      assert.equal(await chips.count(), 2, 'Only the file and explicit selection are attached');
-      await chips.nth(1).click(); await text.waitFor();
-      assert.equal(await text.textContent(), selection, 'Preview preserves the exact selected text');
-      await preview.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
-      await page.waitForFunction(() => document.querySelector('.flower-context-preview-window')?.getAttribute('data-floating-presence') === 'open');
-      await page.screenshot({ path: path.join(output, `selection-${path.basename(file)}.png`) });
-      await preview.locator('[data-floe-floating-window-control="close"]').click(); await preview.waitFor({ state: 'hidden' });
-      report.previews.push({ type: 'file-selection', file, selection, exact: true });
-    };
     await openFile('selection.ts');
     const editor = fileWindow.locator('.monaco-editor');
     await editor.locator('.view-lines').click();
@@ -439,14 +534,39 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     assert.ok((await card.innerText()).includes('reading.md'));
     await sendAndVerify('QUALIFY_ASK_FILE_TITLE', markdownPath, markdownPath);
     await fileWindow.locator('[data-floe-floating-window-control="close"]').click();
-    const standalone = new URL(page.url());
-    standalone.search = ''; standalone.hash = '';
-    standalone.searchParams.set('window', 'file-preview'); standalone.searchParams.set('path', codePath);
-    await page.goto(standalone.href);
+    if (bundle) {
+      await openFile('selection.ts');
+      await fileWindow.getByRole('button', { name: 'More file actions', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Open in separate window', exact: true }).click();
+      const parent = page;
+      for (let attempt = 0; attempt < 600; attempt++) {
+        const child = app.context().pages().find(candidate => candidate !== parent && new URL(candidate.url()).searchParams.get('window') === 'file-preview');
+        if (child) { page = child; break; }
+        await delay(50);
+      }
+      assert.notEqual(page, parent, 'Desktop opens a real independent native preview');
+      page.setDefaultTimeout(15000);
+      await page.bringToFront();
+      card = page.locator('[data-floe-prompt-card]');
+      preview = page.locator('.flower-context-preview-window');
+      text = preview.locator('[data-flower-context-preview-text]');
+      report.nativeStandalone = true;
+    } else {
+      const standalone = new URL(page.url());
+      standalone.search = ''; standalone.hash = '';
+      standalone.searchParams.set('window', 'file-preview'); standalone.searchParams.set('path', codePath);
+      await page.goto(standalone.href);
+    }
     const standaloneEditor = page.locator('[data-file-preview-standalone] .monaco-editor');
     await standaloneEditor.locator('.view-lines').click(); await page.keyboard.press('ControlOrMeta+a');
     const allCode = await readFile(codePath, 'utf8');
     await askAt(standaloneEditor.locator('.view-line').first(), { x: 100, y: 9 });
+    if (bundle) {
+      assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getFocusedWindow()?.webContents.getURL()), page.url(), 'The native preview retains typing focus');
+      for (const other of app.context().pages().filter(candidate => candidate !== page)) {
+        assert.equal(await other.locator('[data-floe-prompt-card]').count(), 0, 'The prompt opens only in its source window');
+      }
+    }
     await inspectSelection(allCode, codePath);
     await sendAndVerify('QUALIFY_ASK_STANDALONE', allCode, codePath);
     await askAt(page.locator('[data-file-preview-standalone] header'));
@@ -456,6 +576,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
   } catch (error) {
     report.error = error.stack ?? String(error); report.providerError = providerError;
     await page.screenshot({ path: path.join(output, 'failure.png') });
+    await writeFile(path.join(output, 'failure-dom.html'), await page.content());
     throw error;
   } finally {
     await session.writeEvidence(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
