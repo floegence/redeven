@@ -802,7 +802,7 @@ describe('completed turn process disclosure', () => {
     trigger.click();
     await waitFor(() => Boolean(document.querySelector('.flower-turn-error-dialog [role="alert"]')));
     expect(loadTurnError).toHaveBeenCalledTimes(2);
-    const retry = Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-turn-error-dialog button')).find(button => button.textContent === copy.chat.syncResync)!;
+    const retry = Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-turn-error-dialog button')).find(button => button.textContent === copy.taskFiles.retry)!;
     retry.click();
     await waitFor(() => document.querySelector('.flower-turn-error-detail')?.textContent === 'retained diagnostic');
     expect(loadTurnError).toHaveBeenCalledTimes(3);

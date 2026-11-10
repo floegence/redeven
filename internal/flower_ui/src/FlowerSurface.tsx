@@ -8819,7 +8819,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const historicalRunError = (threadID: string, turnID: string, runID: string) => <Show when={props.adapter.loadTurnError}><FlowerTurnError
     load={signal => props.adapter.loadTurnError!(threadID, turnID, runID, signal)} summary={presentRunError}
-    loadingLabel={copy().chat.history.loading} failedLabel={copy().chat.history.failed} retryLabel={copy().chat.syncResync}
+    loadingLabel={copy().chat.history.loading} failedLabel={copy().chat.history.failed} retryLabel={copy().taskFiles.retry}
     detailsLabel={copy().chat.runErrorDetails} copyLabel={copy().chat.runErrorCopyDetails} copiedLabel={copy().chat.messageCopied}
     closeLabel={copy().computer.close} onCopyError={cause => notifyThreadActionError(getErrorMessage(cause))} /></Show>;
   const runErrorNotice = (error: FlowerThreadSnapshot['error'], targetThread: Accessor<FlowerThreadSnapshot | null | undefined>) => {
