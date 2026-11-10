@@ -110,7 +110,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@floegence/floe-webapp-core": "0.101.14",
+    "@floegence/floe-webapp-core": "0.101.15",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/iosevka": "^5.2.5",
     "@silurus/ooxml": "0.89.7",
@@ -143,7 +143,7 @@
     "vitest": "^4.1.12"
   },
   "dependencies": {
-    "@floegence/floe-webapp-boot": "0.101.14",
+    "@floegence/floe-webapp-boot": "0.101.15",
     "@floegence/flowersec-core": "5.12.0",
     "@floegence/redeven-service-templates": "https://github.com/floegence/redeven-service-templates/releases/download/v0.8.2/floegence-redeven-service-templates-0.8.2.tgz",
     "builder-util-runtime": "^9.7.0",

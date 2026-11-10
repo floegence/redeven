@@ -702,7 +702,7 @@
               "protocol",
               "ui"
             ],
-            "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.14, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.",
+            "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.15, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.",
             "section_count": 3
           },
           {
@@ -10541,7 +10541,7 @@
         "type": "Frontend Contract"
       },
       "body_length": 3768,
-      "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.14, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.",
+      "summary": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.15, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.",
       "sections": [
         {
           "id": "contract",
@@ -10577,7 +10577,7 @@
           "description": "Tests."
         }
       ],
-      "snippet": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.14, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Flo",
+      "snippet": "Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.15, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Flo",
       "links": [
         {
           "label": "Flower citations",
@@ -24759,5 +24759,5 @@
       ]
     }
   ],
-  "source_sha256": "e0eb52dbccf10f16f5a46fa3f2092e8fd04769194743d24de66b4f08e9a72791"
+  "source_sha256": "70e899e7d3cd84660309e01b423039f4df5f210f5e63d7d491b7230b3c7b06cb"
 }

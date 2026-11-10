@@ -9,7 +9,9 @@ export async function qualifyFlowerSidebarMotion({ page, session, output, versio
     for (const name of ['Time', 'Directory']) {
       await page.getByRole('radio', { name, exact: true }).click();
       await page.evaluate(async () => {
-        document.getAnimations().forEach(animation => animation.finish());
+        document.querySelector('.flower-thread-view-switch').getAnimations({ subtree: true })
+          .filter(animation => animation.id.startsWith('floe-segmented-'))
+          .forEach(animation => animation.finish());
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       });
       const options = await page.evaluate(() => {

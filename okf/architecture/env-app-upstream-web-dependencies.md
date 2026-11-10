@@ -8,7 +8,7 @@ reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.14, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.
+Env App adapts published Floe UI/runtime/protocol, FloeBrowser projection, Floeterm terminal-web and Flowersec helpers. Pins: Floe Boot/Core/Protocol v0.101.15, FloeBrowser v0.1.28, Floeterm terminal-web v0.20.0, Flowersec Core v5.12.0. Floeterm supplies Presentation/session exports.
 
 # Contract
 

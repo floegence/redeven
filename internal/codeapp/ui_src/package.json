@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@floegence/floe-webapp-boot": "0.101.14",
+    "@floegence/floe-webapp-boot": "0.101.15",
     "@floegence/flowersec-core": "5.12.0"
   },
   "overrides": {
