@@ -113,6 +113,16 @@ await session.run(async () => {
     const response = await fetch(new URL(route, startup.local_ui_url), { method, headers: { 'Content-Type': 'application/json', Origin: new URL(startup.local_ui_url).origin }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const result = await response.json(); assert.ok(response.ok && result.ok !== false, JSON.stringify(result)); return result.data ?? result;
   };
+  // Runtime HTTP readiness precedes the asynchronously prepared Flower host.
+  // Observe readiness before configuring the isolated provider; never replay writes.
+  let readiness;
+  for (let attempt = 0; attempt < 600; attempt++) {
+    readiness = await api('/_redeven_proxy/api/ai/readiness');
+    if (readiness.state === 'ready') break;
+    assert.ok(!['blocked', 'unavailable', 'stopped'].includes(readiness.state), JSON.stringify(readiness));
+    await delay(50);
+  }
+  assert.equal(readiness.state, 'ready', JSON.stringify(readiness));
   await api('/_redeven_proxy/api/ai/provider_bundle', 'PUT', { model_profile: { current_model_id: 'fixture/gpt-5-mini', providers: [{ id: 'fixture', name: 'Ask Flower qualification', type: 'openai', base_url: `http://127.0.0.1:${provider.address().port}/v1`, models: [{ model_name: 'gpt-5-mini', input_modalities: ['text', 'image'], context_window: 128000, max_output_tokens: 8192 }] }] }, provider_api_key_patches: [{ provider_id: 'fixture', api_key: 'qualification-only' }], web_search_provider_key_patches: [] });
   await api('/_redeven_proxy/api/ai/default_permission', 'PUT', { permission_type: 'readonly' });
   await build({ stdin: { contents: "import { bootstrapDesktopShellBridge } from './desktop/src/preload/desktopShell'; bootstrapDesktopShellBridge();", resolveDir: root, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: path.join(state, 'preload.cjs') });
