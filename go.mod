@@ -13,7 +13,7 @@ require (
 	github.com/floegence/floret/v7 v7.111.3
 	github.com/floegence/flowersec/flowersec-go/v5 v5.12.0
 	github.com/floegence/redeven-service-templates v0.8.2
-	github.com/floegence/redevplugin/v3 v3.25.0
+	github.com/floegence/redevplugin/v3 v3.25.1
 	github.com/go-openapi/runtime v0.33.3
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/jsonschema-go v0.4.3
