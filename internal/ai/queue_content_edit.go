@@ -203,25 +203,35 @@ func (s *Service) editQueuedContent(ctx context.Context, meta *session.Meta, thr
 	if original == nil || queuedInputFingerprint(*original) != content.ExpectedInputFingerprint {
 		return flruntime.ThreadView{}, flruntime.ErrRequestConflict
 	}
-	retained, _, err := queuedEditAttachmentIDs(*original, content)
+	replacement, err := s.prepareEditedInput(ctx, meta, threadID, settings.ModelID, *original, content, req.ClientRequestID)
 	if err != nil {
 		return flruntime.ThreadView{}, err
+	}
+	return editor.EditQueued(ctx, flruntime.EditQueuedInput{ThreadID: identity.ThreadID(threadID), QueueItemID: queueID, ExpectedInput: original, Input: &replacement, RequestKey: key})
+}
+
+// prepareEditedInput shares retained-resource validation and new upload admission
+// between pending-input editing and canonical latest-message revisions.
+func (s *Service) prepareEditedInput(ctx context.Context, meta *session.Meta, threadID, modelID string, original flruntime.UserInput, content EditQueuedContent, requestID string) (flruntime.UserInput, error) {
+	retained, _, err := queuedEditAttachmentIDs(original, content)
+	if err != nil {
+		return flruntime.UserInput{}, err
 	}
 	if err := s.authorizeThreadReferences(ctx, meta, content.ContextAction); err != nil {
-		return flruntime.ThreadView{}, err
+		return flruntime.UserInput{}, err
 	}
-	refs, contexts, err := s.queuedEditReferences(ctx, meta, *original, content, req.ClientRequestID)
+	refs, contexts, err := s.queuedEditReferences(ctx, meta, original, content, requestID)
 	if err != nil {
-		return flruntime.ThreadView{}, err
+		return flruntime.UserInput{}, err
 	}
-	prepared, input, err := s.prepareUserTurnForTarget(ctx, meta, meta.EndpointID, threadID, settings.ModelID, RunInput{Text: content.Text, Attachments: content.Attachments, ContextAction: content.ContextAction}, content.StagingScopeID, content.StagingCapability)
+	prepared, input, err := s.prepareUserTurnForTarget(ctx, meta, meta.EndpointID, threadID, modelID, RunInput{Text: content.Text, Attachments: content.Attachments, ContextAction: content.ContextAction}, content.StagingScopeID, content.StagingCapability)
 	if err != nil {
-		return flruntime.ThreadView{}, err
+		return flruntime.UserInput{}, err
 	}
 	// Validate retained and new descriptors together before claiming any upload.
 	capability := prepared.AttachmentClaimPolicy
 	if len(retained)+len(input.Attachments) > capability.MaxCount {
-		return flruntime.ThreadView{}, errors.New("attachment count exceeds turn limit")
+		return flruntime.UserInput{}, errors.New("attachment count exceeds turn limit")
 	}
 	var bytes int64
 	for _, attachment := range retained {
@@ -230,26 +240,26 @@ func (s *Service) editQueuedContent(ctx context.Context, meta *session.Meta, thr
 	for _, attachment := range input.Attachments {
 		record, err := s.threadsDB.GetUpload(ctx, meta.EndpointID, attachment.AttachmentID)
 		if err != nil {
-			return flruntime.ThreadView{}, err
+			return flruntime.UserInput{}, err
 		}
 		bytes += record.SizeBytes
 	}
 	if bytes > capability.MaxTurnBytes {
-		return flruntime.ThreadView{}, errors.New("attachment bytes exceed turn limit")
+		return flruntime.UserInput{}, errors.New("attachment bytes exceed turn limit")
 	}
 	if len(prepared.UploadIDs) > 0 {
 		if prepared.StagingScope == nil {
-			return flruntime.ThreadView{}, errors.New("new queue attachments require a staging scope")
+			return flruntime.UserInput{}, errors.New("new queue attachments require a staging scope")
 		}
 		if err := s.threadsDB.ClaimStagedUploadsToThread(ctx, meta.EndpointID, threadID, prepared.UploadIDs, capability, *prepared.StagingScope, true); err != nil {
-			return flruntime.ThreadView{}, err
+			return flruntime.UserInput{}, err
 		}
 	}
 	replacement, err := floretTurnInputWithUploadLoader(ctx, input, refs, func(ctx context.Context, uploadID string) (*threadstore.UploadRecord, error) {
 		return s.threadsDB.GetThreadOwnedUpload(ctx, meta.EndpointID, threadID, uploadID)
 	})
 	if err != nil {
-		return flruntime.ThreadView{}, err
+		return flruntime.UserInput{}, err
 	}
 	replacement.Attachments = append(retained, replacement.Attachments...)
 	replacement.Context = contexts
@@ -258,7 +268,7 @@ func (s *Service) editQueuedContent(ctx context.Context, meta *session.Meta, thr
 		snapshot.Sections = append([]flruntime.ModelContextSection(nil), snapshot.Sections...)
 		replacement.ModelContextSnapshot = &snapshot
 	}
-	return editor.EditQueued(ctx, flruntime.EditQueuedInput{ThreadID: identity.ThreadID(threadID), QueueItemID: queueID, ExpectedInput: original, Input: &replacement, RequestKey: key})
+	return replacement, nil
 }
 
 // Source context indices are canonical host facts. Older captured snapshots

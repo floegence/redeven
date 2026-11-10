@@ -1664,6 +1664,8 @@ func aiThreadActionHTTPStatus(err error) int {
 	switch {
 	case err == nil:
 		return http.StatusOK
+	case errors.Is(err, ai.ErrMessageEditUnconfirmed):
+		return http.StatusServiceUnavailable
 	case errors.Is(err, sql.ErrNoRows):
 		return http.StatusNotFound
 	case errors.Is(err, ai.ErrPluginWorkspaceUnavailable),
@@ -6277,6 +6279,50 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				if err == nil {
 					data, err = aiSvc.MarshalFlowerHistoryCurrent(r.Context(), meta, view.ThreadID.String())
 				}
+			}
+			if err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: data})
+			return
+
+		case action == "message-edit" && len(parts) == 2 && (r.Method == http.MethodGet || r.Method == http.MethodPost):
+			query := r.URL.Query()
+			if len(query) > 0 {
+				keys := query["revision_request_key"]
+				if r.Method != http.MethodGet || len(query) != 1 || len(keys) != 1 || strings.TrimSpace(keys[0]) == "" || len(keys[0]) > 512 {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid message edit query"})
+					return
+				}
+			}
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok || !g.requireAIService(w, aiSvc) {
+				return
+			}
+			var data any
+			var err error
+			if r.Method == http.MethodGet {
+				if key := strings.TrimSpace(r.URL.Query().Get("revision_request_key")); key != "" {
+					data, err = aiSvc.GetMessageEditHistory(r.Context(), meta, threadID, key)
+				} else {
+					data, err = aiSvc.GetMessageEditDraft(r.Context(), meta, threadID)
+				}
+			} else {
+				var body ai.EditMessageRequest
+				dec := json.NewDecoder(r.Body)
+				dec.DisallowUnknownFields()
+				if dec.Decode(&body) != nil || dec.Decode(&struct{}{}) != io.EOF {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+					return
+				}
+				scope, capability, headerErr := optionalUploadStagingHeaders(r)
+				if headerErr != nil || strings.TrimSpace(body.Content.StagingScopeID) != scope {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "upload staging scope mismatch"})
+					return
+				}
+				body.Content.StagingCapability = capability
+				data, err = aiSvc.EditLastUserMessage(r.Context(), meta, threadID, body)
 			}
 			if err != nil {
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})

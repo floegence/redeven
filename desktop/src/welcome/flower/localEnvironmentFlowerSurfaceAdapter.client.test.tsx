@@ -2081,3 +2081,16 @@ it.each([false, true])('keeps admitted browser bytes bound to their runtime afte
     await expect(adapter.computerManagement!.installBrowser!({ action: 'start', source: 'upload', package_id: pkg.id })).rejects.toThrow();
   } finally { release(); unsubscribe(); browserWindow.redevenBrowserPackage = prior; }
 });
+
+it('transports message revisions through the actual Desktop route allowlist',async()=>{
+ const calls:RuntimeFlowerRequest[]=[];
+ const draft={storage_generation:'generation',item_id:'user:old',turn_id:'old',input_fingerprint:'a'.repeat(64),prompt:'old',references:[],reference_ids:[],attachments:[]};
+ const bridge=bridgeFor(request=>{expect(runtimeFlowerPath(request.path)).toBe(request.path);expect(runtimeFlowerMethodAllowed(request.path,request.method)).toBe(true);calls.push(request);return draft;});
+ const adapter=createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+ expect(await adapter.prepareMessageEdit!('thread-1')).toEqual(draft);
+ await adapter.loadMessageEditHistory!('thread-1','edit-message:key');
+ await adapter.editLastMessage!('thread-1',{client_request_id:'key',storage_generation:'generation',item_id:'user:old',stop_active:true,expected_input_fingerprint:draft.input_fingerprint,prompt:'new',retained_attachment_ids:['image'],retained_reference_ids:['ref'],attachment_ids:['added-image'],staging_scope:stagingScope('thread-1')});
+ expect(calls[1].path).toBe('/_redeven_proxy/api/ai/threads/thread-1/message-edit?revision_request_key=edit-message%3Akey');
+ expect(calls[2]).toMatchObject({method:'POST',path:'/_redeven_proxy/api/ai/threads/thread-1/message-edit',staging_scope_id:'staging_thread-1',staging_capability:'secret_thread-1',body:{storage_generation:'generation',item_id:'user:old',stop_active:true,content:{text:'new',retained_attachment_ids:['image'],retained_reference_ids:['ref'],attachments:[{attachment_id:'added-image'}]}}});
+ expect(JSON.stringify(calls[2].body)).not.toContain('secret');
+});

@@ -2605,3 +2605,18 @@ it('uploads attachments once through the bound session with honest progress and 
   expect(progress).toHaveBeenLastCalledWith({attempt_id:'attempt-one',loaded:5,total:5,indeterminate:false});
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
+
+it('transports frozen message edits and immutable history through scoped HTTP',async()=>{
+ const draft={storage_generation:'generation',item_id:'user:old',turn_id:'old',input_fingerprint:'a'.repeat(64),prompt:'old',references:[],reference_ids:[],attachments:[]};
+ fetchMock.mockImplementation(async (_url:string,init?:RequestInit)=>jsonResponse(init?.method==='POST'?{accepted:true}:draft));
+ const adapter=createEnvLocalFlowerSurfaceAdapter({envPublicID:'env',envLabel:'Environment',rpc:{ai:{}} as never});
+ expect(await adapter.prepareMessageEdit!('thread/one')).toEqual(draft);
+ await adapter.loadMessageEditHistory!('thread/one','edit-message:key');
+ await adapter.editLastMessage!('thread/one',{client_request_id:'key',storage_generation:'generation',item_id:'user:old',stop_active:true,restore_revision_key:'edit-message:previous',expected_input_fingerprint:draft.input_fingerprint,prompt:'new',retained_attachment_ids:['old-image'],retained_reference_ids:['ref'],attachment_ids:['new-image'],staging_scope:stagingScope('thread/one')});
+ expect(fetchMock.mock.calls[0][0]).toBe('/_redeven_proxy/api/ai/threads/thread%2Fone/message-edit');
+ expect(fetchMock.mock.calls[1][0]).toBe('/_redeven_proxy/api/ai/threads/thread%2Fone/message-edit?revision_request_key=edit-message%3Akey');
+ const [url,init]=fetchMock.mock.calls[2] as [string,RequestInit];
+ expect(url).toBe('/_redeven_proxy/api/ai/threads/thread%2Fone/message-edit');expect(init.method).toBe('POST');
+ expect(JSON.parse(String(init.body))).toMatchObject({client_request_id:'key',storage_generation:'generation',item_id:'user:old',stop_active:true,restore_revision_key:'edit-message:previous',content:{text:'new',expected_input_fingerprint:draft.input_fingerprint,retained_attachment_ids:['old-image'],retained_reference_ids:['ref'],attachments:[{attachment_id:'new-image'}]}});
+ expect(new Headers(init.headers).get('Upload-Staging-Capability')).toBe('secret_thread/one');expect(String(init.body)).not.toContain('secret_thread/one');
+});

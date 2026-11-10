@@ -6080,7 +6080,14 @@
         "zoomIn": "Zoom avant",
         "zoomOut": "Zoom arrière",
         "fit": "Ajuster"
-      }
+      },
+      "messageEditTitle": "Modifier le message",
+      "messageEditSend": "Enregistrer et renvoyer",
+      "messageEditStopSend": "Arrêter et renvoyer",
+      "messageEditUnknown": "L’envoi n’a pas pu être confirmé. Réessayez pour vérifier la même demande.",
+      "messageEditRetry": "Vérifier et réessayer",
+      "messageEditPrevious": "Version précédente",
+      "messageEditUseVersion": "Utiliser cette version"
     },
     "threadList": {
       "title": "Discussions",

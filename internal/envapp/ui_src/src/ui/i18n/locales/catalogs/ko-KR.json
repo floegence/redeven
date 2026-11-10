@@ -6080,7 +6080,14 @@
         "zoomIn": "확대",
         "zoomOut": "축소",
         "fit": "화면에 맞춤"
-      }
+      },
+      "messageEditTitle": "메시지 편집",
+      "messageEditSend": "저장 후 다시 보내기",
+      "messageEditStopSend": "중지 후 다시 보내기",
+      "messageEditUnknown": "제출 결과를 확인하지 못했습니다. 다시 시도하면 동일한 요청을 확인합니다.",
+      "messageEditRetry": "확인 후 다시 시도",
+      "messageEditPrevious": "이전 버전",
+      "messageEditUseVersion": "이 버전 사용"
     },
     "threadList": {
       "title": "대화",

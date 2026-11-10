@@ -6080,7 +6080,14 @@
         "zoomIn": "Vergrößern",
         "zoomOut": "Verkleinern",
         "fit": "Einpassen"
-      }
+      },
+      "messageEditTitle": "Nachricht bearbeiten",
+      "messageEditSend": "Speichern und erneut senden",
+      "messageEditStopSend": "Stoppen und erneut senden",
+      "messageEditUnknown": "Die Übermittlung konnte nicht bestätigt werden. Ein erneuter Versuch prüft dieselbe Anfrage.",
+      "messageEditRetry": "Prüfen und erneut versuchen",
+      "messageEditPrevious": "Vorherige Version",
+      "messageEditUseVersion": "Diese Version verwenden"
     },
     "threadList": {
       "title": "Unterhaltungen",

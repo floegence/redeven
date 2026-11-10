@@ -1107,7 +1107,14 @@
         "zoomIn": "拡大",
         "zoomOut": "縮小",
         "fit": "全体を表示"
-      }
+      },
+      "messageEditTitle": "メッセージを編集",
+      "messageEditSend": "保存して再送信",
+      "messageEditStopSend": "停止して再送信",
+      "messageEditUnknown": "送信結果を確認できませんでした。再試行すると同じリクエストを確認します。",
+      "messageEditRetry": "確認して再試行",
+      "messageEditPrevious": "前のバージョン",
+      "messageEditUseVersion": "このバージョンを使用"
     },
     "threadList": {
       "title": "会話",

@@ -74,31 +74,9 @@ func (s *Service) PrepareQueuedDraft(ctx context.Context, meta *session.Meta, th
 	draft.Prompt = original.Text
 	draft.References = []ContextActionContextItem{}
 	draft.Attachments = []QueuedDraftAttachment{}
-	for _, reference := range original.References {
-		var item ContextActionContextItem
-		switch reference.Kind {
-		case flruntime.MessageReferenceFile, flruntime.MessageReferenceDirectory:
-			locator, err := decodeFlowerCanonicalReferenceLocator(reference.ResourceRef)
-			if err != nil {
-				return draft, err
-			}
-			authority, err := resolveFlowerCanonicalReferenceTargetAuthority(meta.EndpointID, s.ToolTargetPolicy())
-			if err != nil || !flowerCanonicalReferenceLocatorMatchesAuthority(locator, authority) {
-				return draft, ErrFlowerCanonicalReferenceDenied
-			}
-			item = ContextActionContextItem{Kind: contextActionKindFilePath, Path: locator.Path, IsDirectory: locator.Directory}
-		case flruntime.MessageReferenceThread:
-			var snapshot ThreadReferenceSnapshot
-			if err := json.Unmarshal([]byte(reference.Text), &snapshot); err != nil || !snapshot.valid() {
-				return draft, ErrInvalidContextAction
-			}
-			item = ContextActionContextItem{Kind: contextActionKindThread, Thread: &snapshot}
-		case flruntime.MessageReferenceText, flruntime.MessageReferenceTerminal, flruntime.MessageReferenceProcess:
-			item = ContextActionContextItem{Kind: contextActionKindReferenceSnapshot, ReferenceSnapshot: &ContextActionReferenceSnapshot{Kind: string(reference.Kind), Label: reference.Label, Text: reference.Text, Truncated: reference.Truncated}}
-		default:
-			return draft, ErrInvalidContextAction
-		}
-		draft.References = append(draft.References, item)
+	draft.References, err = s.editedDraftReferences(meta, *original)
+	if err != nil {
+		return draft, err
 	}
 	if len(original.Attachments) == 0 {
 		return draft, nil
@@ -166,4 +144,35 @@ func (s *Service) TakeBackQueuedInput(ctx context.Context, meta *session.Meta, t
 		return flruntime.ThreadView{}, err
 	}
 	return s.threadRuntime.DeleteQueued(ctx, flruntime.DeleteQueuedInput{ThreadID: identity.ThreadID(threadID), QueueItemID: queueID, ExpectedInputSHA256: fingerprint, RequestKey: flruntime.RequestKey("take-back:" + queueID + ":" + fingerprint)})
+}
+
+func (s *Service) editedDraftReferences(meta *session.Meta, original flruntime.UserInput) ([]ContextActionContextItem, error) {
+	items := []ContextActionContextItem{}
+	for _, reference := range original.References {
+		var item ContextActionContextItem
+		switch reference.Kind {
+		case flruntime.MessageReferenceFile, flruntime.MessageReferenceDirectory:
+			locator, err := decodeFlowerCanonicalReferenceLocator(reference.ResourceRef)
+			if err != nil {
+				return nil, err
+			}
+			authority, err := resolveFlowerCanonicalReferenceTargetAuthority(meta.EndpointID, s.ToolTargetPolicy())
+			if err != nil || !flowerCanonicalReferenceLocatorMatchesAuthority(locator, authority) {
+				return nil, ErrFlowerCanonicalReferenceDenied
+			}
+			item = ContextActionContextItem{Kind: contextActionKindFilePath, Path: locator.Path, IsDirectory: locator.Directory}
+		case flruntime.MessageReferenceThread:
+			var snapshot ThreadReferenceSnapshot
+			if err := json.Unmarshal([]byte(reference.Text), &snapshot); err != nil || !snapshot.valid() {
+				return nil, ErrInvalidContextAction
+			}
+			item = ContextActionContextItem{Kind: contextActionKindThread, Thread: &snapshot}
+		case flruntime.MessageReferenceText, flruntime.MessageReferenceTerminal, flruntime.MessageReferenceProcess:
+			item = ContextActionContextItem{Kind: contextActionKindReferenceSnapshot, ReferenceSnapshot: &ContextActionReferenceSnapshot{Kind: string(reference.Kind), Label: reference.Label, Text: reference.Text, Truncated: reference.Truncated}}
+		default:
+			return nil, ErrInvalidContextAction
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }

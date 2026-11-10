@@ -282,3 +282,14 @@ it('allows only bounded read-only conversation material requests', () => {
   for (const suffix of ['/child', '?user=other', '?cursor=a&cursor=b', '#fragment'])
     expect(() => runtimeFlowerPath(path + suffix)).toThrow();
 });
+
+ it('bounds message revision reads and commands to one thread and exact methods', () => {
+  const path = '/_redeven_proxy/api/ai/threads/thread-1/message-edit';
+  expect(runtimeFlowerPath(path)).toBe(path);
+  for (const method of ['GET','POST','PATCH','PUT','DELETE'] as const) expect(runtimeFlowerMethodAllowed(path,method)).toBe(method === 'GET' || method === 'POST');
+  const history = path + '?revision_request_key=edit-message%3Arevision';
+  expect(runtimeFlowerPath(history)).toBe(history);
+  expect(runtimeFlowerMethodAllowed(history,'GET')).toBe(true);
+  expect(runtimeFlowerMethodAllowed(history,'POST')).toBe(false);
+  for (const suffix of ['/child','?revision_request_key=','?revision_request_key=a&revision_request_key=b','?revision_request_key=a&other=b','?other=a']) expect(() => runtimeFlowerPath(path + suffix)).toThrow();
+ });

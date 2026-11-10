@@ -53,6 +53,10 @@ Unmodified ArrowUp in an exactly empty textarea recalls newest eligible text. Wh
 ### Presentation
 Contextual PromptCard has no placeholder and opens with the real editor caret; ordinary conversation composers retain their localized concise placeholder. Recall restores no attachments or canonical mutations.
 
+## Latest sent message editing
+
+[Message editing](flower-message-editing.md) reuses the composer with a separate draft, preserves complete resources and submits an immutable canonical revision. Opening or canceling does not stop execution; unknown submission retains the exact key for explicit Retry.
+
 # Boundaries
 
 Composer drafts and the transport outbox own only unconfirmed browser input, stable request identity, and presentation-only launch settings. They never become authorization evidence or canonical queue, interaction, effect, turn, Thread settings, or Agent lifecycle state. Secret answers bypass the outbox, and canonical confirmation or terminal cleanup removes transport state instead of projecting a second durable command.

@@ -915,6 +915,11 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/take-back`,
         { expected_input_fingerprint: fingerprint },
       ),
+      prepareMessageEdit: (threadID) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/message-edit`),
+      loadMessageEditHistory: (threadID, key) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/message-edit?revision_request_key=${encodeURIComponent(key)}`),
+      editLastMessage: async (threadID, input) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/message-edit`,
+        { ...buildFlowerQueuedEditHTTPBody(input), item_id: input.item_id, stop_active: input.stop_active,
+          restore_revision_key: input.restore_revision_key, storage_generation: input.storage_generation }, input.staging_scope),
       editQueuedTurn: (threadID, queueID, input) => runtimeJSON(
         bridge, 'PATCH', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
         buildFlowerQueuedEditHTTPBody(input), input.staging_scope,

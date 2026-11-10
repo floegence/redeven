@@ -94,11 +94,16 @@ func TestResponsesPublishedSplitBindingSurvivesUpgradeRestartAndFork(t *testing.
 				t.Errorf("request %d wrong native reuse: %s present=%t", n, want, present)
 			}
 		}
+		// New v12 fragments must still survive an ordinary restart, while
+		// the independent Fork starts its own native render lineage.
+		if present := strings.Contains(string(body["input"]), "continued-message-1"); present != (n == 2) {
+			t.Errorf("request %d wrong current native reuse: present=%t", n, present)
+		}
 		if body["previous_response_id"] != nil {
 			t.Error("unexpected server continuation")
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		output := []any{map[string]any{"type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Continued."}}}}
+		output := []any{map[string]any{"id": fmt.Sprintf("continued-message-%d", n), "type": "message", "role": "assistant", "content": []any{map[string]any{"type": "output_text", "text": "Continued."}}}}
 		event, _ := json.Marshal(map[string]any{"type": "response.completed", "response": map[string]any{"id": fmt.Sprintf("continued%d", n), "status": "completed", "output": output}})
 		fmt.Fprintf(w, "data: %s\n\n", event)
 	}))

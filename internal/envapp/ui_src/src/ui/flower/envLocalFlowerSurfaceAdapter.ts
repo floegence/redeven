@@ -703,6 +703,13 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/take-back`,
         { method: 'POST', body: JSON.stringify({ expected_input_fingerprint: fingerprint }) },
       ),
+      prepareMessageEdit: (threadID) => fetchFlowerJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/message-edit`, { method: 'GET' }),
+      loadMessageEditHistory: (threadID, key) => fetchFlowerJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/message-edit?revision_request_key=${encodeURIComponent(key)}`, { method: 'GET' }),
+      editLastMessage: async (threadID, input) => fetchFlowerJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/message-edit`, {
+        method: 'POST', body: JSON.stringify({ ...buildFlowerQueuedEditHTTPBody(input), item_id: input.item_id, stop_active: input.stop_active,
+          restore_revision_key: input.restore_revision_key, storage_generation: input.storage_generation }),
+        ...(input.staging_scope ? { headers: flowerAttachmentStagingHeaders(input.staging_scope) } : {}),
+      }),
       editQueuedTurn: (threadID, queueID, input) => fetchFlowerJSON(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
         { method: 'PATCH', body: JSON.stringify(buildFlowerQueuedEditHTTPBody(input)),

@@ -788,6 +788,17 @@ export type FlowerQueuedTurnEditInput = Readonly<{
   staging_scope?: FlowerAttachmentStagingScope;
 }>;
 
+export type FlowerMessageEditDraft = Readonly<{
+  storage_generation: string; item_id: string; turn_id: string; input_fingerprint: string; prompt: string;
+  references: FlowerQueuedDraft['references']; reference_ids: readonly string[];
+  attachments: readonly Readonly<{ attachment_id: string; name: string; mime_type: string; size_bytes: number; url?: string }>[];
+  revision_request_key?: string;
+}>;
+export type FlowerMessageEditInput = FlowerQueuedTurnEditInput & Readonly<{
+  storage_generation: string; item_id: string; stop_active: boolean; restore_revision_key?: string;
+}>;
+export type FlowerMessageEditHistory = Readonly<{ draft: FlowerMessageEditDraft; items: readonly FlowerRuntimeCurrentItem[] }>;
+
 export type FlowerQueuedTurnAttachment = Readonly<{
   attachment_id: string;
   name: string;
@@ -1793,6 +1804,9 @@ export type FlowerSurfaceAdapter = Readonly<{
   deleteQueuedTurn?: (threadID: string, queueID: string) => Promise<void>;
   prepareQueuedTurnDraft?: (threadID: string, queueID: string, input: FlowerQueuedDraftInput) => Promise<FlowerQueuedDraft>;
   takeBackQueuedTurn?: (threadID: string, queueID: string, fingerprint: string) => Promise<FlowerRuntimeCurrentView>;
+  prepareMessageEdit?: (threadID: string) => Promise<FlowerMessageEditDraft>;
+  editLastMessage?: (threadID: string, input: FlowerMessageEditInput) => Promise<void>;
+  loadMessageEditHistory?: (threadID: string, revisionKey: string) => Promise<FlowerMessageEditHistory>;
   editQueuedTurn?: (threadID: string, queueID: string, input: FlowerQueuedTurnEditInput) => Promise<void>;
   sendQueuedTurnNow?: (threadID: string, queueID: string) => Promise<void>;
   forkThread?: (threadID: string, input: FlowerForkThreadInput) => Promise<FlowerThreadSnapshot>;

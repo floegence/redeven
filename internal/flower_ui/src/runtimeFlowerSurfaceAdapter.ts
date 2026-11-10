@@ -26,6 +26,9 @@ import type {
   FlowerSurfaceAdapter,
   FlowerStopThreadInput,
   FlowerQueuedTurnEditInput,
+  FlowerMessageEditDraft,
+  FlowerMessageEditInput,
+  FlowerMessageEditHistory,
   FlowerQueuedDraft,
   FlowerQueuedDraftInput,
   FlowerSubmitInputReceipt,
@@ -147,6 +150,9 @@ export type FlowerRuntimeTransport = Readonly<{
   deleteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
   prepareQueuedTurnDraft?(threadID: string, queueID: string, input: FlowerQueuedDraftInput): Promise<FlowerQueuedDraft>;
   takeBackQueuedTurn?(threadID: string, queueID: string, fingerprint: string): Promise<FlowerRuntimeCurrentView>;
+  prepareMessageEdit?(threadID: string): Promise<FlowerMessageEditDraft>;
+  editLastMessage?(threadID: string, input: FlowerMessageEditInput): Promise<unknown>;
+  loadMessageEditHistory?(threadID: string, revisionKey: string): Promise<FlowerMessageEditHistory>;
   editQueuedTurn?(threadID: string, queueID: string, input: FlowerQueuedTurnEditInput): Promise<unknown>;
   sendQueuedTurnNow?(threadID: string, queueID: string): Promise<unknown>;
   forkThread(threadID: string, input: FlowerForkThreadInput): Promise<LoadThreadResponse>;
@@ -658,6 +664,16 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         }
       },
     } : {}),
+    ...(options.transport.prepareMessageEdit && options.transport.editLastMessage ? {
+      prepareMessageEdit: (threadID: string) => options.transport.prepareMessageEdit!(trim(threadID)),
+      editLastMessage: async (threadID: string, input: FlowerMessageEditInput) => {
+        if (options.canMutate === false || options.signal?.aborted) throw flowerTurnAdmissionError('rejected', new DOMException('Flower is unavailable.', 'NotAllowedError'));
+        try { await options.transport.editLastMessage!(trim(threadID), input); }
+        catch (error) { const failure = error as { status?: number; failureKind?: string };
+          throw flowerTurnAdmissionError((failure.status ?? 0) >= 400 && (failure.status ?? 0) < 500 ? 'rejected' : 'unknown', error); }
+      },
+      ...(options.transport.loadMessageEditHistory ? { loadMessageEditHistory: (threadID: string, key: string) => options.transport.loadMessageEditHistory!(trim(threadID), key) } : {}),
+    } : {}),
     ...(options.transport.editQueuedTurn ? {
       editQueuedTurn: async (threadID: string, queueID: string, input: FlowerQueuedTurnEditInput) => {
         const tid = trim(threadID), qid = trim(queueID);
@@ -808,7 +824,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
   const mutations = new Set<keyof FlowerSurfaceAdapter>([
     'operateSubagentInput', 'renameThread', 'setThreadPinned', 'movePinnedThread', 'setThreadPermissionType',
     'setThreadModel', 'setThreadReasoningSelection', 'reorderQueuedTurns', 'deleteQueuedTurn', 'prepareQueuedTurnDraft',
-    'takeBackQueuedTurn', 'editQueuedTurn', 'sendQueuedTurnNow', 'forkThread', 'deleteThread',
+    'prepareMessageEdit', 'editLastMessage', 'loadMessageEditHistory', 'takeBackQueuedTurn', 'editQueuedTurn', 'sendQueuedTurnNow', 'forkThread', 'deleteThread',
     'loadAttachmentCapability', 'createAttachmentStagingScope', 'bindAttachmentStagingScope', 'releaseAttachmentStagingScope',
     'uploadAttachment', 'deleteStagedAttachment', 'readStagedLongText', 'loadStagedAttachmentPreview',
     'previewStagedAttachment', 'inputComputerControl', 'manageGoal', 'compactThreadContext',

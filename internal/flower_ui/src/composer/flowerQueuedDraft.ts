@@ -1,7 +1,7 @@
 import type { FlowerQueuedDraft } from '../contracts/flowerSurfaceContracts';
 import type { FlowerComposerDraftReference } from './createFlowerComposerDraftCoordinator';
 
-export function flowerQueuedDraftReferences(draft: FlowerQueuedDraft): readonly FlowerComposerDraftReference[] {
+export function flowerQueuedDraftReferences(draft: Pick<FlowerQueuedDraft, 'references'>): readonly FlowerComposerDraftReference[] {
   return draft.references.map((item, index) => {
     const local_id = `restored:${index}`;
     switch (item.kind) {

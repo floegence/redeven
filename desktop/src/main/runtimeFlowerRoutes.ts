@@ -143,6 +143,8 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['GET', 'PATCH'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['DELETE'], allowsQuery: runtimeFlowerDeleteQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/(history|history-item|history-body|history-release)$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/message-edit$/u, methods: ['GET', 'POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/message-edit$/u, methods: ['GET'], allowsQuery: runtimeFlowerIdentifierQuery('revision_request_key') },
   { path: '/_redeven_proxy/api/ai/flower/stream', methods: ['GET'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/subagents\/[^/]+\/detail$/u, methods: ['GET', 'POST'], allowsQuery: runtimeFlowerSubagentDetailQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/subagents\/[^/]+\/input$/u, methods: ['POST'] },

@@ -13018,3 +13018,11 @@ fieldset.flower-provider-workspace { margin: 0; padding: 0; border: 0; min-width
   .flower-provider-model-choice,
   .flower-provider-model-name { min-height: max(44px, var(--floe-line-body)); }
 }
+
+.flower-message-version-dialog { width:min(640px,calc(100vw - 24px)); }
+.flower-message-version-content { max-height:65vh; overflow:auto; padding:16px; }
+.flower-message-version-content article { padding:12px; margin-bottom:12px; border:1px solid var(--border); border-radius:12px; }
+.flower-message-version-content article[data-message-version-kind="user"] { background:var(--muted); }
+.flower-message-version-content p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.65; }
+
+.flower-message-edit-error { margin:0; padding:8px 12px; color:var(--destructive); font-size:var(--floe-type-body); }

@@ -1107,7 +1107,14 @@
         "zoomIn": "Ampliar",
         "zoomOut": "Reduzir",
         "fit": "Ajustar"
-      }
+      },
+      "messageEditTitle": "Editar mensagem",
+      "messageEditSend": "Salvar e reenviar",
+      "messageEditStopSend": "Parar e reenviar",
+      "messageEditUnknown": "Não foi possível confirmar o envio. Tente novamente para verificar a mesma solicitação.",
+      "messageEditRetry": "Verificar e tentar novamente",
+      "messageEditPrevious": "Versão anterior",
+      "messageEditUseVersion": "Usar esta versão"
     },
     "threadList": {
       "title": "Conversas",

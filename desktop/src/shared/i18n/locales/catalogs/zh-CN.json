@@ -1107,7 +1107,14 @@
         "zoomIn": "放大",
         "zoomOut": "缩小",
         "fit": "适应窗口"
-      }
+      },
+      "messageEditTitle": "编辑消息",
+      "messageEditSend": "保存并重新发送",
+      "messageEditStopSend": "停止并重新发送",
+      "messageEditUnknown": "无法确认提交结果。重试将核查同一个请求。",
+      "messageEditRetry": "核查并重试",
+      "messageEditPrevious": "上一版本",
+      "messageEditUseVersion": "使用此版本"
     },
     "threadList": {
       "title": "对话",

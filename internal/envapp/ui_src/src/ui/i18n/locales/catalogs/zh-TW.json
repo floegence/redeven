@@ -6080,7 +6080,14 @@
         "zoomIn": "放大",
         "zoomOut": "縮小",
         "fit": "符合視窗"
-      }
+      },
+      "messageEditTitle": "編輯訊息",
+      "messageEditSend": "儲存並重新傳送",
+      "messageEditStopSend": "停止並重新傳送",
+      "messageEditUnknown": "無法確認提交結果。重試將查核同一個請求。",
+      "messageEditRetry": "查核並重試",
+      "messageEditPrevious": "上一版本",
+      "messageEditUseVersion": "使用此版本"
     },
     "threadList": {
       "title": "對話",

@@ -6080,7 +6080,14 @@
         "zoomIn": "Acercar",
         "zoomOut": "Alejar",
         "fit": "Ajustar"
-      }
+      },
+      "messageEditTitle": "Editar mensaje",
+      "messageEditSend": "Guardar y reenviar",
+      "messageEditStopSend": "Detener y reenviar",
+      "messageEditUnknown": "No se pudo confirmar el envío. Vuelve a intentarlo para comprobar la misma solicitud.",
+      "messageEditRetry": "Comprobar y reintentar",
+      "messageEditPrevious": "Versión anterior",
+      "messageEditUseVersion": "Usar esta versión"
     },
     "threadList": {
       "title": "Conversaciones",

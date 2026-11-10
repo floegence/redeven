@@ -1218,3 +1218,17 @@ describe('published completed host-work history', () => {
     }
   });
 });
+
+it.each([ [409,'rejected'],[403,'rejected'],[503,'unknown'],[0,'unknown'] ] as const)('classifies message edits without implicit retries: %s', async (status, kind) => {
+ const editLastMessage=vi.fn(async()=>{throw Object.assign(new Error('edit failed'),{status});});
+ const loadThread=vi.fn();
+ const adapter=createRuntimeFlowerSurfaceAdapter(adapterOptions({prepareMessageEdit:vi.fn(),editLastMessage,loadThread}));
+ const command={client_request_id:'edit',storage_generation:'frozen-generation',item_id:'user:old',stop_active:true,expected_input_fingerprint:'a'.repeat(64),prompt:'replacement',retained_attachment_ids:['image'],retained_reference_ids:['file']};
+ await expect(adapter.editLastMessage!(' thread ',command)).rejects.toMatchObject({admission_kind:kind});
+ expect(editLastMessage).toHaveBeenCalledExactlyOnceWith('thread',command);
+ expect(loadThread).not.toHaveBeenCalled();
+});
+it('does not expose message editing for read-only surfaces',()=>{
+ const adapter=createRuntimeFlowerSurfaceAdapter(adapterOptions({prepareMessageEdit:vi.fn(),editLastMessage:vi.fn(),loadMessageEditHistory:vi.fn()},{canMutate:false}));
+ expect(adapter.prepareMessageEdit).toBeUndefined();expect(adapter.editLastMessage).toBeUndefined();expect(adapter.loadMessageEditHistory).toBeUndefined();
+});

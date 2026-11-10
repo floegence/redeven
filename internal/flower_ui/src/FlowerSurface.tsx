@@ -1,3 +1,4 @@
+import type { FlowerMessageEditDraft, FlowerMessageEditInput, FlowerMessageEditHistory } from './contracts/flowerSurfaceContracts';
 import { historicalToolName } from './historicalToolName';
 import { computerObservationInterruption } from './computerActivityOutcome';
 import { Sparkles } from 'lucide-solid';
@@ -1936,9 +1937,115 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		if (!draftSnapshot) throw new Error('Flower composer draft session snapshot is unavailable.');
 		return draftSnapshot();
 	};
-  const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || pendingDraftKey());
+  type MessageEditSession = Readonly<{ threadID: string; sessionKey: string; target: FlowerMessageEditDraft; source: FlowerMessageEditDraft;
+    restoreKey?: string; command?: FlowerMessageEditInput; state: 'editing' | 'submitting' | 'unknown'; error?: string }>;
+  const [messageEdits, setMessageEdits] = createSignal<ReadonlyMap<string, MessageEditSession>>(new Map());
+  const currentMessageEdit = createMemo(() => messageEdits().get(selectedThreadID()));
+  const messageEditFrozen = () => Boolean(currentMessageEdit() && currentMessageEdit()!.state !== 'editing');
+  const [editableMessage, setEditableMessage] = createSignal<FlowerMessageEditDraft>();
+  const [messageEditPreparing, setMessageEditPreparing] = createSignal(false);
+  const [messageEditRefresh, setMessageEditRefresh] = createSignal(0);
+  const [messageVersion, setMessageVersion] = createSignal<{ threadID: string; key: string; history: FlowerMessageEditHistory }>();
+  let messageEditReadSequence = 0;
+  const messageEditEligibility = createMemo(() => JSON.stringify([selectedThreadID(),
+    selectedThread()?.messages.filter(message => message.role === 'user').at(-1)?.id,
+    selectedThread()?.status, selectedThreadReadOnly(), messageEditRefresh()]));
+  createEffect(on(messageEditEligibility, () => {
+    const threadID = selectedThreadID();
+    const sequence = ++messageEditReadSequence;
+    setEditableMessage(undefined);
+    if (!threadID || !props.adapter.prepareMessageEdit || selectedThreadReadOnly()) return;
+    void props.adapter.prepareMessageEdit(threadID).then(draft => {
+      if (!surfaceDisposed && sequence === messageEditReadSequence) setEditableMessage(draft);
+    }).catch(() => { /* Eligibility is canonical; an unavailable target has no edit action. */ });
+  }));
+  const putMessageEdit = (edit: MessageEditSession) => setMessageEdits(previous => new Map(previous).set(edit.threadID, edit));
+  const closeMessageEdit = (accepted = false, target = currentMessageEdit()) => {
+    if (!target || !accepted && target.state !== 'editing') return;
+    const controller = attachmentControllerFor(target.sessionKey);
+    if (accepted) controller.consumeReady(controller.snapshot().items.map(item => item.local_id));
+    else if (target.state !== 'unknown') for (const item of controller.snapshot().items) controller.remove(item.local_id);
+    // Unknown commands retain their uploads until the server settles or the scope expires.
+    if (target.state !== 'unknown' || accepted) releaseAttachmentStagingScope(target.sessionKey);
+    draftSessionFor(target.sessionKey).mutate(value => ({ ...value, text: '', references: [], attachments: [] }));
+    setMessageEdits(previous => { const next = new Map(previous); next.delete(target.threadID); return next; });
+    if (selectedThreadID() === target.threadID) queueMicrotask(() => focusComposerIfConnected());
+  };
+  const openMessageEdit = async (source?: FlowerMessageEditDraft, restoreKey?: string) => {
+    const threadID = selectedThreadID();
+    if (!threadID || !props.adapter.prepareMessageEdit || !props.adapter.editLastMessage || messageEditPreparing() || currentMessageEdit()) return;
+    setMessageEditPreparing(true);
+    try {
+      const target = await withFlowerRequestDeadline(() => props.adapter.prepareMessageEdit!(threadID), copy().chat.syncTimeout);
+      if (surfaceDisposed || selectedThreadID() !== threadID) return;
+      const draft = source ?? target;
+      const sessionKey = `message-edit:${threadID}:${createFlowerClientRequestID()}`;
+      const attachments = draft.attachments.map(admitted => ({ local_id: `retained:${admitted.attachment_id}`, source: 'file' as const,
+        name: admitted.name, mime_type: admitted.mime_type, size_bytes: admitted.size_bytes ?? 0, upload_request_id: '', request_id: '', attempt_state: 'staged_ready', admitted }));
+      draftSessionFor(sessionKey).mutate(value => ({ ...value, text: draft.prompt, references: flowerQueuedDraftReferences(draft), attachments,
+        mode: 'ordinary', goal_command: undefined, page_context_captured: true, omit_embedded_context: true }));
+      attachmentControllerFor(sessionKey).hydrateDraft(attachments);
+      putMessageEdit({ threadID, sessionKey, target, source: draft, restoreKey, state: 'editing' });
+      setMessageVersion(undefined); composerHistory.reset(); returnToChat();
+      queueMicrotask(() => { if (selectedThreadID() !== threadID) return; focusComposerIfConnected();
+        if (composerRef instanceof HTMLTextAreaElement) composerRef.setSelectionRange(composerRef.value.length, composerRef.value.length); });
+    } catch (error) { if (selectedThreadID() === threadID) notifyComposerError(getErrorMessage(error)); }
+    finally { setMessageEditPreparing(false); }
+  };
+  const openMessageVersion = async (key: string) => {
+    const threadID = selectedThreadID();
+    if (!props.adapter.loadMessageEditHistory || messageEditPreparing()) return;
+    setMessageEditPreparing(true);
+    try {
+      const history = await withFlowerRequestDeadline(() => props.adapter.loadMessageEditHistory!(threadID, key), copy().chat.syncTimeout);
+      if (!surfaceDisposed && selectedThreadID() === threadID) setMessageVersion({ threadID, key, history });
+    } catch (error) { if (selectedThreadID() === threadID) notifyThreadActionError(getErrorMessage(error)); }
+    finally { setMessageEditPreparing(false); }
+  };
+  const submitMessageEdit = async () => {
+    let edit = currentMessageEdit();
+    if (!edit || !props.adapter.editLastMessage || edit.state === 'submitting' || selectedThreadReadOnly()) return;
+    const adapter = props.adapter;
+    if (!edit.command) {
+      const draft = draftSessionFor(edit.sessionKey).snapshot().value;
+      const controller = attachmentControllerFor(edit.sessionKey);
+      const snapshot = controller.snapshot();
+      if (snapshot.items.some(item => item.status !== 'staged_ready')) return;
+      if (!draft.text.trim() && !snapshot.items.length && !draft.references.length) return;
+      const inspection = inspectFlowerText(draft.text);
+      if (!inspection || inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) return;
+      const retained = new Map(edit.source.reference_ids.map((id, index) => [`restored:${index}`, id]));
+      const added = draft.references.filter(ref => !retained.has(ref.local_id)).map(flowerDraftReferenceContextItem);
+      const command: FlowerMessageEditInput = { client_request_id: createFlowerClientRequestID(),
+        storage_generation: edit.target.storage_generation, item_id: edit.target.item_id, expected_input_fingerprint: edit.target.input_fingerprint,
+        prompt: draft.text, stop_active: selectedThreadCanStop(), restore_revision_key: edit.restoreKey,
+        retained_reference_ids: draft.references.flatMap(ref => retained.has(ref.local_id) ? [retained.get(ref.local_id)!] : []),
+        retained_attachment_ids: snapshot.items.flatMap(item => item.admitted ? [item.admitted.attachment_id] : []),
+        attachment_ids: snapshot.items.flatMap(item => item.staged ? [item.staged.attachment_id] : []),
+        ...(snapshot.staging_scope ? { staging_scope: snapshot.staging_scope } : {}),
+        ...(added.length ? { context_action: { schema_version: CONTEXT_ACTION_SCHEMA_VERSION, action_id: 'assistant.ask.flower', provider: 'flower',
+          target: { target_id: 'current', locality: 'auto' }, source: { surface: 'flower_composer' }, context: added,
+          presentation: { label: copy().chat.titleFallback, priority: 100 } } } : {}) };
+      edit = { ...edit, command };
+    }
+    const submitted = { ...edit, state: 'submitting' as const, error: undefined };
+    putMessageEdit(submitted);
+    try {
+      await withFlowerRequestDeadline(() => adapter.editLastMessage!(submitted.threadID, submitted.command!), copy().chat.syncTimeout);
+      closeMessageEdit(true, submitted);
+      setMessageEditRefresh(value => value + 1);
+      if (!surfaceDisposed) await requestThreadDetail(submitted.threadID, 'background_refresh', true, true);
+    } catch (error) {
+      // A failed refresh after admission must never turn an accepted command into a retry.
+      if (!messageEdits().has(submitted.threadID)) return;
+      const unknown = flowerTurnAdmissionFailureKind(error) !== 'rejected';
+      putMessageEdit({ ...submitted, state: unknown ? 'unknown' : 'editing', command: unknown ? submitted.command : undefined,
+        error: unknown ? copy().chat.messageEditUnknown : getErrorMessage(error) });
+    }
+  };
+  const currentComposerSessionKey = createMemo(() => currentMessageEdit()?.sessionKey || trimString(selectedThreadID()) || pendingDraftKey());
   const bottomActionMode = createMemo<'chat' | 'input_request' | 'approval'>(() => {
-    if (reactiveDraftSnapshotFor(currentComposerSessionKey()).value.goal_command) return 'chat';
+    if (currentMessageEdit() || reactiveDraftSnapshotFor(currentComposerSessionKey()).value.goal_command) return 'chat';
     if (selectedInputRequest()) return 'input_request';
     if (selectedComposerApprovalActions().length > 0) return 'approval';
     return 'chat';
@@ -2169,7 +2276,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? session.mutate((value) => value.client_request_id
         ? value
         : { ...value, client_request_id: createFlowerClientRequestID() }).snapshot.value.client_request_id
-      : sessionKey;
+      : [...messageEdits().values()].find(edit => edit.sessionKey === sessionKey)?.threadID ?? sessionKey;
     if (!targetID) return Promise.reject(new Error('Attachment staging request identity is unavailable.'));
     const scope = await draftCoordinator.ensureAttachmentStagingScope(
       sessionKey,
@@ -6897,6 +7004,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const submitChat = async (intent?: Readonly<{ fallbackPrompt?: string; context?: ContextActionEnvelope }>) => {
     if (pendingThreadSelection()) return;
+    if (currentMessageEdit()) { await submitMessageEdit(); return; }
     if (composerTakingBackQueuedTurn()) return;
     composerHistory.reset();
     const draftText = composerRef?.value ?? currentComposerSessionDraft().chatDraft;
@@ -8133,10 +8241,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (shouldSubmitOnEnterKeydown(event)) { event.preventDefault(); executeComposerCommand(); return; }
       return;
     }
-    if ((event.key === ' ' || event.key === 'Tab') && composerTextValue().trim() === '/goal') {
+    if (currentMessageEdit() && event.key === 'Escape' && !composerReferenceMenuVisible()) { event.preventDefault(); closeMessageEdit(); return; }
+    if (messageEditFrozen()) { if (event.key === 'Enter') { event.preventDefault(); if (currentMessageEdit()?.state === 'unknown') void submitMessageEdit(); } return; }
+    if (!currentMessageEdit() && (event.key === ' ' || event.key === 'Tab') && composerTextValue().trim() === '/goal') {
       event.preventDefault(); updateComposerText(''); enterGoalCommand(); return;
     }
-    if (composerTakingBackQueuedTurn() || composerReferenceMutationActive()) {
+    if (messageEditFrozen() || composerTakingBackQueuedTurn() || composerReferenceMutationActive()) {
       if (event.key === 'Enter') event.preventDefault();
       return;
     }
@@ -9009,11 +9119,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const waitingQuestion = activeInputQuestion();
-    if (selectedInputRequest() && waitingQuestion) {
+    if (!currentMessageEdit() && selectedInputRequest() && waitingQuestion) {
       updateInputText(waitingQuestion, value);
       return;
     }
-    if (value) capturePageContext();
+    if (value && !currentMessageEdit()) capturePageContext();
     updateComposerSessionText(currentComposerSessionKey(), value);
   };
 
@@ -9032,8 +9142,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
   const composerAttachmentEditingAllowed = createMemo(() => (
     !composerTakingBackQueuedTurn()
-    && !selectedComposerApprovalDisplayAction()
-    && !selectedInputRequest()
+    && !messageEditFrozen()
+    && (Boolean(currentMessageEdit()) || !selectedComposerApprovalDisplayAction() && !selectedInputRequest())
     && !selectedThreadDetailPending()
     && !selectedThreadReadOnly()
     && !surfaceWarmupActive()
@@ -9216,13 +9326,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const handleComposerTextInput = (event: InputEvent & { currentTarget: HTMLTextAreaElement }) => {
     composerHistory.reset();
-    if (composerTakingBackQueuedTurn() || composerReferenceMutationActive()) {
+    if (messageEditFrozen() || composerTakingBackQueuedTurn() || composerReferenceMutationActive()) {
       event.currentTarget.value = composerTextValue();
       return;
     }
     requestCompanionForEditing();
     const value = event.currentTarget.value;
-    if (!goalCommand() && /^\/goal\s/.test(value)) {
+    if (!currentMessageEdit() && !goalCommand() && /^\/goal\s/.test(value)) {
       updateComposerText('');
       enterGoalCommand(value.slice(6));
       // A paste may produce the same canonical value as the prior empty draft.
@@ -9354,11 +9464,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!nextQuestion || nextQuestion.id === activeInputQuestion()?.id) return;
     updateCurrentComposerSessionDraft((draft) => ({ ...draft, activeInputQuestionID: nextQuestion.id }));
   };
-  const activeInputQuestionIsSecret = createMemo(() => !goalCommand() && !!selectedInputRequest() && !!activeInputQuestion()?.is_secret);
+  const activeInputQuestionIsSecret = createMemo(() => !currentMessageEdit() && !goalCommand() && !!selectedInputRequest() && !!activeInputQuestion()?.is_secret);
 
   const composerTextValue = createMemo(() => {
     if (goalCommand()) return goalCommand()!.text;
-    if (!selectedInputRequest()) {
+    if (currentMessageEdit() || !selectedInputRequest()) {
       return currentComposerSessionDraft().chatDraft;
     }
     const question = activeInputQuestion();
@@ -9378,7 +9488,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ]);
   const composerTextareaDisabled = createMemo(() => {
     if (selectedThreadReadOnly()) return true;
-    if (goalCommand()) return false;
+    if (currentMessageEdit() || goalCommand()) return false;
     if (!selectedInputRequest()) return false;
     return !activeInputQuestion() || !activeInputQuestionUsesTextEditor();
   });
@@ -9501,7 +9611,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     retainKeyedItems(previous, flowerInputHistoryEntries(selectedThread()?.messages ?? []), (entry) => entry.id)
   ));
   const composerHistoryEnabled = createMemo(() => (
-    Boolean(selectedThreadID())
+    !currentMessageEdit() && Boolean(selectedThreadID())
     && Boolean(selectedThread())
     && !selectedThreadDetailPending()
     && !threadLoadError()
@@ -9546,6 +9656,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
 
   const composerPlaceholder = createMemo(() => {
+    if (currentMessageEdit()) return copy().chat.messageEditTitle;
     if (goalCommand()) return copy().chat.goalEmpty;
     if (selectedThreadReadOnly()) return selectedThreadReadOnlyDisplay();
     if (surfaceWarmupActive() && !selectedInputRequest()) return copy().chat.warmupComposerPlaceholder;
@@ -9559,7 +9670,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const composerTextareaReadOnly = createMemo(() => (
-    composerTakingBackQueuedTurn() || composerReferenceMutationCount() > 0
+    messageEditFrozen() || composerTakingBackQueuedTurn() || composerReferenceMutationCount() > 0
   ));
 
   const handleComposerBlankClick = (event: MouseEvent & { currentTarget: HTMLDivElement }) => {
@@ -9859,7 +9970,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     scheduleComposerSelection(cursor, cursor, currentComposerSessionKey(), nextText);
   };
   const removeComposerReference = async (reference: FlowerComposerDraftReference, index: number) => {
-    if (!beginComposerReferenceMutation()) return;
+    if (!composerReferenceRemovalAllowed() || !beginComposerReferenceMutation()) return;
     const focusOwner = document.activeElement;
     const removeButton = composerReferenceRemoveButtons.get(reference.local_id);
     const restoreComposerFocus = (
@@ -10038,6 +10149,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   createEffect(() => props.embeddedConversation?.onDraftPresence?.(composerChatDraftHasRawText() || composerHasAttachments() || composerHasExplicitReferences()));
   const composerSlashCommand = createMemo(() => {
+    if (currentMessageEdit()) return { kind: 'none' as const };
     if (goalCommand()) return { kind: 'intent' as const, command: '/goal' as const, operation: 'set' as const, text: goalCommand()!.text };
     if (composerHistoryBrowsing()) return { kind: 'none' as const };
     const parsed = parseFlowerSlashCommand(composerTextValue().trim());
@@ -10065,7 +10177,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return command.kind === 'intent' || command.kind === 'suggest';
   });
   const composerPrimaryActionIsStop = createMemo(() => (
-    !goalCommand() && (longTextPreparing()
+    !currentMessageEdit() && !goalCommand() && (longTextPreparing()
     || (Boolean(selectedThreadID()) && selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences()))
   ));
   type ComposerPrimaryAction = 'send' | 'stop' | 'compact' | 'goal' | 'cancel_long_text';
@@ -10079,8 +10191,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : 'send'
   ));
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
-  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : selectedComposerPendingSend() ? copy().chat.pendingSending : composerPrimaryActionIsCommand() ? (goalCommand() || composerCommandSuggested() === '/goal' ? copy().chat.goalTitle : composerCommandSuggested() === '/plugin' ? '/plugin' : copy().chat.compactContext) : copy().chat.send);
+  const composerPrimaryActionLabel = createMemo(() => currentMessageEdit() ? currentMessageEdit()!.state === 'unknown' ? copy().chat.messageEditRetry : selectedThreadCanStop() ? copy().chat.messageEditStopSend : copy().chat.messageEditSend : composerPrimaryActionIsStop() ? selectedThreadStopLabel() : composerSendPreparing() ? copy().chat.preparingSend : selectedComposerPendingSend() ? copy().chat.pendingSending : composerPrimaryActionIsCommand() ? (goalCommand() || composerCommandSuggested() === '/goal' ? copy().chat.goalTitle : composerCommandSuggested() === '/plugin' ? '/plugin' : copy().chat.compactContext) : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
+    if (currentMessageEdit()) return currentMessageEdit()!.state === 'submitting' || selectedThreadReadOnly() || !settingsReady()
+      || currentMessageEdit()!.state !== 'unknown' && (composerHasSubmissionBlockingAttachments() || composerTextOverLimit()
+        || !composerChatDraftText() && !composerHasReadyAttachments() && !composerHasExplicitReferences());
     if (goalCommand()) return !settingsReady() || !goalCommand()!.text.trim() || goalPending() || !props.adapter.manageGoal || props.adapter.canMutate === false || selectedThreadReadOnly();
     if (composerTakingBackQueuedTurn()) return true;
     if (composerReferenceMutationCount() > 0) return true;
@@ -10116,7 +10231,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || composerSlashCommand().kind !== 'none') return false;
     return !composerPrimaryActionDisabled() || Boolean(fallbackPrompt?.trim() && selectedThreadID());
   };
-  const composerPrimaryActionLoading = createMemo(() => selectedThreadStopPending() || (!composerPrimaryActionIsStop() && (composerSendPreparing() || Boolean(selectedComposerPendingSend()))));
+  const composerPrimaryActionLoading = createMemo(() => currentMessageEdit()?.state === 'submitting' || selectedThreadStopPending() || (!composerPrimaryActionIsStop() && (composerSendPreparing() || Boolean(selectedComposerPendingSend()))));
 
   let capturedComposerPrimaryAction: ComposerPrimaryAction | undefined;
   const captureComposerPrimaryAction = () => {
@@ -12805,6 +12920,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
                   </Show>
                   <MessageCopyButton message={message()} text={copyText()} placement="user" />
+                  <Show when={editableMessage()?.item_id === message().id && !pendingDelivery() && !selectedThreadReadOnly()}>
+                    <Button variant="ghost" size="icon" icon={Pencil} aria-label={copy().chat.messageEditTitle} title={copy().chat.messageEditTitle}
+                      data-flower-message-edit={message().id} disabled={messageEditPreparing() || Boolean(currentMessageEdit())} onClick={() => void openMessageEdit()} />
+                    <Show when={editableMessage()?.revision_request_key}>{key => <Button variant="ghost" size="icon" icon={Clock}
+                      aria-label={copy().chat.messageEditPrevious} title={copy().chat.messageEditPrevious} disabled={messageEditPreparing()}
+                      onClick={() => void openMessageVersion(key())} />}</Show>
+                  </Show>
                   <Show when={pendingDelivery()}>{pending => <span role="status" title={pending().deliveryError}>
                     {pending().delivery === 'failed' ? copy().chat.sendFailed : pending().delivery === 'unknown' ? copy().chat.sendUnknown
                       : pending().delivery === 'accepted' ? copy().chat.sendAcceptedSyncing : copy().chat.pendingSending}
@@ -14692,6 +14814,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </div></Show>
                   </Match>
                   <Match when={bottomActionMode() === 'chat'}>
+                <Show when={currentMessageEdit()?.error}>{error => <p class="flower-message-edit-error" role="alert">{error()}</p>}</Show>
                 <input
                   ref={attachmentPickerRef}
                   class="flower-visually-hidden"
@@ -14816,7 +14939,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     }}
                     onReselect={reselectAttachment}
                     onCancel={(localID) => currentAttachmentController().cancel(localID)}
-                    onRemove={(localID) => currentAttachmentController().remove(localID)}
+                    onRemove={(localID) => { if (composerAttachmentEditingAllowed()) currentAttachmentController().remove(localID); }}
                     onRestore={(localID) => void restoreLongTextAttachment(localID)}
                     onPreview={props.adapter.loadStagedAttachmentPreview || props.adapter.previewStagedAttachment ? previewStagedAttachment : undefined}
                     onFocusFallback={() => attachmentPickerButtonRef?.focus()}
@@ -14855,6 +14978,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       {composerControls()}
                     </div>
                     <div class="flower-composer-actions">
+                      <Show when={currentMessageEdit()}>{edit => <Button variant="ghost" size="icon" icon={X}
+                        class="rounded-full" data-flower-message-editing aria-label={copy().threadList.cancel} title={copy().threadList.cancel}
+                        disabled={edit().state !== 'editing'} onClick={() => closeMessageEdit()} />}</Show>
                   {composerMoreButton()}
                 {composerMorePanel()}
                       <Show when={selectedContextUsage() ?? (selectedThread()?.model_context ? {} : undefined)}>
@@ -14866,7 +14992,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           />
                         )}
                       </Show>
-                      <Show when={selectedThreadCanStop() && !composerPrimaryActionIsStop()}>
+                      <Show when={!currentMessageEdit() && selectedThreadCanStop() && !composerPrimaryActionIsStop()}>
                         <Button
                           variant="secondary"
                           icon={FlowerStopIcon}
@@ -15563,6 +15689,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
         </div>
       </ConfirmDialog>
+      <DialogPlacementProvider mode="global">
+        <Dialog open={Boolean(messageVersion()) && messageVersion()?.threadID === selectedThreadID()} onOpenChange={open => { if (!open) setMessageVersion(undefined); }}
+          title={copy().chat.messageEditPrevious} closeLabel={copy().computer.close} presentation="dialog" class="flower-message-version-dialog"
+          footer={<Button variant="primary" disabled={Boolean(currentMessageEdit()) || messageEditPreparing()}
+            onClick={() => { const version = messageVersion(); if (version) void openMessageEdit(version.history.draft, version.key); }}>{copy().chat.messageEditUseVersion}</Button>}>
+          <Show when={messageVersion()}>{version => <div class="flower-message-version-content">
+            <For each={version().history.items.filter(item => item.turn_id === version().history.draft.turn_id && (item.kind === 'user' || item.kind === 'assistant'))}>{item =>
+              <article data-message-version-kind={item.kind}><p>{item.text}</p><For each={item.attachments}>{attachment => <span>{attachment.name}</span>}</For></article>
+            }</For>
+          </div>}</Show>
+        </Dialog>
+      </DialogPlacementProvider>
       <DialogPlacementProvider mode="global">
         <Dialog
           open={renameTarget()?.placement === 'dialog'}

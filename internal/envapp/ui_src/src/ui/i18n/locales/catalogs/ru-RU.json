@@ -6201,7 +6201,14 @@
         "zoomIn": "Увеличить",
         "zoomOut": "Уменьшить",
         "fit": "Вписать"
-      }
+      },
+      "messageEditTitle": "Изменить сообщение",
+      "messageEditSend": "Сохранить и отправить снова",
+      "messageEditStopSend": "Остановить и отправить снова",
+      "messageEditUnknown": "Не удалось подтвердить отправку. Повторите попытку, чтобы проверить тот же запрос.",
+      "messageEditRetry": "Проверить и повторить",
+      "messageEditPrevious": "Предыдущая версия",
+      "messageEditUseVersion": "Использовать эту версию"
     },
     "threadList": {
       "title": "Беседы",

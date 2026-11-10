@@ -839,7 +839,14 @@
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "fit": "Fit"
-    }
+    },
+    "messageEditTitle": "Edit message",
+    "messageEditSend": "Save and resend",
+    "messageEditStopSend": "Stop and resend",
+    "messageEditUnknown": "Submission could not be confirmed. Retry to check the same request.",
+    "messageEditRetry": "Check and retry",
+    "messageEditPrevious": "Previous version",
+    "messageEditUseVersion": "Use this version"
   },
   "threadList": {
     "title": "Conversations",

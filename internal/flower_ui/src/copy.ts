@@ -635,6 +635,13 @@ export type FlowerSurfaceCopy = Readonly<{
     sendPreparationRecoveryDescription: string;
     pendingQueued: string;
     queuedEdit: string;
+    messageEditTitle: string;
+    messageEditSend: string;
+    messageEditStopSend: string;
+    messageEditUnknown: string;
+    messageEditRetry: string;
+    messageEditPrevious: string;
+    messageEditUseVersion: string;
     queueTakeBackUnknown: string;
     queueTakeBackConflict: string;
     queuedSendNow: string;
@@ -1161,6 +1168,13 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     sendPreparationRecoveryDescription: 'This message was not sent before restart. Restore it to the editor and submit it again.',
     pendingQueued: 'Queued',
     queuedEdit: "Move to input box",
+    messageEditTitle: "Edit message",
+    messageEditSend: "Save and resend",
+    messageEditStopSend: "Stop and resend",
+    messageEditUnknown: "Submission could not be confirmed. Retry to check the same request.",
+    messageEditRetry: "Check and retry",
+    messageEditPrevious: "Previous version",
+    messageEditUseVersion: "Use this version",
     queueTakeBackUnknown: "Message restored to the input box. Queue removal could not be confirmed; check the queue before sending.",
     queueTakeBackConflict: "This queued message has already started or changed. Refresh and try again.",
     queuedSendNow: 'Send now',
