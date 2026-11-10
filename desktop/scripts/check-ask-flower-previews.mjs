@@ -26,6 +26,7 @@ await session.run(async () => {
   const providerRequests = [];
   const expected = new Map();
   const expectedFiles = new Map();
+  const fixtureBodies = new Map();
   let providerError;
   let proofPath;
   let expectedModelImage;
@@ -65,14 +66,14 @@ await session.run(async () => {
         assert.equal(imageParts.length, 0, 'A new navigation task does not inherit the previous screenshot');
       }
       const results = (input.input ?? []).filter(item => item.type === 'function_call_output' && toolCalls.has(item.call_id));
-      providerRequests.push({ marker, model: input.model, referencesExact: true, imageParts: imageParts.length, toolResults: results.length });
+      providerRequests.push({ marker, model: input.model, referencesExact: true, imageParts: imageParts.length, toolResults: results.length, readPath: sourceFile ?? proofPath });
       if (!results.length) {
         assert.ok(input.tools.some(tool => tool.name === 'file_read'));
         const id = `read-${sequence}`; toolCalls.add(id);
-        const item = { type: 'function_call', id, call_id: id, name: 'file_read', arguments: JSON.stringify({ path: proofPath }) };
+        const item = { type: 'function_call', id, call_id: id, name: 'file_read', arguments: JSON.stringify({ path: sourceFile ?? proofPath }) };
         event({ type: 'response.output_item.added', output_index: 0, item }); event({ type: 'response.output_item.done', output_index: 0, item }); complete([item]); return;
       }
-      assert.ok(results.some(item => String(item.output).includes('Ask Flower preview acceptance')), 'A real read tool returns the isolated fixture');
+      assert.ok(results.some(item => strings(JSON.parse(item.output)).includes(fixtureBodies.get(sourceFile ?? proofPath))), 'A real file read returns the exact referenced fixture');
       reply(`ASK_FLOWER_COMPLETE_${marker}: context verified and fixture read successfully.`);
     } catch (error) { providerError = error.stack ?? String(error); if (!response.headersSent) response.writeHead(500); response.end(); }
   });
@@ -93,6 +94,7 @@ await session.run(async () => {
   const markdownPath = path.join(directory, 'reading.md');
   await writeFile(codePath, 'const unrelated = "outside selection";\n' + selectedCode + '\nconst tail = true;\n');
   await writeFile(markdownPath, '# Preview reading\n\nOnly this selected paragraph.\n\nDo not include the other paragraph.\n');
+  for (const file of [proofPath, codePath, markdownPath]) fixtureBodies.set(file, await readFile(file, 'utf8'));
   const startupFile = path.join(state, 'startup.json');
   const runtime = await session.spawn(path.join(state, 'redeven'), ['run', '--mode', 'desktop', '--state-root', path.join(state, 'state'),
     '--local-ui-bind', '127.0.0.1:0', '--local-ui-protocol', 'http', '--presentation', 'machine', '--startup-report-file', startupFile],
@@ -212,7 +214,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       if (sourceFile) expectedFiles.set(marker, sourceFile);
       expected.set(marker, facts);
       const previous = new Set((await api('/_redeven_proxy/api/ai/threads?limit=100')).threads.map(thread => thread.thread_id));
-      await card.locator('textarea').fill(`${marker}: inspect the attached context and read ${proofPath}.`);
+      await card.locator('textarea').fill(`${marker}: inspect the attached context and read ${sourceFile ?? proofPath}.`);
       await card.locator('.floe-prompt-card-submit').click();
       // The real renderer sends over the authenticated session, not page fetch.
       let threadID;
@@ -234,13 +236,21 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       }
       assert.equal(detail.current.last_outcome, 'completed');
       await card.waitFor({ state: 'hidden' });
-      await page.getByText(`ASK_FLOWER_COMPLETE_${marker}: context verified and fixture read successfully.`, { exact: true }).filter({ visible: true }).waitFor();
+      const answer = page.getByText(`ASK_FLOWER_COMPLETE_${marker}: context verified and fixture read successfully.`, { exact: true }).filter({ visible: true });
+      await answer.waitFor();
+      await page.waitForFunction(marker => {
+        const element = [...document.querySelectorAll('[data-flower-message-role="assistant"]')].find(node => node.textContent?.includes(`ASK_FLOWER_COMPLETE_${marker}:`));
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const target = document.elementFromPoint(Math.min(innerWidth - 1, rect.x + rect.width / 2), Math.min(innerHeight - 1, rect.y + rect.height / 2));
+        return target && element.contains(target);
+      }, marker);
       const references = (detail.current.items ?? []).flatMap(item => item.references ?? []);
       assert.ok(references.some(reference => reference.text === facts), 'Canonical admitted reference exactly matches the preview');
       if (sourceFile) {
-        assert.equal(references.length, 2, 'Only the selected file and frozen text enter canonical history');
+        assert.equal(references.length, sourceFile === facts ? 1 : 2, 'Only the selected file and explicit text enter canonical history');
         assert.ok(references.some(reference => reference.kind === 'file' && reference.text === sourceFile), 'Canonical file identity matches the selected source');
-        assert.ok(references.some(reference => reference.kind === 'text' && reference.text === facts && !reference.truncated), 'Canonical selection preserves whitespace without truncation');
+        if (sourceFile !== facts) assert.ok(references.some(reference => reference.kind === 'text' && reference.text === facts && !reference.truncated), 'Canonical selection preserves whitespace without truncation');
       }
       assert.ok(!report.sends.some(previous => previous.threadID === threadID), 'Every Ask creates a new task');
       report.sends.push({ marker, threadID, outcome: detail.current.last_outcome, previewEqualsSubmission: true, answerVisible: true, references: references.map(({ kind, label, text, truncated }) => ({ kind, label, text, truncated: !!truncated })) });
@@ -378,6 +388,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
       await chips.nth(1).click(); await text.waitFor();
       assert.equal(await text.textContent(), selection, 'Preview preserves the exact selected text');
       await preview.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
+      await page.waitForFunction(() => document.querySelector('.flower-context-preview-window')?.getAttribute('data-floating-presence') === 'entered');
       await page.screenshot({ path: path.join(output, `selection-${path.basename(file)}.png`) });
       await preview.locator('[data-floe-floating-window-control="close"]').click(); await preview.waitFor({ state: 'hidden' });
       report.previews.push({ type: 'file-selection', file, selection, exact: true });
@@ -410,7 +421,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     await askAt(fileWindow.locator('[data-floe-floating-window-titlebar]'));
     assert.equal(await card.locator('.flower-composer-context-source').count(), 1);
     assert.ok((await card.innerText()).includes('reading.md'));
-    await sendAndVerify('QUALIFY_ASK_FILE_TITLE', markdownPath);
+    await sendAndVerify('QUALIFY_ASK_FILE_TITLE', markdownPath, markdownPath);
     await fileWindow.locator('[data-floe-floating-window-control="close"]').click();
     const standalone = new URL(startup.local_ui_url);
     standalone.searchParams.set('window', 'file-preview'); standalone.searchParams.set('path', codePath);
