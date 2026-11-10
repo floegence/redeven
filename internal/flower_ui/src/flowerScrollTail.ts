@@ -244,6 +244,25 @@ export function createFlowerScrollTailController(
     // Our own position writes cannot count as user scrolling.
     if (userScroll) userScroll.top = target.scrollTop;
   };
+  const advanceReadingAnchor = (delta: number) => {
+    if (!anchor?.reading || !delta) return;
+    if (delta < 0) pendingHistoryWheel = Math.max(0, pendingHistoryWheel + delta);
+    anchor.top -= delta;
+    for (const fallback of anchor.fallbacks ?? []) fallback.top -= delta;
+  };
+  const acceptNativeReadingScroll = () => {
+    if (!node) return;
+    const delta = node.scrollTop - knownScrollTop;
+    // Scroll and before-paint layout may arrive in either order. Consume native
+    // movement before either updates the baseline, even when offscreen content
+    // changes the scroll range. Tail-follow admission remains a separate check.
+    if (userScroll && delta && anchor?.reading
+      && (userScroll.direction === 0 || Math.sign(delta) === Math.sign(userScroll.direction))) {
+      advanceReadingAnchor(delta);
+      knownScrollTop = node.scrollTop;
+      userScroll.moved = true;
+    }
+  };
   const setReadingTailSpace = (height: number) => {
     if (height === readingTailSpace) return;
     readingTailSpace = height;
@@ -298,16 +317,7 @@ export function createFlowerScrollTailController(
     if (!measuredViewport) { knownScrollTop = target.scrollTop; measuredViewport = true; }
     if (options.preparing?.()) { clearAutomaticFold(); setReadingTailSpace(0); }
     if (gesture() && !gesture()!.target.isConnected) finishGesture();
-    const nativeDelta = target.scrollTop - knownScrollTop;
-    // Native wheel scrolling can update scrollTop before dispatching scroll.
-    // Layout correction must follow that input, never undo it for one frame.
-    if (userScroll && nativeDelta && anchor?.reading
-      && (userScroll.direction === 0 || Math.sign(nativeDelta) === Math.sign(userScroll.direction))) {
-      if (nativeDelta < 0) pendingHistoryWheel = Math.max(0, pendingHistoryWheel + nativeDelta);
-      anchor.top -= nativeDelta;
-      for (const fallback of anchor.fallbacks ?? []) fallback.top -= nativeDelta;
-      knownScrollTop = target.scrollTop;
-    }
+    acceptNativeReadingScroll();
     restoreConnectedAnchor();
     const scrollTop = target.scrollTop;
     let scrollHeight = target.scrollHeight;
@@ -565,6 +575,7 @@ export function createFlowerScrollTailController(
       return 'following' as const;
     }
     growthScrollEvent = false;
+    acceptNativeReadingScroll();
     knownScrollTop = node.scrollTop;
     measuredViewport = true;
     let direction: 'before' | 'after' | undefined;
@@ -582,13 +593,6 @@ export function createFlowerScrollTailController(
       input.viewportHeight = node.clientHeight;
       input.moved ||= moved;
       if (moved) {
-        // Empty reserved rows may have no hit-testable reading target. Move
-        // the existing anchor with the native input before trying to replace it.
-        if (anchor?.reading && externalDelta) {
-          if (externalDelta < 0) pendingHistoryWheel = Math.max(0, pendingHistoryWheel + externalDelta);
-          anchor.top -= externalDelta;
-          for (const fallback of anchor.fallbacks ?? []) fallback.top -= externalDelta;
-        }
         direction = delta < 0 ? 'before' : 'after';
         options.onScrollIntent?.(direction);
         const current = gesture();
@@ -610,9 +614,7 @@ export function createFlowerScrollTailController(
       && node.scrollHeight === knownScrollHeight && node.clientHeight === knownViewportHeight) {
       // Native focus/scrollIntoView and scrollbar movement can occur without a
       // wheel event. They establish a new reading position, unlike our writes.
-      if (externalDelta < 0) pendingHistoryWheel = Math.max(0, pendingHistoryWheel + externalDelta);
-      anchor.top -= externalDelta;
-      for (const fallback of anchor.fallbacks ?? []) fallback.top -= externalDelta;
+      advanceReadingAnchor(externalDelta);
       if (!pendingHistoryWheel) captureReadingAnchor();
     }
     if (readingTailSpace || node.scrollHeight !== knownScrollHeight || node.clientHeight !== knownViewportHeight) scheduleLayout();

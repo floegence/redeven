@@ -4,12 +4,13 @@ import assert from 'node:assert/strict';
 export const workload = Object.freeze({ historyTurns: 500, hz: 80, toolEvery: 60, initialBytes: 32768, warmupSeconds: 600, sampleSeconds: 12 });
 export const fastTests = Object.freeze([
   'runtimeThreadRecord.test.ts', 'runtimeThreadRecord.client.test.ts', 'composer/flowerInputHistory.client.test.ts', 'runtimeCurrentView.stability.test.ts', 'flowerTimelineProjection.test.ts', 'flowerLiveFrameQueue.test.ts', 'threadCache.test.ts',
-  'historySequenceCompletion.test.ts', 'historyBodyLoader.test.ts', 'historyBodyLayout.client.test.ts', 'historyWindowRetention.test.ts', 'historyReadingWindow.test.ts', 'historyReadingGeometry.client.test.ts', 'flowerTurnDisclosure.test.ts',
+  'historySequenceCompletion.test.ts', 'historyBodyLoader.test.ts', 'historyBodyLayout.client.test.ts', 'historyWindowRetention.test.ts', 'historyReadingWindow.test.ts', 'historyReadingGeometry.client.test.ts', 'flowerTurnDisclosure.test.ts', 'flowerScrollTail.test.ts',
   'flowerTurnPresentation.test.ts', 'flowerToolSequences.test.ts', 'flowerToolSequences.client.test.ts', 'flowerToolSequenceLayout.client.test.ts', 'flowerPresentationSubscriptions.client.test.ts', 'flowerActivityTitleReveal.client.test.ts', 'flowerComputerActivities.client.test.ts', 'flowerMotionPreference.client.test.ts', 'flowerSequenceDisclosure.client.test.ts', 'chat/markdown/streamingMarkdownModel.test.ts',
 ]);
 export const browserTests = Object.freeze([
   'FlowerSurface.unavailableHistory.browser.test.tsx', 'FlowerSurface.historySyncRecovery.browser.test.tsx',
   'FlowerSurface.continuousHistory.browser.test.tsx', 'FlowerSurface.coldHistory.browser.test.tsx',
+  'FlowerSurface.scrollContinuity.browser.test.tsx',
   'FlowerSurface.streamingStability.browser.test.tsx',
   'FlowerSurface.reasoningSelection.browser.test.tsx', 'FlowerSurface.disclosureInteraction.browser.test.tsx',
   'FlowerSurface.liveRecovery.browser.test.tsx', 'FlowerSurface.inputResponse.browser.test.tsx',

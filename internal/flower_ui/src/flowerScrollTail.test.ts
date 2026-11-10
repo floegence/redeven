@@ -697,3 +697,34 @@ it('reacquires the same table row after Markdown completion replaces its DOM', (
   expect(rows[0].getBoundingClientRect().top).toBe(20);
   raf.flushAll(); controller.dispose();
 });
+
+it.each(['scroll-first', 'layout-first'])('consumes native reading movement once through range contraction (%s)', order => {
+  const { controller, raf } = createController();
+  const metrics = createViewport(2000); metrics.setScrollTop(400);
+  let documentTop = 420;
+  const title = { isConnected: true, closest: () => null,
+    getBoundingClientRect: () => ({ top: documentTop - metrics.scrollTop(), height: 20 }) } as unknown as HTMLElement;
+  Object.assign(metrics.viewport, { contains: () => true });
+  try {
+    controller.bind(metrics.viewport); controller.stopFollowing(); controller.flushLayout();
+    controller.onWheel({ target: metrics.viewport, deltaY: 80 } as unknown as WheelEvent);
+    controller.preserveLayoutAnchor(title);
+    metrics.setScrollTop(480); metrics.setScrollHeight(1960);
+    if (order === 'scroll-first') controller.onScroll();
+    controller.flushLayout(false);
+    expect(metrics.scrollTop()).toBe(480);
+    if (order === 'layout-first') controller.onScroll();
+    raf.flushFrame(); raf.flushFrame();
+    // Momentum remains native input even after the no-movement expiry.
+    metrics.setScrollTop(540); metrics.setScrollHeight(1920);
+    controller.onScroll(); controller.flushLayout();
+    expect(metrics.scrollTop()).toBe(540);
+    expect(controller.followingLatest()).toBe(false);
+    // A later layout correction must neither lose nor reapply that input.
+    documentTop += 120; metrics.setScrollHeight(2040);
+    controller.measureAfterLayout(); raf.flushAll();
+    expect(metrics.scrollTop()).toBe(660);
+    expect(title.getBoundingClientRect().top).toBe(-120);
+    expect(raf.pending()).toBe(0);
+  } finally { controller.dispose(); }
+});

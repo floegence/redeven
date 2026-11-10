@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower streaming stability
 tags: [flower, streaming, performance, interaction]
 lifecycle: contract
-reviewed_at: "2026-11-05"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -19,6 +19,8 @@ Placement touches changed membership/registration,retaining borrowed DOM/focus/s
 Reuse block classification while final/intermediate/live/outcome stays current;Computer candidates subscribe to relevant targets only. Observed wire window is distinct from retained reading document:wire-only changes cannot rebuild archive/rescan ordinals. Actual ownership/order/coverage/lifecycle publish atomically. Canonical order needs linear check;out-of-order receipts/decorations stable-sort with uncommitted tail intact. Compare unchanged source ranges before copying groups/partitions. Sparse keyed facts visit fewer source keys rather than broadcast absence;updates/removals synchronous. Regressions:2400rows/100partitions,reversed input/decorations,600sparse subscribers,600groups+append.
 
 DOM mutation reads no offsets/extents. Nested-tail/disclosure joins existing before-paint pass;explicit reopen restores follow,transferred anchors retain offset. Capture native input offset before default action. Same-run snapshots retain presentation/equal collections;wire replacement cannot rebind every retained layout controller. New execution gets prefix-validated presentation. Content advances on text owner.
+
+The shared Flower scroll controller consumes native reading movement exactly once before either scroll-event or before-paint layout processing advances its offset baseline. Offscreen range contraction cannot undo downward input or expire observed momentum before `scrollend`. Reading-anchor movement and tail-follow admission are separate: preserve the existing strict bottom/extent checks. Late content still corrects the same reader after input ends. These product-specific anchors belong to Redeven's shared Flower owner, not Floret storage or an unused Floe chat hook.
 
 Measure history gaps after accepted membership in same batch while old DOM mounted;only removed interior rows contribute height,preserved/appended rows need no historical geometry. Keep gap/virtual anchors. Running turns cannot fold;inspect protection runs when eligible,retaining terminal focus/selection/manual choices. Row registration cannot enumerate unchanged groups.
 
@@ -48,4 +50,5 @@ Floret remains the runtime/persistence owner; Floe owns generic parsing; Redeven
 
 - [Indexed records](../../internal/flower_ui/src/runtimeThreadRecord.test.ts)
 - [Streaming CSS optimizer regression](../../scripts/flower_streaming_css.test.mjs)
+- [Native scroll continuity regression](../../internal/envapp/ui_src/src/ui/FlowerSurface.scrollContinuity.browser.test.tsx) and [event-order/momentum checks](../../internal/envapp/ui_src/src/ui/flower/flowerScrollInteraction.test.ts) cover range contraction in both transcript surfaces.
 - FlowerSurface.contextErrors shared/browser and i18n tests cover completed-response feedback.

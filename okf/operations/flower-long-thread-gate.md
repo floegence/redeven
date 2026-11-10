@@ -3,7 +3,7 @@ type: Validation Contract
 title: Flower explicit long-thread qualification
 tags: [flower, performance, correctness, gates]
 lifecycle: contract
-reviewed_at: "2026-11-04"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -18,6 +18,8 @@ Nonzero/interrupted runs, missing tests/tools/metrics or cleanup failure fail qu
 
 ## Correctness
 Fast checks cover indexed records, bounded queues/windows, turn/disclosure identity, keyed disposal, local thinking, structural versus mutable dependencies, sealed bodies and incremental Markdown in Desktop's browser-conditioned Solid/jsdom configuration. Each sequence entry has one mounted owner: classify once, update live fields/first-prose boundaries and dispose removed owners. Read one token snapshot; retained entries must not grow dependencies. Reuse immutable partition/row identities, restored titles and admission-only visibility. Regressions include 2,400-row subscription/identity bounds, 600 retained rows, real browser arrival/DOM placement, plain/reactive cache ownership and user-only prompt history.
+
+Native downward-wheel regressions must shrink offscreen extent during the gesture in both main and child transcripts. Measure every frame and retained paragraph geometry, require the complete input distance without backward movement above 1 CSS px, then verify late-content anchoring after `scrollend`. Unit checks cover both scroll/layout orderings and momentum after the two-frame input expiry. Settled ordinal progress and delayed endpoint samples alone do not certify scrolling continuity.
 
 Per-group observers update changed blockers and dispose removed groups; a 600-group case rejects historical refolding. Body growth cannot advance restoration provenance. Root/child history scans preserve fresh motion. Correct anchors after synchronous completion render and before paint. Every-frame cold-history checks span preview/pending/large-Markdown completion during live generation and native upward wheel input: unintended drift <=1 CSS px, no owner loss, blank frames, duplicate items or malformed cells. Structural batches publish membership once after records are ready; coverage/immutable turn facts add no per-field observers. Cover reconnect, selection, input, approval and terminal state.
 

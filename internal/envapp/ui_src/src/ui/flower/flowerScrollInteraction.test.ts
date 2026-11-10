@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFlowerScrollTailController } from '../../../../../flower_ui/src/flowerScrollTail';
 
 const cleanups: (() => void)[] = [];
-afterEach(() => { cleanups.splice(0).forEach((cleanup) => cleanup()); vi.unstubAllGlobals(); });
+afterEach(() => { cleanups.splice(0).forEach((cleanup) => cleanup()); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function harness(options: { onLayout?: () => void; smoothContentGrowth?: boolean } = {}) {
   const frames = new Map<number, FrameRequestCallback>();
@@ -62,6 +62,40 @@ function touchMove(target: Element, clientY: number) {
 }
 
 describe('Flower viewport input ownership', () => {
+  it.each(['before-layout', 'after-layout'])('retains downward input and momentum during an offscreen range contraction (%s)', order => {
+    const { controller, viewport, frame } = harness();
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 2000 });
+    viewport.scrollTop = 400;
+    controller.flushLayout();
+    const message = document.createElement('div');
+    message.dataset.flowerMessageId = 'reading-message';
+    const paragraph = document.createElement('p');
+    paragraph.textContent = 'Keep reading through offscreen layout changes.';
+    message.append(paragraph); viewport.append(message);
+    vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: 100, left: 0, width: 500, height: 100 } as DOMRect);
+    vi.spyOn(paragraph, 'getBoundingClientRect').mockImplementation(() => ({ top: 420 - viewport.scrollTop, bottom: 440 - viewport.scrollTop, height: 20 } as DOMRect));
+    vi.spyOn(document, 'elementFromPoint').mockReturnValue(paragraph);
+    viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 80 }));
+    // Native scrolling and offscreen intrinsic-size correction share a frame.
+    // The new bottom is still far below this reading position: no clamping.
+    viewport.scrollTop = 480;
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1960 });
+    if (order === 'before-layout') viewport.dispatchEvent(new Event('scroll'));
+    controller.flushLayout(false);
+    expect(viewport.scrollTop).toBe(480);
+    if (order === 'after-layout') viewport.dispatchEvent(new Event('scroll'));
+    controller.measureAfterLayout(); frame(); frame();
+    expect(viewport.scrollTop).toBe(480);
+    expect(controller.followingLatest()).toBe(false);
+    // Trackpad momentum can continue without another wheel callback. An
+    // observed movement must keep its gesture alive until native scrollend.
+    viewport.scrollTop = 540;
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1920 });
+    viewport.dispatchEvent(new Event('scroll'));
+    controller.flushLayout(false);
+    expect(viewport.scrollTop).toBe(540);
+  });
+
   it('retargets resize growth without measuring or notifying on animation-only frames', () => {
     let resize!: () => void;
     vi.stubGlobal('ResizeObserver', class {
