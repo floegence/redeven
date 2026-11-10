@@ -104,9 +104,6 @@ export function EnvSettingsDialog(props: {
   // path as X/Escape. Closing must neither save drafts nor activate background UI.
   return <SettingsDialog closeOnBackdropClick globalZIndex={ENV_APP_FLOATING_LAYER.productModal} open={target() !== null} present={props.session.present()} title={i18n.t('settings.runtimeTitle')} closeLabel={i18n.t('common.actions.close')}
     header={<div data-floe-dialog-header class="redeven-env-settings-dialog-header">
-      {/* IMPORTANT: Parent navigation changes only the settings target. Retained
-          owners preserve drafts; hidden controls lose presentation authority. */}
-      <Show when={target()?.resource}><Button variant="ghost" size="icon" class="shrink-0" data-settings-parent aria-label={i18n.t('common.actions.back')} onClick={() => { const current = target(); if (props.session.present() && current?.resource) props.session.open({ section: current.section }); }}><ChevronLeft class="size-4" /></Button></Show>
       <div class="redeven-env-settings-dialog-header-main">{header()}</div>
       <Button variant="ghost" size="icon" class="redeven-env-settings-dialog-close shrink-0" aria-label={i18n.t('common.actions.close')} onClick={() => props.session.close()}><X class="h-4 w-4" /></Button>
     </div>}
@@ -114,7 +111,12 @@ export function EnvSettingsDialog(props: {
     {/* IMPORTANT: An invalid deep link is presentation state, not an owner change.
         Keep the scope-owned forms alive so returning never discards drafts. */}
     <div class="h-full min-h-0" hidden={!supported()} inert={!supported()}>
-      <SettingsResourceHeaderContext.Provider value={publishResourceHeader}><Show when={scope()} keyed>{(_scope) => <EnvSettingsPage resourceHeader={resourceHeader()} panels={panels} initialSection={(target()?.section ?? 'appearance') as EnvSettingsSection} onNavigate={section => props.session.open({ section })} onHeaderChange={content => setHeader(() => content)} />}</Show></SettingsResourceHeaderContext.Provider>
+      <SettingsResourceHeaderContext.Provider value={publishResourceHeader}><Show when={scope()} keyed>{(_scope) => <EnvSettingsPage parentNavigation={
+        // IMPORTANT: Only clear the resource. Returning preserves drafts and
+        // keeps the parent action in the first header row on narrow dialogs.
+        <Show when={target()?.resource}><Button variant="ghost" size="icon" class="shrink-0" data-settings-parent aria-label={i18n.t('common.actions.back')}
+          onClick={() => { const current = target(); if (props.session.present() && current?.resource) props.session.open({ section: current.section }); }}><ChevronLeft class="size-4" /></Button></Show>
+      } resourceHeader={resourceHeader()} panels={panels} initialSection={(target()?.section ?? 'appearance') as EnvSettingsSection} onNavigate={section => props.session.open({ section })} onHeaderChange={content => setHeader(() => content)} />}</Show></SettingsResourceHeaderContext.Provider>
     </div>
     <Show when={!supported()}><p role="alert">{i18n.t('settings.targetUnavailable')}</p></Show>
   </SettingsDialog>;

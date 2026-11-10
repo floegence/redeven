@@ -204,7 +204,7 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
             <p class="mt-3 text-xs leading-relaxed text-muted-foreground">{presentation().description}</p>
           </Show>
         </SettingRow>
-        <SettingRow title={i18n.t('aiReadiness.actions.showDiagnostics')}
+        <SettingRow title={i18n.t('aiReadiness.diagnostics.title')}
           control={<div class="flex flex-wrap items-center justify-end gap-2">
             <Show when={props.canAdmin && props.controller.snapshot().state === 'degraded'}>
               <Button size="sm" variant="outline" icon={AlertTriangle} disabled={reviewLoading()}

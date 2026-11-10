@@ -237,51 +237,18 @@ describe('AIReadinessSettingsSection', () => {
     fixture.dispose();
   });
 
-  it('checks Flower stores together and keeps backups in the same settings surface', () => {
+  it('shows concise runtime status and diagnostics without obsolete backup interfaces', () => {
     const fixture = mountSettings();
     const rows = fixture.host.querySelectorAll('.redeven-setting-row');
-    expect(rows).toHaveLength(3);
-    expect(rows[0]?.textContent).toContain('Conversation history, product settings, read status, and uploads are checked together.');
-    expect(rows[1]?.textContent).toContain('View diagnostics');
-    expect(rows[2]?.textContent).toContain('Flower backups');
-    expect(buttonWithText(fixture.host, 'View backups')).toBeTruthy();
-    fixture.dispose();
-  });
-
-  it('requires review and explicit confirmation before restoring the selected backup', async () => {
-    const fixture = mountSettings();
-    const snapshot = { id: '12345678901234567890123456789012', created_at: '2026-09-08T10:00:00Z', source_build: 'v1', bytes: 10000, kind: 'automatic', protected: true };
-    fetchLocalApiJSON.mockResolvedValueOnce({ snapshots: [snapshot] });
-    buttonWithText(fixture.host, 'View backups').click();
-    await vi.waitFor(() => expect(buttonWithText(fixture.host, 'Review restore')).toBeTruthy());
-    expect(fetchLocalApiJSON).toHaveBeenCalledTimes(1);
-    buttonWithText(fixture.host, 'Review restore').click();
-    expect(fixture.host.textContent).toContain('Unfinished tasks will stop');
-    expect(fixture.host.textContent).toContain('Commands and external actions are not undone');
-    expect(fetchLocalApiJSON).toHaveBeenCalledTimes(1);
-    const response = deferred<unknown>();
-    fetchLocalApiJSON.mockReturnValueOnce(response.promise);
-    buttonWithText(fixture.host, 'Confirm restore').click();
-    buttonWithText(fixture.host, 'Confirm restore').click();
-    expect(fetchLocalApiJSON).toHaveBeenCalledTimes(2);
-    expect(fetchLocalApiJSON).toHaveBeenLastCalledWith('/_redeven_proxy/api/ai/maintenance/restore', { method: 'POST', body: JSON.stringify({ snapshot_id: snapshot.id, confirmed: true }) });
-    response.resolve({});
-    await vi.waitFor(() => expect(fixture.host.textContent).toContain('Restore started.'));
-    fixture.dispose();
-  });
-
-  it('discards a pending backup response when administrator access is revoked', async () => {
-    const fixture = mountSettings();
-    const response = deferred<unknown>();
-    fetchLocalApiJSON.mockReturnValueOnce(response.promise);
-    buttonWithText(fixture.host, 'View backups').click();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain('Status');
+    expect(rows[1]?.textContent).toContain('Startup details');
+    expect(buttonWithText(fixture.host, 'View diagnostics')).toBeTruthy();
+    expect(fixture.host.textContent).not.toContain('Flower backups');
+    expect(fixture.host.textContent).not.toContain('Restore');
+    expect(fetchLocalApiJSON).not.toHaveBeenCalled();
     fixture.setCanAdmin(false);
-    response.resolve({ snapshots: [{ id: 'secret-backup' }] });
-    await Promise.resolve();
-    expect(fixture.host.textContent).toContain('Administrator access is required');
-    expect(fixture.host.textContent).not.toContain('secret-backup');
-    fixture.setCanAdmin(true);
-    expect(fixture.host.textContent).not.toContain('secret-backup');
+    expect(fixture.host.textContent).not.toContain('View backups');
     fixture.dispose();
   });
 

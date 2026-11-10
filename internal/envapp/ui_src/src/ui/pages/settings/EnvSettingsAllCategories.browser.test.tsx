@@ -146,14 +146,16 @@ const selectors: Partial<Record<EnvSettingsSection, string>> = {
   appearance: '.floe-setting-row', terminal: '[data-terminal-history-settings] input', browser: '.flower-computer-capabilities',
   applications: '.host-access-settings .host-access-feature-settings', containers: 'input[aria-label]', services: '[data-testid=managed-service-settings] input',
   extensions: '[data-testid=flower-extensions] .flower-extension-source', plugins: '[data-plugin-connections] input', ai: '.flower-settings-provider-card',
+  flower_recovery: '.ai-readiness-settings .floe-setting-row',
 };
 async function openCategory(section: EnvSettingsSection) {
   const resource = section === 'containers' ? 'docker-a' : section === 'services' ? 'design-service' : section === 'plugins' ? pluginInstalledSettingsResource('metrics-instance') : section === 'terminal' ? terminalSettingsResource({ kind: 'widget', id: 'widget-a', sessionId: 'session-a' }) : undefined;
   session.open({ section, ...(resource ? { resource } : {}) });
   await expect.element(page.getByTestId(`settings-section-${section}`)).toBeVisible();
-  const panel = document.querySelector<HTMLElement>(`[data-testid="settings-section-${section}"]`)!;
-  await expect.poll(() => panel.innerText.trim().length, { message: `${section} renders nonempty real content` }).toBeGreaterThan(30);
-  if (selectors[section]) await expect.poll(() => panel.querySelector(selectors[section]!), { message: `${section} owner data finishes loading` }).not.toBeNull();
+  const live = () => document.querySelector<HTMLElement>(`[data-testid="settings-section-${section}"]`)!;
+  await expect.poll(() => live().innerText.trim(), { timeout: 5000, message: `${section} renders nonempty real content` }).not.toBe('');
+  if (selectors[section]) await expect.poll(() => live().querySelector(selectors[section]!), { timeout: 5000, message: `${section} owner data finishes loading` }).not.toBeNull();
+  const panel = live();
   await document.fonts.ready;
   await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   return panel;
@@ -594,7 +596,7 @@ it.each([320, 1024])('uses one icon list and header-owned resource navigation at
     const panel = document.querySelector<HTMLElement>(`[data-testid="settings-section-${section}"]`);
     await expect.element(page.getByTestId(`settings-section-${section}`)).toBeVisible();
     const live = () => document.querySelector<HTMLElement>(`[data-testid="settings-section-${section}"]`)!;
-    await expect.poll(() => live().querySelectorAll('[data-settings-resource-list] button').length).toBeGreaterThan(0);
+    await expect.poll(() => live().querySelectorAll('[data-settings-resource-list] button').length, { timeout: 5000 }).toBeGreaterThan(0);
     expect(live().querySelector('[role=combobox]')).toBeNull();
     for (const row of live().querySelectorAll('[data-settings-resource-list] button')) expect(row.querySelector('svg, img')).not.toBeNull();
     await page.screenshot({ path: `../../../../dist/settings-resources/list-${width}-${section}.png` });

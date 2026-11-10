@@ -121,6 +121,7 @@ const sectionComponents: Partial<Record<EnvSettingsSection, () => JSX.Element>> 
 };
 
 type EnvSettingsPageProps = {
+  parentNavigation?: JSX.Element;
   resourceHeader?: JSX.Element;
   initialSection?: EnvSettingsSection;
   context?: EnvSettingsPageContextValue;
@@ -158,6 +159,7 @@ function EnvSettingsPageContent(props: EnvSettingsPageProps = {}) {
   const header = (
       <div class="redeven-settings-header flex items-center justify-between gap-3 shrink-0">
         <div class="flex flex-1 items-center gap-3 min-w-0">
+          {props.parentNavigation}
           <Show when={!props.onHeaderChange && returnToFlower()}>
             <button
               type="button"
@@ -282,13 +284,13 @@ export function EnvSettingsPage(props: EnvSettingsPageProps = {}) {
   if (props.context) {
     return (
       <EnvSettingsPageCtx.Provider value={props.context}>
-        <EnvSettingsPageContent resourceHeader={props.resourceHeader} context={props.context} panels={props.panels} onNavigate={props.onNavigate} onHeaderChange={props.onHeaderChange} />
+        <EnvSettingsPageContent parentNavigation={props.parentNavigation} resourceHeader={props.resourceHeader} context={props.context} panels={props.panels} onNavigate={props.onNavigate} onHeaderChange={props.onHeaderChange} />
       </EnvSettingsPageCtx.Provider>
     );
   }
   return (
     <EnvSettingsPageProvider initialSection={props.initialSection}>
-      <EnvSettingsPageContent resourceHeader={props.resourceHeader} panels={props.panels} onNavigate={props.onNavigate} onHeaderChange={props.onHeaderChange} />
+      <EnvSettingsPageContent parentNavigation={props.parentNavigation} resourceHeader={props.resourceHeader} panels={props.panels} onNavigate={props.onNavigate} onHeaderChange={props.onHeaderChange} />
     </EnvSettingsPageProvider>
   );
 }
