@@ -297,9 +297,9 @@ function surfaceAllowsKind(surface: ContextActionSurface, kind: string): boolean
     case 'git_browser':
     case 'desktop_welcome_environment_card': return kind === 'text_snapshot';
     case 'flower_composer': return kind === 'file_path' || kind === 'text_snapshot' || kind === 'thread_reference' || kind === 'reference_snapshot';
-    case 'file_browser':
+    case 'file_browser': return kind === 'file_path';
     case 'file_preview':
-    case 'editor_preview': return kind === 'file_path';
+    case 'editor_preview': return kind === 'file_path' || kind === 'text_snapshot';
   }
 }
 

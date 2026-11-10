@@ -450,7 +450,7 @@ func contextActionSurfaceAllowsKind(surface string, kind string) bool {
 	case contextActionSurfaceFile:
 		return kind == contextActionKindFilePath
 	case contextActionSurfacePreview, contextActionSurfaceEditor:
-		return kind == contextActionKindFilePath
+		return kind == contextActionKindFilePath || kind == contextActionKindText
 	case contextActionSurfaceTerminal:
 		return kind == contextActionKindTerminal
 	case contextActionSurfaceMonitoring:

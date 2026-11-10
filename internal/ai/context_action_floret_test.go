@@ -664,3 +664,39 @@ func TestTextSnapshotReferencePreservesSelectionWhitespace(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewContextAdmitsSelectedTextThroughWireValidation(t *testing.T) {
+	for _, surface := range []string{contextActionSurfacePreview, contextActionSurfaceEditor} {
+		t.Run(surface, func(t *testing.T) {
+			selection := "  selected 中文\n\tsecond line\n"
+			action := ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion, ActionID: contextActionAskFlowerID, Provider: contextActionFlowerProvider,
+				Target: ContextActionTarget{TargetID: "current", Locality: contextActionLocalityAuto},
+				Source: ContextActionSource{Surface: surface}, Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+				Context: []ContextActionContextItem{
+					{Kind: contextActionKindFilePath, Path: "/workspace/code.ts"},
+					{Kind: contextActionKindText, Title: "code.ts", Detail: "/workspace/code.ts", Content: selection},
+				},
+			}
+			raw, err := json.Marshal(action)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded ContextActionEnvelope
+			if err := json.Unmarshal(raw, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			normalized, err := normalizeAskFlowerContextActionEnvelope(&decoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := floretTextSnapshotReference(normalized.Context[1], 1); got.Text != selection || got.Truncated {
+				t.Fatalf("selection changed: %#v", got)
+			}
+			decoded.Source.Surface = contextActionSurfaceFile
+			if _, err := normalizeAskFlowerContextActionEnvelope(&decoded); !errors.Is(err, ErrInvalidContextAction) {
+				t.Fatalf("file browser unexpectedly accepts selection: %v", err)
+			}
+		})
+	}
+}
