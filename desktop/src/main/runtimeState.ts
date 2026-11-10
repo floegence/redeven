@@ -20,8 +20,8 @@ import {
   normalizeDesktopPrivateBridgeToken,
 } from './desktopPrivateBridge';
 
-export const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
-const DEFAULT_ENV_APP_SHELL_TIMEOUT_MS = 15_000;
+export const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 10_000;
+const DEFAULT_ENV_APP_SHELL_TIMEOUT_MS = 30_000;
 // Leave bridge capacity for control and interactive traffic while reusing
 // connections across every asset in a packaged Env App.
 const RUNTIME_PROBE_MAX_SOCKETS = 8;
