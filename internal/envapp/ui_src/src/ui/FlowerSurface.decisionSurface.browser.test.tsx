@@ -1163,6 +1163,11 @@ describe('Flower bottom decision surface', () => {
     await flush();
     expect(stopThread).toHaveBeenCalledTimes(1);
     expect(stopThread.mock.calls[0][1]).toEqual(expect.objectContaining({ expected_run_id: 'run-old' }));
+    await waitFor(() => !(runtime.querySelector('.flower-composer-stop-thread') as HTMLButtonElement).disabled);
+    (runtime.querySelector('.flower-composer-stop-thread') as HTMLButtonElement).click();
+    await waitFor(() => stopThread.mock.calls.length === 2);
+    expect(stopThread.mock.calls[1][1]).toEqual(expect.objectContaining({ expected_run_id: 'run-new' }));
+    expect(stopThread.mock.calls[1][1].client_request_id).not.toBe(stopThread.mock.calls[0][1].client_request_id);
   });
 
   it('does not steal focus when the user leaves the approval surface during submission', async () => {
