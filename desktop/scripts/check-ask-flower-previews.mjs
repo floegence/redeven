@@ -131,7 +131,7 @@ await session.run(async () => {
       await delay(50);
     }
     assert.ok(page, 'Desktop opens its Env App');
-    await app.evaluate(({ BrowserWindow }, { url, output }) => {
+    await app.evaluate(({ BrowserWindow }, url) => {
       const win = BrowserWindow.getAllWindows().find(win => win.webContents.getURL() === url);
       win.setContentSize(1440, 960);
       const capturePage = win.webContents.capturePage.bind(win.webContents);
@@ -140,10 +140,10 @@ await session.run(async () => {
       win.webContents.capturePage = async (...args) => {
         const image = await capturePage(...args);
         global.captures++;
-        require('node:fs').writeFileSync(output, image.toPNG());
+        global.captureBytes = Array.from(image.toPNG());
         return image;
       };
-    }, { url: page.url(), output: path.join(output, 'captured.png') });
+    }, page.url());
   } else {
     const startupFile = path.join(state, 'startup.json');
     const runtime = await session.spawn(path.join(state, 'redeven'), ['run', '--mode', 'desktop', '--state-root', path.join(state, 'state'),
@@ -329,8 +329,6 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     await sendAndVerify('QUALIFY_ASK_DRAG_SELECTION', draggedText, modulePath);
     await fileWindow.locator('[data-floe-floating-window-control="close"]').click();
     await fileWindow.waitFor({ state: 'hidden' });
-    await page.getByRole('button', { name: 'Collapse Flower', exact: true }).click();
-    await page.locator('#redeven-activity-flower-product[data-presentation="collapsed"]').waitFor({ state: 'attached' });
     report.firstPreview = { normalPointerPressMs: 80, exactDraggedSelection: true, cardHitTested: true, typingFocus: true };
     await page.getByRole('textbox', { name: 'Filter files', exact: true }).click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click({ delay: 80 });
@@ -367,6 +365,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     const image = preview.locator('img'); await image.waitFor();
     await page.waitForFunction(() => document.querySelector('.flower-context-preview-window img')?.naturalWidth > 0);
     const bytes = Buffer.from(await image.evaluate(async element => [...new Uint8Array(await (await fetch(element.src)).arrayBuffer())]));
+    if (bundle) await writeFile(path.join(output, 'captured.png'), Buffer.from(await app.evaluate(() => global.captureBytes)));
     const captured = await readFile(path.join(output, 'captured.png'));
     assert.equal(hash(bytes), hash(captured));
     expectedModelImage = JSON.parse(execFileSync('go', ['run', './scripts/fixtures/ask_flower_model_image', path.join(output, 'captured.png')], { cwd: root, env: { ...process.env, GOWORK: 'off' }, encoding: 'utf8' }));
@@ -535,7 +534,10 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     await sendAndVerify('QUALIFY_ASK_FILE_TITLE', markdownPath, markdownPath);
     await fileWindow.locator('[data-floe-floating-window-control="close"]').click();
     if (bundle) {
+      await fileWindow.waitFor({ state: 'hidden' });
       await openFile('selection.ts');
+      await fileWindow.locator('.monaco-editor .view-line').filter({ hasText: 'const tail' }).waitFor();
+      await fileWindow.locator('.monaco-editor .view-line').first().click();
       await fileWindow.getByRole('button', { name: 'More file actions', exact: true }).click();
       await page.getByRole('menuitem', { name: 'Open in separate window', exact: true }).click();
       const parent = page;
