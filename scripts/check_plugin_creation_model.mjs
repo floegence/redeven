@@ -185,6 +185,9 @@ try {
   // checks. Review its completed result before exercising the retained preview.
   await expect(workspace.getByRole('button', { name: 'Stop', exact: true })).toBeHidden({ timeout: 900000 });
   await expect(workspace.getByRole('button', { name: 'Preview versions', exact: true })).toBeEnabled();
+  const initialBuildLabel = await workspace.locator('.plugin-creation-version-label').innerText();
+  assert.match(initialBuildLabel, /^Build [1-9][0-9]*$/);
+  report.initialPreviewBuild = initialBuildLabel;
   await expect(workspace.locator('[data-plugin-surface-host]')).toHaveAttribute('data-surface-instance-id', /.+/, { timeout: 30000 });
   await frame.getByText('25:00', { exact: true }).waitFor();
   await frame.getByRole('button', { name: 'Start', exact: true }).click();
@@ -250,13 +253,15 @@ try {
   await expect(comment).toBeVisible();
   await expect(comment.locator('.plugin-canvas-comment-target')).toContainText('Start');
   await comment.getByRole('textbox').fill(
-    'Change the selected Start button label to Begin focus. Add a compact heading with the exact text Focus session ready. Keep this same plugin identity, Pause, Reset and the initial 25:00 display. Set the package version to 0.1.1, update the real tests and run plugin_author_build. Do not install or grant permissions. Continue until the new successful artifact is returned.',
+    'Change the selected Start button label to Begin focus. Add a compact heading with the exact text Focus session ready. Keep this same plugin identity, Pause, Reset and the initial 25:00 display. Increment the current package patch version, update the real tests and run plugin_author_build. Do not install or grant permissions. Continue until the new successful artifact is returned.',
   );
   await expect(comment.getByRole('button', { name: 'Ask Flower to change', exact: true })).toBeEnabled({ timeout: 120000 });
   await page.screenshot({ path: path.join(reportRoot, 'canvas-comment.png') });
   await comment.getByRole('button', { name: 'Ask Flower to change', exact: true }).click();
   await expect(workspace.locator('.plugin-creation-flower-composer textarea')).toHaveValue(ordinaryDraft);
   await frame.getByText('Focus session ready', { exact: true }).waitFor({ timeout: 900000 });
+  await expect(workspace.getByRole('button', { name: 'Stop', exact: true })).toBeHidden({ timeout: 900000 });
+  await expect(workspace.locator('.plugin-creation-version-label')).not.toHaveText(initialBuildLabel);
   await phase('Canvas comment produced an automatically displayed revision');
   await page.setViewportSize({ width: 390, height: 844 });
   await workspace.getByRole('tab', { name: 'Preview', exact: true }).click();
@@ -264,8 +269,7 @@ try {
   await expect(workspace.locator('[data-plugin-surface-host]')).toHaveAttribute('data-surface-instance-id', /.+/, { timeout: 30000 });
   await workspace.getByRole('button', { name: 'More actions', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Preview versions', exact: true }).click();
-  await expect(page.getByRole('menuitem').filter({ hasText: '0.1.1' }).first()).toBeVisible();
-  await page.getByRole('menuitem').filter({ hasText: '0.1.0' }).first().click();
+  await page.getByRole('menuitem', { name: new RegExp('^' + initialBuildLabel + ' ·') }).click();
   await frame.getByRole('button', { name: 'Start', exact: true }).waitFor();
   await expect(frame.getByText('Focus session ready', { exact: true })).toHaveCount(0);
   await page.reload();
@@ -382,6 +386,9 @@ try {
     filled: getComputedStyle(element.querySelector('svg')).fill !== 'none',
   })), { border: '0px', shadow: 'none', filled: true });
   await page.reload();
+  await page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first().click();
+  await page.locator('[data-plugin-center-market-action]').click();
+  await page.getByRole('tab', { name: /^Installed/ }).click();
   await expect(pin).toHaveAttribute('aria-pressed', 'true');
   await page.screenshot({ path: path.join(reportRoot, 'installed-pinned-icon.png') });
   await pin.click();
