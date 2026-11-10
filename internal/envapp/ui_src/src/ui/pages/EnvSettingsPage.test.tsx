@@ -594,7 +594,7 @@ describe('EnvSettingsPage', () => {
 
     const navLabels = SETTINGS_NAV_ITEMS.map((item) => item.label);
     expect(navLabels).toEqual([
-      'Appearance & Language', 'Terminal', 'Browser', 'Host Applications & Desktop', 'Containers', 'Services', 'Extensions', 'Plugin configuration', 'Flower recovery', 'Storage',
+      'Appearance & Language', 'Terminal', 'Browser', 'Host Applications & Desktop', 'Containers', 'Services', 'Extensions', 'Plugin configuration', 'Flower diagnostics', 'Storage',
       'Config File', 'Connection', 'Runtime Status', 'Shell & Workspace', 'Codespaces & Tooling', 'Logging', 'Permission Policy', 'Flower', 'Debug Console',
     ]);
     const renderedIDs = Array.from(host.querySelectorAll('[data-settings-nav-item]')).map(node => node.getAttribute('data-settings-nav-item'));
@@ -630,7 +630,7 @@ describe('EnvSettingsPage', () => {
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
     const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-nav-item]') ?? []).map((node) => node.getAttribute('data-settings-nav-item'));
-    expect(aiGroupSections).toEqual(['ai', 'extensions', 'plugins', 'flower_recovery']);
+    expect(aiGroupSections).toEqual(['ai', 'extensions', 'plugins']);
     expect(host.querySelector('[data-settings-nav-item="plugins"]')).not.toBeNull();
 
     await openSettingsSection(host, 'debug_console');

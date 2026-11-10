@@ -864,6 +864,9 @@ describe('native Containers page', () => {
     harness.preflight.mockResolvedValue(preflight);
     const host = document.createElement('div'); document.body.append(host);
     dispose = render(() => <ContainerSettingsPanel resource="container_service_docker" />, host); await settle();
+    const proxy = host.querySelector<HTMLTextAreaElement>('textarea')!;
+    proxy.value = '{"debug":true}';
+    proxy.dispatchEvent(new InputEvent('input', { bubbles: true })); await settle();
     const label = applyMode === 'save' ? 'containers.services.save' : 'containers.services.saveRestart';
     const save = () => Array.from(host.querySelectorAll<HTMLButtonElement>('[data-testid="container-settings-panel"] button')).find(button => button.textContent === label)!;
     save().click(); await settle();
