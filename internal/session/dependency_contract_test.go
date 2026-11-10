@@ -657,8 +657,8 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 		},
 		filepath.Join("okf", "ui", "flower-live-timeline.md"): {
 			"one workspace stream",
-			"Broken authority/sequence invalidates.",
-			"Viewer/current-only events grant no coverage.",
+			"Broken sequence/authority invalidates.",
+			"Viewer/current-only events prove no coverage.",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
 			"Published Floret v7.18.2",
@@ -1173,13 +1173,22 @@ func TestFloretLegacyThreadTranscriptAPIsAreNotUsedInProduction(t *testing.T) {
 		if readErr != nil {
 			return readErr
 		}
-		content := string(data)
-		for _, marker := range []string{"flruntime." + "ThreadMessage"} {
-			if strings.Contains(content, marker) {
-				rel, _ := filepath.Rel(root, path)
-				t.Fatalf("%s must not use Floret transcript API marker %q", rel, marker)
-			}
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, data, 0)
+		if parseErr != nil {
+			return parseErr
 		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			selector, ok := node.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			qualifier, ok := selector.X.(*ast.Ident)
+			if ok && qualifier.Name == "flruntime" && selector.Sel.Name == "ThreadMessage" {
+				rel, _ := filepath.Rel(root, path)
+				t.Errorf("%s must not use the retired Floret ThreadMessage transcript API", rel)
+			}
+			return true
+		})
 		return nil
 	})
 	if err != nil {

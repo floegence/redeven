@@ -66,8 +66,8 @@ func writeEncodingIntegrationCall(w http.ResponseWriter, name, id, args string) 
 	writeAskUserIntegrationCompletedResponse(w, flush, id)
 }
 
-// Decode only the provider's documented output text boundary. Nested JSON
-// strings are deliberately never decoded by this assertion.
+// Decode the published retained-output envelope and its structured result.
+// Nested JSON strings are deliberately never decoded by this assertion.
 func assertProviderComputerTypes(t *testing.T, request map[string]any) {
 	t.Helper()
 	found := false
@@ -85,6 +85,20 @@ func assertProviderComputerTypes(t *testing.T, request map[string]any) {
 		decoder.UseNumber()
 		if err := decoder.Decode(&payload); err != nil {
 			t.Fatalf("invalid model output: %q (%v)", output, err)
+		}
+		retained, ok := payload["retained_output"].(map[string]any)
+		if !ok || payload["status"] != "success" || retained["preview_omitted"] != false {
+			t.Fatalf("invalid retained output envelope: %#v", retained)
+		}
+		if ref, ok := retained["ref"].(string); !ok || !strings.HasPrefix(ref, "output:v1:") {
+			t.Fatal("retained output reference missing")
+		}
+		if hash, ok := retained["sha256"].(string); !ok || len(hash) != 64 {
+			t.Fatal("retained output digest missing")
+		}
+		payload, ok = payload["result"].(map[string]any)
+		if !ok {
+			t.Fatal("retained computer result must remain a JSON object")
 		}
 		assertComputerResultTypes(t, payload)
 		if len(payload["data"].(map[string]any)["complete_text"].(string)) != 70<<10 {

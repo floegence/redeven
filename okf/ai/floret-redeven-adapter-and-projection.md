@@ -27,6 +27,12 @@ extra subscriptions, canonical reads or observer persistence.
 Workspace facts preserve equal sidebar cache identity. Each observer has two cancellable slots: conversation and child. Off-window Computer assistance uses server-only canonical evidence, excluded from bounded response. [Live delivery](../ui/flower-live-timeline.md) and [qualification](../operations/flower-live-queue-performance.md#navigation-acceptance) own details. No schema/migration change.
 
 ## Model result and UI
+Published Floret v7.113.0 retains large model tool results in a structured
+`result` with separate `status` and `retained_output` metadata. The original
+JSON types and complete content remain intact; the archive reference never
+authorizes execution or retry. Provider-boundary tests assert this envelope
+and the unchanged underlying result through Retry and restart.
+
 [Final encoder](../../internal/ai/tool_result_encoding.go) applies execution facts/content policy/JSON, then Text plus independent Decoder.UseNumber structured snapshot. Activity separately projects valid source; truncation cannot alter model content. Floret's uncertain-effect warning sits outside payload budget, preserving complete diagnostics through provider/restart/retry.
 
 Optional encoding loss emits factual error and continues provider loop, never soliciting human confirmation merely for possible mutation. Preserve result_unavailable/result_error_code separately from original owner error, invocation ID, completed_actions, needs_observation and target, including confirmed prefix/uncertain remainder. Malformed metadata cannot replace classification. Empty prefix proves no absence of effects; invocation completion is not task success. Model chooses authorized observation/work; never replay tools. Actual interactions/cancellation/dispatch/uncertainty retain authority; failure to encode safe result is infrastructure failure. Persisted questions keep canonical answer/cancel after restart, without host migration/auto-answer.

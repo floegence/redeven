@@ -8,7 +8,7 @@ reviewed_at: "2026-11-02"
 ---
 # Summary
 
-Floret v7 ThreadService alone owns active/canonical lifecycle. Redeven authorizes endpoints/resources/provider-tool effects. Send/Respond/Cancel/Retry/CompactContext return typed state before continuation. Floret owns one-time historical source preparation during upgrade.
+Floret v7 ThreadService alone owns active/canonical lifecycle. Canonical records deduplicate; drafts and execution tokens stay transient. Redeven authorizes endpoints/resources/provider-tool effects. Send/Respond/Cancel/Retry/CompactContext return typed state before continuation. Floret owns one-time historical source preparation during upgrade.
 
 # Contract
 
