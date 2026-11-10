@@ -1,3 +1,4 @@
+import { buildFilePreviewFlowerTurnLauncherIntent } from './utils/filePreviewAskFlower';
 import { createBrowserEditorSetupSession } from './services/browserEditorSetupSession';
 import { createHostApplicationOperationSession } from './services/hostApplicationOperationSession';
 import { createContainerOperationSession } from './services/containerOperationSession';
@@ -2677,10 +2678,19 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
       environment === envId() && mode === viewMode() && (source.value.kind === 'navigation' || mode !== 'activity' || page === layout.sidebarActiveTab())
       && current()?.id === source.id && current()?.value.resourceKey === source.value.resourceKey } : undefined;
   };
-  let askPreviewFlower: (() => void) | undefined;
   const prepareGlobalAskFlower = (request?: ContextMenuRequest) => {
-    if (standaloneFilePreview) return () => askPreviewFlower?.();
     const source = captureFlowerSource(false, request?.target, request?.selection ?? '');
+    if (source?.value.file) {
+      const file = source.value.file;
+      const { intent } = buildFilePreviewFlowerTurnLauncherIntent({
+        item: { id: file.path, path: file.path, name: file.name, type: 'file' },
+        selectionText: source.selection || file.selection, unsaved: file.unsaved,
+      });
+      return () => {
+        if (intent) openFlowerTurnLauncher(intent, request ? { x: request.x, y: request.y } : { x: source.rect.x + 28, y: source.rect.y + 48 });
+        bindScreenshotSource(source, request?.target);
+      };
+    }
     const snapshot = source ? flowerPageContextSnapshot({ environmentID: envId(), environmentName: environmentName(),
       pageID: source.value.pageID, pageName: source.value.pageName, capturedAtMs: Date.now(),
       state: { ...source.value.state, kind: source.value.kind ?? 'surface',
@@ -2766,7 +2776,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
   };
 
   const receiveFlowerWindowHandoff = async (source: DesktopAskFlowerSource) => {
-    if (standaloneFilePreview) { askPreviewFlower?.(); return; }
+    if (standaloneFilePreview) { openGlobalAskFlower(); return; }
     try {
       const receiver = await import('./services/desktopFlowerSource');
       receiver.deliverFlowerWindowHandoff(source, envId(), environmentName(), openFlowerTurnLauncher, screenshot => {
@@ -5591,7 +5601,7 @@ export function EnvAppShell(props: { navigation?: ActivityNavigation; standalone
         <ErrorBoundary fallback={() => <PageLoadError ready={assetRecoveryReady()} />}>
           <Suspense fallback={<ActivityPageLoading />}>
             <div class="h-full min-h-0 flex flex-col">
-              <div class="min-h-0 flex-1"><Show when={standaloneFilePreview} fallback={<EnvTessivenPage openRequest={tessivenOpenRequest()} visible standalone />}><FilePreviewStandalone onAskFlowerReady={action => { askPreviewFlower = action; }} /></Show></div>
+              <div class="min-h-0 flex-1"><Show when={standaloneFilePreview} fallback={<EnvTessivenPage openRequest={tessivenOpenRequest()} visible standalone />}><FilePreviewStandalone /></Show></div>
             </div>
           </Suspense>
         </ErrorBoundary>

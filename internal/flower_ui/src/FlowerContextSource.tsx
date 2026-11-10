@@ -2,7 +2,8 @@ import { createContext, useContext, onMount, onCleanup, createEffect, createUniq
 import { createContextSourceRegistry } from '@floegence/floe-webapp-core/ui';
 import type { FlowerPageContextRegistrar, FlowerPageContextState } from './flowerPageContext';
 
-export type FlowerSourceFacts = Readonly<{ kind?: 'surface' | 'navigation' | 'object' | 'shell'; screenshotElement?: HTMLElement; resourceKey?: string; pageID: string; pageName: string; mode: 'activity' | 'workbench' | 'overlay'; state?: FlowerPageContextState }>;
+export type FlowerSourceFile = Readonly<{ path: string; name: string; selection?: string; unsaved?: boolean }>;
+export type FlowerSourceFacts = Readonly<{ file?: FlowerSourceFile; kind?: 'surface' | 'navigation' | 'object' | 'shell'; screenshotElement?: HTMLElement; resourceKey?: string; pageID: string; pageName: string; mode: 'activity' | 'workbench' | 'overlay'; state?: FlowerPageContextState }>;
 export const createFlowerContextSources = () => createContextSourceRegistry<FlowerSourceFacts>(document);
 export const FlowerContextSources = createContext<ReturnType<typeof createFlowerContextSources>>();
 type SourceReader = (read: () => FlowerPageContextState | undefined, resourceKey?: () => string | undefined) => void;
@@ -17,7 +18,7 @@ export function registerFlowerPageReader(read: () => FlowerPageContextState | un
   registrar?.(read, resourceKey);
 }
 
-export function FlowerContextSource(props: { id: string; pageID: string; pageName: string; mode: 'activity' | 'workbench' | 'overlay'; kind?: FlowerSourceFacts['kind']; resourceKey?: string; selected?: boolean; enabled?: boolean; boundary?: (body: HTMLElement) => HTMLElement; class?: string; state?: FlowerPageContextState; children: JSX.Element }) {
+export function FlowerContextSource(props: { id: string; pageID: string; pageName: string; mode: 'activity' | 'workbench' | 'overlay'; kind?: FlowerSourceFacts['kind']; file?: FlowerSourceFile; resourceKey?: string; selected?: boolean; enabled?: boolean; boundary?: (body: HTMLElement) => HTMLElement; class?: string; state?: FlowerPageContextState; children: JSX.Element }) {
   const sources = useContext(FlowerContextSources);
   let element!: HTMLElement;
   let reader: (() => FlowerPageContextState | undefined) | undefined;
@@ -37,7 +38,7 @@ export function FlowerContextSource(props: { id: string; pageID: string; pageNam
   onMount(() => {
     element = props.boundary?.(element) ?? element;
     const remove = sources?.register({ id, element, enabled: () => props.enabled !== false, activateOnInteraction: props.kind !== 'shell' && props.kind !== 'navigation', read: () => ({
-      kind: props.kind ?? 'surface', resourceKey: readResourceKey?.() ?? props.resourceKey, pageID: props.pageID, pageName: props.pageName, mode: props.mode, state: copyFacts(reader?.() ?? props.state),
+      file: props.file ? { ...props.file } : undefined, kind: props.kind ?? 'surface', resourceKey: readResourceKey?.() ?? props.resourceKey, pageID: props.pageID, pageName: props.pageName, mode: props.mode, state: copyFacts(reader?.() ?? props.state),
     }) });
     if (props.selected) activate();
     onCleanup(() => remove?.());

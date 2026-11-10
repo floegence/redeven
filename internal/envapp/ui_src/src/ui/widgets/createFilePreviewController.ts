@@ -574,7 +574,7 @@ export function createFilePreviewController(params: {
   };
 
   const updateSelection = (selectionText: string) => {
-    setPreviewSelectedText(String(selectionText ?? '').trim());
+    setPreviewSelectedText(String(selectionText ?? ''));
   };
 
   const bindPdfEditor: BindPdfPreviewEditor = (editor) => {

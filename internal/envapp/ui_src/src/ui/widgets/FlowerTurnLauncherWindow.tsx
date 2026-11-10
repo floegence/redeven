@@ -1,3 +1,4 @@
+import { useLayout } from '@floegence/floe-webapp-core';
 import { Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import {
@@ -344,6 +345,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
     tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
   }));
   const floatingWindowStack = useEnvAppFloatingWindowStack();
+  const layout = useLayout();
   const viewportInsets = createAskFlowerWindowViewportInsets({
     open: () => props.open && props.placement !== 'panel',
     chrome: desktopWindowChromeBridge(),
@@ -528,7 +530,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
             onClose={props.onClose}
             onSubmit={props.onSubmit}
             onContextAction={executeContextAction}
-            zIndex={floatingWindowStack?.zIndex(FLOWER_TURN_LAUNCHER_STACK_ID) ?? ENV_APP_FLOATING_LAYER.windowBase}
+            zIndex={layout.isMobile() ? ENV_APP_FLOATING_LAYER.mobileAskFlower : floatingWindowStack?.zIndex(FLOWER_TURN_LAUNCHER_STACK_ID) ?? ENV_APP_FLOATING_LAYER.windowBase}
             onActivate={activateLauncher}
             windowClass="flower-turn-launcher-window"
             localScrollProps={REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}

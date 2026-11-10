@@ -1,7 +1,6 @@
 import { openFilePreviewWindow } from '../services/filePreviewWindow';
 import { desktopShellBridgeAvailable } from '../services/desktopShellBridge';
 import { FilePreviewSearchScope } from './FilePreviewSearch';
-import { FlowerContextSource } from '../flower/FlowerContextSource';
 import { Dynamic, Portal } from 'solid-js/web';
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type Component } from 'solid-js';
 import { useLayout } from '@floegence/floe-webapp-core';
@@ -72,6 +71,7 @@ export function FilePreviewDocument(props: { controller: FilePreviewController; 
     const result = buildFilePreviewFlowerTurnLauncherIntent({
       item: filePreview.controller.item(),
       selectionText,
+      unsaved: filePreview.controller.dirty(),
     });
     if (result.error) {
       notification.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), result.error);
@@ -212,6 +212,9 @@ function FilePreviewWorkspaceWindow(props: { workspace: FilePreviewWorkspace }) 
   /> : undefined);
   return <PreviewWindow open={workspace.open()} onOpenChange={open => { if (!open) workspace.requestClose(); }}
     title={title()} titleContent={tabs()} stackId="file-preview" persistenceKey="file-preview" surfaceRef={setSurface}
+    context={{ pageID: 'preview:file', pageName: title(), resourceKey: workspace.active()?.item.path,
+      file: workspace.active() ? { path: workspace.active()!.item.path, name: title(),
+        unsaved: workspace.active()!.controller.dirty(), selection: workspace.active()!.controller.selectedText() } : undefined }}
     headerActions={<div ref={setActionsHost} class="flex items-center" />}>
     <div class="relative h-full min-h-0 flex-1">
     <For each={panels()}>{entry => {
@@ -228,12 +231,8 @@ function FilePreviewWorkspaceWindow(props: { workspace: FilePreviewWorkspace }) 
           </div></Portal>}</Show>
           <RetainedPanel active={workspace.activeId() === entry.id} data-preview-document={entry.id} role={multiple() ? 'tabpanel' : undefined} id={panelId(entry.id)} aria-labelledby={multiple() ? tabId(entry.id) : undefined} aria-label={entry.item.name}
             class="h-full min-h-0">
-            <FlowerContextSource id={`preview:${entry.id}`} pageID={`preview:${entry.id}`} pageName={entry.item.name} mode="overlay"
-              state={{ path: entry.controller.item()?.path, mode: entry.controller.descriptor().mode, unsaved: entry.controller.dirty(), selection: entry.controller.selectedText() }}
-              selected={workspace.activeId() === entry.id && workspace.open()}>
             <FilePreviewPanel {...panel} active={workspace.activeId() === entry.id && workspace.open()} surface={layout.isMobile() ? 'main' : 'window'} showHeader={layout.isMobile()}
               contentRef={setContent} closeConfirmVariant="none" />
-            </FlowerContextSource>
           </RetainedPanel>
         </FilePreviewSearchScope>;
       };

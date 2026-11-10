@@ -245,9 +245,9 @@ func floretProcessReference(item ContextActionContextItem, index int) flruntime.
 }
 
 func floretTextSnapshotReference(item ContextActionContextItem, index int) flruntime.MessageReference {
-	text := strings.TrimSpace(item.Content)
-	if text == "" {
-		text = strings.TrimSpace(item.Detail)
+	text := item.Content
+	if strings.TrimSpace(text) == "" {
+		text = item.Detail
 	}
 	text, truncated := truncateContextReferenceText(text)
 	return flruntime.MessageReference{
@@ -268,7 +268,7 @@ func contextReferencePathLabel(value string) string {
 }
 
 func truncateContextReferenceText(value string) (string, bool) {
-	runes := []rune(strings.TrimSpace(value))
+	runes := []rune(value)
 	if len(runes) <= flruntime.MaxMessageReferenceTextRunes {
 		return string(runes), false
 	}

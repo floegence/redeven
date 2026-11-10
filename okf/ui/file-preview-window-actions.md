@@ -3,7 +3,7 @@ type: UI Contract
 title: File preview actions and dismissal
 tags: [ui, files, preview, floating-windows, selection]
 lifecycle: contract
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -19,6 +19,9 @@ Alt+Shift+Left/Right sorts; Escape cancels sorting before dismissal. Arrow/Home/
 One controller/panel per normalized path serves every filesystem entry. Reopening selects without reread/discard. Switching preserves nodes, drafts, position and mode, pausing inactive native media. Floe RetainedPanel keeps panels laid out at current viewport size, hidden/inert/ARIA-hidden rather than display:none; DOM order is independent of tab order. Each tab owns actions/loading/errors/Retry. Closing inactive tabs preserves selection; active selects adjacent; last closes window. Window close confirms all unsaved edits together, cancellation preserves all, saving prevents discard until settlement.
 
 Attachments use source-identity tabs with independent loaders/retry/cancel/object URLs; repeat selects the same source. Snapshot inspectors, Workbench widgets and conversation-file back navigation keep separate ownership. Workbench content begins below header except sync notices; keyboard/Escape/Tab cannot leak to canvas/shell focus. FilePreviewActions owns availability/feedback; downloads preserve draft mapping and use [product Downloads](../ai/flower-task-files.md#downloads-and-panel), including child previews. Writable PDFs use Edit and PDF.js Unicode saves/NeedAppearances without replacement-font embedding. Live links open current objects; snapshots retain bytes; failed targets offer Retry/Open parent.
+
+## Ask Flower context
+The preview frame owns one active-file context reader, including titlebar and portaled actions. Tab changes update that reader; a menu freezes the file identity and explicit selection before focus changes. No selection submits only the file reference. Selected text is a separate snapshot with the source path; preserve indentation, line endings and unsaved status. The file remains an authorized live resource, not a substitute for the frozen selected text. Read-only standalone previews use the same global source capture and intent builder, including the menu anchor; they do not replace the request with a no-argument callback. Monaco's shared adapter reads its model selection, never its hidden DOM input. Preview buttons capture selection on pointer down.
 
 ## Separate preview
 More opens the active saved filesystem file in a separate Desktop window or browser tab. Busy/loading disables it; unsaved edits show localized save-first feedback without autosave/discard. Retain original document and drafts. Separate previews are read-only, with Ask Flower, Find, Copy path, Download, rendering and Retry. Attachments do not gain this filesystem action.
@@ -44,3 +47,5 @@ Loading/errors remain in body. [Rendering](file-preview-viewport-and-rendering.m
 # Evidence
 
 FilePreviewWorkspace and FlowerAttachmentPreviewTabs browser suites cover tabs, actions, keyboard, narrow geometry, retries and release; FlowerTurnLauncherWindow.preview covers capture/focus/Escape. desktop/scripts/check-{office-preview,file-preview-continuity,file-preview-popout}.mjs qualify built Electron/product controllers, retained dark documents, authorization, read-only routing, drafts, local Flower/settings/capture and supervised cleanup. November 6 Floe 0.96.0/Electron 45.1.0 fixtures passed 16 switches with no light samples/repeated reads and preserved scroll; reintroducing display:none failed. External images stay outside source. These are scoped renderer/Runtime results, not all-platform installer qualification.
+
+`redeven:desktop/scripts/check-ask-flower-previews.mjs` checks built Runtime/Electron code and Markdown selections, titlebar context, repeated right-click focus, standalone previews, canonical/provider equality, real file-tool execution and visible replies.

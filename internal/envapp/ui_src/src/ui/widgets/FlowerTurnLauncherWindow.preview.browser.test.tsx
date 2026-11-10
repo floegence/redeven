@@ -10,6 +10,8 @@ import type { FlowerTurnLauncherIntent } from '../../../../../flower_ui/src/cont
 import type { FlowerTurnLauncherSubmitInput } from '../../../../../flower_ui/src/FlowerTurnLauncherWindow';
 import { FlowerTurnLauncherWindow } from './FlowerTurnLauncherWindow';
 import { FilePreviewContext, type FilePreviewContextValue } from './FilePreviewContext';
+import { EnvAppFloatingWindowStackProvider } from '../context/EnvAppFloatingWindowStackContext';
+import { PreviewWindow } from './PreviewWindow';
 import { I18nProvider } from '../i18n';
 
 let dispose: (() => void) | undefined;
@@ -95,4 +97,31 @@ it.each([{ width: 1440, theme: 'light' }, { width: 390, theme: 'dark' }, { width
   await expect.poll(() => submitted.length).toBe(1);
   expect(submitted[0].intent.pending_attachments?.[0]).toBe(file);
   expect(submitted[0].intent.context_items[0]).toEqual({ kind: 'text_snapshot', title: 'File Browser', content: body });
+});
+
+it.each([390, 1440])('raises a repeated contextual request above its source at %i', async width => {
+  await page.viewport(width, 900);
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => {
+    const [intent, setIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
+    return <I18nProvider><LayoutProvider><EnvAppFloatingWindowStackProvider>
+      <FilePreviewContext.Provider value={{ openPreview: async () => {}, closePreview: () => {} } as unknown as FilePreviewContextValue}>
+      <GlobalFlowerContextMenu label="Ask Flower" onError={error => { throw error; }}
+        editingLabels={{ undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste', selectAll: 'Select all', openLink: 'Open link', copyLink: 'Copy link' }}
+        prepare={() => () => setIntent({ id: 'same-draft', source_surface: 'flower_composer', context_items: [{ kind: 'text_snapshot', title: 'Preview', content: 'Frozen selection' }] })}>
+        <PreviewWindow open onOpenChange={() => {}} title="Source preview"><p id="reading-source">Selected preview text</p></PreviewWindow>
+        <FlowerTurnLauncherWindow open={!!intent()} intent={intent()} anchor={{ x: 500, y: 300 }} onClose={() => setIntent(null)} onSubmit={async () => {}} />
+      </GlobalFlowerContextMenu></FilePreviewContext.Provider>
+    </EnvAppFloatingWindowStackProvider></LayoutProvider></I18nProvider>;
+  }, host);
+  await expect.poll(() => document.querySelector('#reading-source')).toBeTruthy();
+  for (let invocation = 0; invocation < 2; invocation++) {
+    await userEvent.click(document.querySelector('#reading-source')!, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+    const editor = document.querySelector<HTMLTextAreaElement>('[data-floe-prompt-card] textarea')!;
+    await expect.poll(() => document.activeElement).toBe(editor);
+    await expect.poll(() => { const rect = editor.getBoundingClientRect(); return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2); }).toBe(editor);
+    if (!invocation) await userEvent.fill(editor, 'Keep this question');
+    else expect(editor.value).toBe('Keep this question');
+  }
 });

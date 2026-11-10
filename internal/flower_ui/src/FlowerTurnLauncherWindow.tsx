@@ -192,6 +192,11 @@ export function createFlowerTurnLauncherPanelController(
       setPendingRequest(null);
       setClientRequestID(createFlowerClientRequestID());
       presentedIntent = intent;
+      // A fresh contextual action also raises an already-open card. Preserve the
+      // draft and insertion point while returning typing ownership from its source.
+      queueMicrotask(() => {
+        if (props.open && props.autoFocus !== false && textareaEl?.isConnected) textareaEl.focus({ preventScroll: true });
+      });
       return;
     }
     presentedIntent = intent;

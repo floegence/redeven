@@ -7,6 +7,7 @@ import { builtInShellThemePresets, FloeConfigProvider, LayoutProvider, ThemeProv
 import { render } from 'solid-js/web';
 import { commands, page, userEvent } from 'vitest/browser';
 import { afterEach, expect, it, vi } from 'vitest';
+import { createFlowerContextSources, FlowerContextSources } from '../flower/FlowerContextSource';
 import { FilePreviewContext } from './FilePreviewContext';
 import { FilePreviewHost } from './FilePreviewHost';
 import { createFilePreviewWorkspace, type FilePreviewWorkspace } from './createFilePreviewWorkspace';
@@ -26,13 +27,15 @@ function mount(mode: 'light' | 'dark' = 'light') {
     return { meta: { content_len: bytes.length }, channel: { reader: { readExactly: async () => bytes }, close: vi.fn(), stream: { reset: vi.fn() } } };
   });
   const host = document.createElement('div'); document.body.append(host);
-  dispose = render(() => {
+  const sources = createFlowerContextSources();
+  const renderDispose = render(() => {
     workspace = createFilePreviewWorkspace({ client: () => ({} as never), rpc: () => null, canWrite: () => true });
     return <FloeConfigProvider config={{ theme: { storageKey: 'preview-tabs-test', defaultTheme: mode, defaultSurfaceStyle: 'soft-neumorphic', shellPresets: builtInShellThemePresets, defaultShellPreset: { light: 'porcelain-light', dark: 'classic-dark' } } }}><ThemeProvider><LayoutProvider>
-      <FilePreviewContext.Provider value={{ workspace, get controller() { return workspace.activeController(); }, openPreview: workspace.openPreview, closePreview: workspace.requestClose }}><FilePreviewHost /></FilePreviewContext.Provider>
+      <FlowerContextSources.Provider value={sources}><FilePreviewContext.Provider value={{ workspace, get controller() { return workspace.activeController(); }, openPreview: workspace.openPreview, closePreview: workspace.requestClose }}><FilePreviewHost /></FilePreviewContext.Provider></FlowerContextSources.Provider>
     </LayoutProvider></ThemeProvider></FloeConfigProvider>;
   }, host);
-  return workspace;
+  dispose = () => { renderDispose(); sources.dispose(); };
+  return Object.assign(workspace, { contextSources: sources });
 }
 async function openFind() {
   await userEvent.click(page.getByRole('button', { name: 'More file actions', exact: true }));
@@ -489,4 +492,20 @@ it('keeps late HTML reads local and makes rapid selection authoritative', async 
   workspace.requestClose('/workspace/slow.html');
   expect(workspace.activeId()).toBe('/workspace/ready.html');
   expect(document.querySelector('iframe')).toBe(readyFrame);
+});
+
+it.each([390, 1280])('freezes active-file facts across titlebar, body and tab switches at %i', async width => {
+  await page.viewport(width, 900);
+  const workspace = mount();
+  await workspace.openPreview(file('first.md'));
+  await expect.poll(() => document.querySelector('.file-markdown-body p')).toBeTruthy();
+  const boundary = document.querySelector<HTMLElement>('[data-floe-geometry-surface="floating-window"], [role="dialog"]')!;
+  const title = width === 390 ? boundary.querySelector('button')! : boundary.querySelector('[data-floe-floating-window-titlebar]')!;
+  const frozen = workspace.contextSources.captureTarget(title);
+  expect(frozen?.value.file?.path).toBe('/workspace/first.md');
+  await workspace.openPreview(file('second.md'));
+  expect(workspace.contextSources.captureTarget(title)?.value.file?.path).toBe('/workspace/second.md');
+  expect(frozen?.value.file?.path).toBe('/workspace/first.md');
+  const inactive = document.querySelector('[data-preview-document="/workspace/first.md"] p')!;
+  expect(inactive.closest('[inert]')).not.toBeNull();
 });

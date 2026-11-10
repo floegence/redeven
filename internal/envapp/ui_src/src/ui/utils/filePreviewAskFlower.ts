@@ -12,6 +12,7 @@ export type BuildFilePreviewFlowerTurnLauncherIntentResult = Readonly<{
 export function buildFilePreviewFlowerTurnLauncherIntent(params: {
   item?: FileItem | null;
   selectionText?: string;
+  unsaved?: boolean;
 }): BuildFilePreviewFlowerTurnLauncherIntentResult {
   const item = params.item;
   if (!item || item.type !== 'file') {
@@ -27,6 +28,14 @@ export function buildFilePreviewFlowerTurnLauncherIntent(params: {
   }
 
   const contextItems: EnvFlowerTurnLauncherContextItem[] = [{ kind: 'file_path', path: absolutePath, is_directory: false }];
+
+  const selection = String(params.selectionText ?? '');
+  if (selection.trim()) {
+    contextItems.push({ kind: 'text_snapshot', title: item.name, detail: absolutePath, content: selection });
+  }
+  if (params.unsaved) {
+    contextItems.push({ kind: 'text_snapshot', title: item.name, content: `path: ${absolutePath}\nunsaved: true` });
+  }
 
   const intent: EnvFlowerTurnLauncherIntent = {
     id: createClientId(),

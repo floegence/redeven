@@ -119,7 +119,7 @@ describe('FilePreviewHost', () => {
     try {
       const ask = host.querySelector<HTMLButtonElement>('[data-testid="ask-flower"]')!;
       expect(ask.disabled).toBe(false); ask.click();
-      expect(openFlowerTurnLauncherMock).toHaveBeenCalledWith(expect.objectContaining({ source_surface: 'file_preview', context_items: [{ kind: 'file_path', path: '/workspace/demo.txt', is_directory: false }] }), { x: 820, y: 520 });
+      expect(openFlowerTurnLauncherMock).toHaveBeenCalledWith(expect.objectContaining({ source_surface: 'file_preview', context_items: [{ kind: 'file_path', path: '/workspace/demo.txt', is_directory: false }, { kind: 'text_snapshot', title: 'demo.txt', detail: '/workspace/demo.txt', content: 'selected line' }] }), { x: 820, y: 520 });
     } finally { dispose(); }
   });
   it.each(['dirty', 'saving', 'loading'] as const)('protects the original preview while %s', state => {
@@ -174,6 +174,7 @@ describe('FilePreviewHost', () => {
           path: '/workspace/demo.txt',
           is_directory: false,
         },
+        { kind: 'text_snapshot', title: 'demo.txt', detail: '/workspace/demo.txt', content: 'selected line' },
       ],
       pending_attachments: [],
     }), { x: 820, y: 520 });

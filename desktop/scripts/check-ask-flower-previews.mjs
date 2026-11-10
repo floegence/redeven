@@ -25,6 +25,7 @@ await session.run(async () => {
   await mkdir(output, { recursive: true });
   const providerRequests = [];
   const expected = new Map();
+  const expectedFiles = new Map();
   let providerError;
   let proofPath;
   let expectedModelImage;
@@ -52,6 +53,8 @@ await session.run(async () => {
       assert.ok(marker, 'The actual user prompt reaches the provider');
       const facts = expected.get(marker);
       assert.ok(texts.some(text => text.includes(facts) || text.includes(JSON.stringify(facts).slice(1, -1))), 'Exact preview facts reach the provider');
+      const sourceFile = expectedFiles.get(marker);
+      if (sourceFile) assert.ok(texts.some(text => text.includes(sourceFile) || text.includes(JSON.stringify(sourceFile).slice(1, -1))), 'The selected file identity accompanies its text');
       assert.equal(input.model, 'gpt-5-mini');
       const images = value => value && typeof value === 'object' ? value.type === 'input_image' ? [value] : Object.values(value).flatMap(images) : [];
       const imageParts = images(input.input);
@@ -85,6 +88,11 @@ await session.run(async () => {
   await mkdir(directory);
   proofPath = path.join(directory, 'preview-evidence.txt');
   await writeFile(proofPath, 'Ask Flower preview acceptance\nThe reference and screenshot must remain readable.\n');
+  const selectedCode = '  const selected = "quoted context";\n\treturn selected;';
+  const codePath = path.join(directory, 'selection.ts');
+  const markdownPath = path.join(directory, 'reading.md');
+  await writeFile(codePath, 'const unrelated = "outside selection";\n' + selectedCode + '\nconst tail = true;\n');
+  await writeFile(markdownPath, '# Preview reading\n\nOnly this selected paragraph.\n\nDo not include the other paragraph.\n');
   const startupFile = path.join(state, 'startup.json');
   const runtime = await session.spawn(path.join(state, 'redeven'), ['run', '--mode', 'desktop', '--state-root', path.join(state, 'state'),
     '--local-ui-bind', '127.0.0.1:0', '--local-ui-protocol', 'http', '--presentation', 'machine', '--startup-report-file', startupFile],
@@ -150,6 +158,7 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     assert.ok(context.includes('File Browser (files)'));
     assert.ok(context.includes(`directory: ${directory}`));
     assert.ok(!context.includes('selected_paths:'));
+    await preview.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
     assert.ok((await text.boundingBox()).height > 240);
     assert.equal(await preview.locator('.redeven-file-preview-toolbar').count(), 0);
     assert.equal(await preview.locator('[data-flower-context-preview-close]').count(), 0);
@@ -199,7 +208,8 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     await page.screenshot({ path: path.join(output, 'image-reopened.png') });
     await preview.locator('[data-floe-floating-window-control="close"]').click();
     await preview.waitFor({ state: 'hidden' });
-    const sendAndVerify = async (marker, facts) => {
+    const sendAndVerify = async (marker, facts, sourceFile) => {
+      if (sourceFile) expectedFiles.set(marker, sourceFile);
       expected.set(marker, facts);
       const previous = new Set((await api('/_redeven_proxy/api/ai/threads?limit=100')).threads.map(thread => thread.thread_id));
       await card.locator('textarea').fill(`${marker}: inspect the attached context and read ${proofPath}.`);
@@ -336,6 +346,78 @@ win.loadURL('about:blank'); }); app.on('window-all-closed', () => app.quit());`)
     await assertOriginalPage();
     report.flowerPage = { originalThreadID, newThreadID: report.sends.at(-1).threadID, pageRetained: true, draftRetained: true, contextPreviewed: true, dismissals: ['close', 'escape'], newTaskAnswerVisible: true };
     assert.equal(await app.evaluate(() => global.captures), 1);
+    await navigation('files').click();
+    const fileWindow = page.locator('.file-preview-floating-window').filter({ has: page.locator('.redeven-file-preview') });
+    const openFile = async name => {
+      await page.getByText(name, { exact: true }).filter({ visible: true }).last().dblclick();
+      await fileWindow.waitFor();
+    };
+    const askAt = async (target, position) => {
+      await target.click({ button: 'right', ...(position ? { position } : {}) });
+      // Monaco arms pointer selection after its native menu appears.
+      await page.waitForTimeout(120);
+      await page.getByRole('menuitem', { name: 'Ask Flower', exact: true }).click();
+      await card.waitFor();
+      await card.locator('textarea').evaluate(async element => {
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const rect = element.getBoundingClientRect();
+        if (element !== document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)) throw new Error('Ask Flower is covered by its source window');
+        if (document.activeElement !== element) throw new Error('Ask Flower does not own typing focus');
+      });
+    };
+    const closeCard = async () => { await card.locator('.floe-prompt-card-close').click(); await card.waitFor({ state: 'hidden' }); };
+    const inspectSelection = async (selection, file) => {
+      const chips = card.locator('.flower-composer-context-source');
+      assert.equal(await chips.count(), 2, 'Only the file and explicit selection are attached');
+      await chips.nth(1).click(); await text.waitFor();
+      assert.equal(await text.textContent(), selection, 'Preview preserves the exact selected text');
+      await preview.evaluate(async element => { await Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))); });
+      await page.screenshot({ path: path.join(output, `selection-${path.basename(file)}.png`) });
+      await preview.locator('[data-floe-floating-window-control="close"]').click(); await preview.waitFor({ state: 'hidden' });
+      report.previews.push({ type: 'file-selection', file, selection, exact: true });
+    };
+    await openFile('selection.ts');
+    const editor = fileWindow.locator('.monaco-editor');
+    await editor.locator('.view-lines').click();
+    await page.keyboard.press('ControlOrMeta+a'); await page.keyboard.press('ArrowLeft');
+    for (const _ of 'const unrelated = "outside selection";\n') await page.keyboard.press('ArrowRight');
+    await page.keyboard.down('Shift');
+    for (const _ of selectedCode) await page.keyboard.press('ArrowRight');
+    await page.keyboard.up('Shift');
+    assert.ok(await editor.locator('.selected-text').count(), 'A real Monaco text selection exists before asking');
+    const selectedLine = editor.locator('.view-line').filter({ hasText: 'const selected' });
+    await askAt(selectedLine, { x: 100, y: 9 });
+    await inspectSelection(selectedCode, codePath);
+    await card.locator('textarea').fill('Keep this draft');
+    await askAt(selectedLine, { x: 100, y: 9 });
+    assert.equal(await card.locator('textarea').inputValue(), 'Keep this draft');
+    await inspectSelection(selectedCode, codePath);
+    await sendAndVerify('QUALIFY_ASK_FILE_SELECTION', selectedCode, codePath);
+    await fileWindow.locator('[data-floe-floating-window-control="close"]').click();
+    await openFile('reading.md');
+    const paragraph = fileWindow.locator('.file-markdown-body p').first();
+    await paragraph.click();
+    await paragraph.evaluate(element => { const range = document.createRange(); range.selectNodeContents(element); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range); });
+    await askAt(paragraph);
+    await inspectSelection('Only this selected paragraph.', markdownPath);
+    await sendAndVerify('QUALIFY_ASK_MARKDOWN_SELECTION', 'Only this selected paragraph.', markdownPath);
+    await askAt(fileWindow.locator('[data-floe-floating-window-titlebar]'));
+    assert.equal(await card.locator('.flower-composer-context-source').count(), 1);
+    assert.ok((await card.innerText()).includes('reading.md'));
+    await sendAndVerify('QUALIFY_ASK_FILE_TITLE', markdownPath);
+    await fileWindow.locator('[data-floe-floating-window-control="close"]').click();
+    const standalone = new URL(startup.local_ui_url);
+    standalone.searchParams.set('window', 'file-preview'); standalone.searchParams.set('path', codePath);
+    await page.goto(standalone.href);
+    const standaloneEditor = page.locator('[data-file-preview-standalone] .monaco-editor');
+    await standaloneEditor.locator('.view-lines').click(); await page.keyboard.press('ControlOrMeta+a');
+    const allCode = await readFile(codePath, 'utf8');
+    await askAt(standaloneEditor.locator('.view-line').first(), { x: 100, y: 9 });
+    await inspectSelection(allCode, codePath);
+    await sendAndVerify('QUALIFY_ASK_STANDALONE', allCode, codePath);
+    await askAt(page.locator('[data-file-preview-standalone] header'));
+    await closeCard();
+    report.filePreview = { repeatedContextMenu: true, draftRetained: true, titlebar: true, monaco: true, markdown: true, standalone: true };
     report.passed = true; report.captureCount = 1; report.draftRetained = true;
   } catch (error) {
     report.error = error.stack ?? String(error); report.providerError = providerError;

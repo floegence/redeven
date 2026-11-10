@@ -653,3 +653,14 @@ func TestComposerPageAndFileAdmissionRetainsResourceAuthority(t *testing.T) {
 		})
 	}
 }
+
+func TestTextSnapshotReferencePreservesSelectionWhitespace(t *testing.T) {
+	for _, text := range []string{"  const value = 1;\n\treturn value;\n", strings.Repeat(" 界", flruntime.MaxMessageReferenceTextRunes)} {
+		ref := floretTextSnapshotReference(ContextActionContextItem{Kind: contextActionKindText, Title: "Selected code", Content: text}, 0)
+		runes := []rune(text)
+		want := string(runes[:min(len(runes), flruntime.MaxMessageReferenceTextRunes)])
+		if ref.Text != want || ref.Truncated != (len(runes) > flruntime.MaxMessageReferenceTextRunes) {
+			t.Fatalf("selection changed: got %q truncated=%v", ref.Text, ref.Truncated)
+		}
+	}
+}

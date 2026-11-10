@@ -161,3 +161,19 @@ describe('File preview action presentations', () => {
     }
   });
 });
+
+it.each(['header', 'icons'] as const)('freezes exact selected text before %s action focus changes', presentation => {
+  const host = document.createElement('div'); document.body.append(host);
+  const content = document.createElement('div'); content.textContent = '  indented line\n\tsecond line\n'; document.body.append(content);
+  const ask = vi.fn();
+  const dispose = render(() => <FilePreviewActions item={item} descriptor={{ mode: 'markdown' }} presentation={presentation} contentElement={content} onAskFlower={ask} />, host);
+  try {
+    const range = document.createRange(); range.selectNodeContents(content);
+    window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+    const action = button(host, 'Ask Flower');
+    action.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    window.getSelection()!.removeAllRanges();
+    action.click();
+    expect(ask.mock.calls[0][0]).toBe(content.textContent);
+  } finally { dispose(); content.remove(); }
+});

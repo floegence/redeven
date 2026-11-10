@@ -1,12 +1,13 @@
 import { handlePreviewSearchShortcut } from './previewSearchShortcut';
-import { FlowerContextSource } from '../flower/FlowerContextSource';
+import type { FlowerPageContextState } from '../flower/flowerPageContext';
+import { FlowerContextSource, type FlowerSourceFacts } from '../flower/FlowerContextSource';
 import { Show, createMemo, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import type { EnvAppFloatingWindowStackLayer } from '../utils/envAppFloatingWindowStack';
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { X } from '@floegence/floe-webapp-core/icons';
 import { useI18n } from '../i18n';
-import { Dialog } from '../primitives/EnvAppModal';
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 import { PersistentFloatingWindow, type PersistentFloatingWindowSurfaceRef } from './PersistentFloatingWindow';
 
 const PREVIEW_WINDOW_MARGIN_DESKTOP = 16;
@@ -33,6 +34,8 @@ export interface PreviewWindowProps {
   floatingClass?: string;
   mobileClass?: string;
   surfaceRef?: PersistentFloatingWindowSurfaceRef;
+  context?: Readonly<{ pageID: string; pageName: string; resourceKey?: string; state?: FlowerPageContextState; file?: FlowerSourceFacts['file'] }>;
+
 }
 
 export function PreviewWindow(props: PreviewWindowProps) {
@@ -73,11 +76,14 @@ export function PreviewWindow(props: PreviewWindowProps) {
           class={cn('file-preview-floating-window overflow-hidden rounded-md', props.floatingClass)}
           contentClass="min-h-0 flex flex-1 flex-col !overflow-hidden !p-0"
         >
-          <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col overflow-hidden" id={sourceID} pageID={sourceID} pageName={props.title ?? i18n.t('filePreview.previewWindowTitle')} mode="overlay" state={{ title: props.title, detail: props.description }}>{props.children}</FlowerContextSource>
+          <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col overflow-hidden" id={sourceID} pageID={props.context?.pageID ?? sourceID} pageName={props.context?.pageName ?? props.title ?? i18n.t('filePreview.previewWindowTitle')} mode="overlay" resourceKey={props.context?.resourceKey} file={props.context?.file} enabled={props.open}
+            boundary={body => body.closest<HTMLElement>('[data-floe-geometry-surface="floating-window"], [role="dialog"]') ?? body}
+            state={props.context?.state ?? { title: props.title, detail: props.description }}>{props.children}</FlowerContextSource>
         </PersistentFloatingWindow>
       )}
     >
       <Dialog
+        globalZIndex={props.stackLayer === 'flowerContext' ? ENV_APP_FLOATING_LAYER.mobileFlowerContext : ENV_APP_FLOATING_LAYER.productModal}
         escapeKeyPhase="bubble"
         onKeyDown={handlePreviewSearchShortcut}
         open={props.open}
@@ -98,7 +104,9 @@ export function PreviewWindow(props: PreviewWindowProps) {
           props.mobileClass,
         )}
       >
-        <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col overflow-hidden" id={sourceID} pageID={sourceID} pageName={props.title ?? i18n.t('filePreview.previewWindowTitle')} mode="overlay" state={{ title: props.title, detail: props.description }}>{props.children}</FlowerContextSource>
+        <FlowerContextSource class="flex min-h-0 w-full flex-1 flex-col overflow-hidden" id={sourceID} pageID={props.context?.pageID ?? sourceID} pageName={props.context?.pageName ?? props.title ?? i18n.t('filePreview.previewWindowTitle')} mode="overlay" resourceKey={props.context?.resourceKey} file={props.context?.file} enabled={props.open}
+            boundary={body => body.closest<HTMLElement>('[data-floe-geometry-surface="floating-window"], [role="dialog"]') ?? body}
+            state={props.context?.state ?? { title: props.title, detail: props.description }}>{props.children}</FlowerContextSource>
       </Dialog>
     </Show>
   );

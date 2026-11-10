@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { builtInShellThemePresets, FloeConfigProvider, LayoutProvider, ThemeProvider } from '@floegence/floe-webapp-core';
 import { removeUIStorageItem, writeUIStorageJSON } from '../services/uiStorage';
 import { floatingWindowStorageKey } from './PersistentFloatingWindow';
+import { createFlowerContextSources, FlowerContextSources } from '../flower/FlowerContextSource';
 import { FilePreviewSurface } from './FilePreviewSurface';
 import { FilePreviewContext } from './FilePreviewContext';
 import { createFilePreviewController } from './createFilePreviewController';
@@ -26,6 +27,7 @@ describe('File preview titlebar', () => {
     document.documentElement.dataset.floeShellTheme = mode === 'dark' ? 'classic-dark' : 'paper';
     document.documentElement.dataset.floeSurfaceStyle = 'soft-neumorphic';
     writeUIStorageJSON(floatingWindowStorageKey('file-preview'), { x: 40, y: 60, width: 420, height: 600 });
+    const sources = createFlowerContextSources();
     const onCopyPath = vi.fn(async () => true);
     const onAskFlower = vi.fn();
     const onDownload = vi.fn();
@@ -46,7 +48,7 @@ describe('File preview titlebar', () => {
           <ThemeProvider>
             <LayoutProvider>
               <FilePreviewContext.Provider value={{ controller, openPreview: controller.openPreview, closePreview: controller.closePreview }}>
-                <FilePreviewSurface
+                <FlowerContextSources.Provider value={sources}><FilePreviewSurface
                   open
                   onOpenChange={() => undefined}
                   item={{ id: '/workspace/review.md', name: 'protocol-consistency-review-final-20260914.md', path: '/workspace/review.md', type: 'file' }}
@@ -63,7 +65,7 @@ describe('File preview titlebar', () => {
                   onCopyPath={onCopyPath}
                   onAskFlower={onAskFlower}
                   onDownload={onDownload}
-                />
+                /></FlowerContextSources.Provider>
               </FilePreviewContext.Provider>
             </LayoutProvider>
           </ThemeProvider>
@@ -76,6 +78,8 @@ describe('File preview titlebar', () => {
       const titlebar = root.querySelector<HTMLElement>('[data-floe-floating-window-titlebar]')!;
       const actions = titlebar.querySelector<HTMLElement>('[data-floe-floating-window-header-actions]')!;
       expect(actions).toBeTruthy();
+      expect(sources.captureTarget(titlebar)?.value.file?.path).toBe('/workspace/review.md');
+      expect(sources.captureTarget(root.querySelector('.file-markdown-body p')!)?.value.file?.path).toBe('/workspace/review.md');
       expect(root.querySelector('.redeven-file-preview-toolbar')).toBeNull();
       expect(root.textContent).not.toContain('/workspace/review.md');
       expect(root.querySelectorAll('button[aria-label="Download file"]')).toHaveLength(0);
@@ -138,7 +142,7 @@ describe('File preview titlebar', () => {
       await chooseAction('Download file');
       expect(onDownload).toHaveBeenCalledOnce();
     } finally {
-      dispose();
+      dispose(); sources.dispose();
     }
   });
 });

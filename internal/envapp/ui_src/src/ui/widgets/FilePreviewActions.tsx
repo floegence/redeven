@@ -120,7 +120,7 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
     }, 1600);
   };
   const readSelection = () =>
-    String(props.selectedText ?? '').trim() ||
+    String(props.selectedText ?? '') ||
     (props.contentElement ? readSelectionTextFromPreview(props.contentElement) : '');
   const openMenu = () => {
     if (menu()) {
@@ -252,7 +252,8 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
                 disabled={action.disabled?.()}
                 aria-label={action.label()}
                 title={action.label()}
-                onClick={event => action.run(undefined, capturePromptCardAnchor(event.currentTarget) ?? undefined)}
+                onPointerDown={() => { pointerSelection = readSelection(); }}
+                onClick={event => { const selection = pointerSelection ?? readSelection(); pointerSelection = undefined; action.run(selection, capturePromptCardAnchor(event.currentTarget) ?? undefined); }}
               >
                 <action.icon class={action.id === 'flower' ? 'size-5' : 'size-3.5'} />
               </button>
@@ -263,7 +264,8 @@ export function FilePreviewActions(props: FilePreviewActionsProps) {
         <Show when={props.presentation === 'header' && props.onAskFlower}>
           <button type="button" class={buttonClass()} disabled={!props.item || props.loading}
             aria-label={i18n.t('filePreview.askFlower')} title={i18n.t('filePreview.askFlower')}
-            onClick={event => props.onAskFlower?.(readSelection(), capturePromptCardAnchor(event.currentTarget) ?? undefined)}>
+            onPointerDown={() => { pointerSelection = readSelection(); }}
+            onClick={event => { const selection = pointerSelection ?? readSelection(); pointerSelection = undefined; props.onAskFlower?.(selection, capturePromptCardAnchor(event.currentTarget) ?? undefined); }}>
             <FlowerNavigationIcon class="size-5" />
           </button>
         </Show>

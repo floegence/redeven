@@ -1,5 +1,3 @@
-import { useEnvContext } from '../pages/EnvContext';
-import { buildFilePreviewFlowerTurnLauncherIntent } from '../utils/filePreviewAskFlower';
 import { FlowerContextSource } from '../flower/FlowerContextSource';
 import { DownloadTaskButton } from '../downloads/DownloadTaskButton';
 import { useDownloadManager } from '../downloads/DownloadContext';
@@ -27,25 +25,19 @@ function StandaloneSurface(props: FilePreviewSurfaceProps) {
         <Show when={downloads.tasks().length > 0}><DownloadTaskButton /></Show>
         <FilePreviewActions {...props} active compact presentation="header" contentElement={content()} />
       </header>
-      <FlowerContextSource class="min-h-0 flex-1" selected boundary={body => body.closest('[data-file-preview-standalone]') as HTMLElement} id="standalone-file-preview" pageID="file-preview" pageName={props.item?.name ?? ''} mode="overlay" state={{ path: props.item?.path }}>
+      <FlowerContextSource class="min-h-0 flex-1" selected boundary={body => body.closest('[data-file-preview-standalone]') as HTMLElement} id="standalone-file-preview" pageID="file-preview" pageName={props.item?.name ?? ''} mode="overlay" resourceKey={props.item?.path} file={props.item ? { path: props.item.path, name: props.item.name, unsaved: props.dirty, selection: props.selectedText } : undefined}>
         <FilePreviewPanel {...props} active surface="main" showHeader={false} contentRef={setContent} />
       </FlowerContextSource>
     </section>
   </FilePreviewSearchScope>;
 }
 
-export function FilePreviewStandalone(props: { onAskFlowerReady: (action: (() => void) | undefined) => void }) {
-  const env = useEnvContext();
+export function FilePreviewStandalone() {
   const context = useFilePreviewContext();
   const i18n = useI18n();
   const request = readFilePreviewWindowRequest(window.location.search);
   onMount(() => {
     if (!request) return;
-    props.onAskFlowerReady(() => {
-      const { intent } = buildFilePreviewFlowerTurnLauncherIntent({ item: context.controller.item() });
-      if (intent) env.openFlowerTurnLauncher(intent);
-    });
-    onCleanup(() => props.onAskFlowerReady(undefined));
     const name = request.path.slice(request.path.lastIndexOf('/') + 1);
     void context.workspace?.openPreview({ id: request.path, path: request.path, name, type: 'file' });
   });

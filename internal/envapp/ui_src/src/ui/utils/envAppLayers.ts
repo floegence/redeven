@@ -6,6 +6,8 @@ export const ENV_APP_FLOATING_LAYER = {
   pluginPanel: 3000,
   pluginContextMenu: 3100,
   productModal: 4000,
+  mobileAskFlower: 4100,
+  mobileFlowerContext: 4200,
   commandPalette: 5000,
 } as const;
 

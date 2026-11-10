@@ -2,8 +2,8 @@ export function readSelectionTextFromPreview(contentElement?: HTMLDivElement): s
   const selection = window.getSelection();
   if (!selection || selection.rangeCount <= 0) return '';
 
-  const text = String(selection.toString() ?? '').trim();
-  if (!text) return '';
+  const text = String(selection.toString() ?? '');
+  if (!text.trim()) return '';
   if (!contentElement) return text;
 
   const range = selection.getRangeAt(0);

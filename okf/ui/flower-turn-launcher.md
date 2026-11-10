@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower turn submission, outbox and input recall
 tags: [ui, flower, composer, commands]
 lifecycle: contract
-reviewed_at: "2026-11-08"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -39,6 +39,8 @@ for painting the submitted message.
 New submissions capture storage generation immediately, even behind paused dispatch. Rejected input stays copyable/restorable; running it requires explicit new submission, never resumed old approvals/effects.
 
 ### Context preview presentation
+A new contextual invocation restores editor focus even when the card is already open, preserving its draft and insertion point while raising it above the reactivated source window. Mobile file dialogs use the product-modal band; Ask Flower and its reference inspector use successive higher bands below the command menu. Do not fix ordinary desktop activation by giving all cards a permanently higher layer.
+
 One Env App `FlowerContextPreviewWindow` uses existing preview/text components for launcher and draft/canonical snapshots. Launcher owns attachment IO, sequencing and URL cleanup; Flower owns validity. Related-surface markers preserve input ownership; Escape dismisses preview before companion.
 
 ## Input recall

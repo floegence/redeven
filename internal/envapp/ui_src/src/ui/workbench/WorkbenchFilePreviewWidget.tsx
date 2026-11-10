@@ -272,6 +272,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     const result = buildFilePreviewFlowerTurnLauncherIntent({
       item: controller.item(),
       selectionText,
+      unsaved: controller.dirty(),
     });
     if (result.error) {
       notification.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), result.error);

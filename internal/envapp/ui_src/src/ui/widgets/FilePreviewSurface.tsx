@@ -1,6 +1,5 @@
 import { FilePreviewSearchScope } from './FilePreviewSearch';
-import { FlowerContextSource } from '../flower/FlowerContextSource';
-import { Show, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
+import { Show, createMemo, createSignal, onCleanup } from 'solid-js';
 import { useLayout } from '@floegence/floe-webapp-core';
 import type { FilePreviewPanelProps } from './FilePreviewPanel';
 import { FilePreviewPanel } from './FilePreviewPanel';
@@ -21,7 +20,6 @@ function RetainedFilePreviewPanel(props: FilePreviewPanelProps & Pick<FilePrevie
 }
 
 export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
-  const sourceID = `preview:${createUniqueId()}`;
   const layout = useLayout();
   const i18n = useI18n();
   const isMobile = createMemo(() => layout.isMobile());
@@ -43,9 +41,9 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
       stackId="file-preview"
       persistenceKey="file-preview"
       surfaceRef={setFloatingSurfaceEl}
+      context={{ pageID: 'preview:file', pageName: title(), resourceKey: props.item?.path,
+        file: props.item ? { path: props.item.path, name: props.item.name, unsaved: props.dirty, selection: props.selectedText } : undefined }}
     >
-      <FlowerContextSource id={sourceID} pageID="preview:file" pageName={title()} mode="overlay"
-        state={{ path: props.item?.path, mode: props.descriptor.mode, unsaved: props.dirty, selection: props.selectedText }} selected={props.open}>
       <RetainedFilePreviewPanel
         {...props}
         surface={isMobile() ? 'main' : 'window'}
@@ -57,7 +55,6 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
         closeConfirmVariant={isMobile() ? 'dialog' : 'floating'}
         closeConfirmHost={floatingSurfaceEl()}
       />
-      </FlowerContextSource>
     </PreviewWindow>
     </FilePreviewSearchScope>
   );
