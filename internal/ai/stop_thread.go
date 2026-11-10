@@ -11,9 +11,9 @@ import (
 )
 
 // StopThread asks Floret's single thread runtime owner to cancel the current
-// turn. Cancel is idempotent for every known thread, including a thread whose
-// provider effect adapter is not resident in this process.
-func (s *Service) StopThread(ctx context.Context, meta *session.Meta, threadID string) (StopThreadResponse, error) {
+// execution. Exact requests retain their target and request identity across
+// transport retries; the upstream owner rejects stale execution targets.
+func (s *Service) StopThread(ctx context.Context, meta *session.Meta, threadID string, requests ...StopThreadRequest) (StopThreadResponse, error) {
 	if s == nil {
 		return StopThreadResponse{}, errors.New("nil service")
 	}
@@ -34,12 +34,29 @@ func (s *Service) StopThread(ctx context.Context, meta *session.Meta, threadID s
 	if err != nil {
 		return StopThreadResponse{}, err
 	}
-	requestID, err := newProductRequestID("stop_")
-	if err != nil {
-		return StopThreadResponse{}, err
+	if len(requests) > 1 {
+		return StopThreadResponse{}, errors.New("invalid stop request")
+	}
+	var request StopThreadRequest
+	if len(requests) == 1 {
+		request = requests[0]
+	}
+	request.ExpectedTurnID = strings.TrimSpace(request.ExpectedTurnID)
+	request.ExpectedRunID = strings.TrimSpace(request.ExpectedRunID)
+	request.ClientRequestID = strings.TrimSpace(request.ClientRequestID)
+	exact := request.ExpectedTurnID != "" || request.ExpectedRunID != "" || request.ClientRequestID != ""
+	if exact && (request.ExpectedTurnID == "" || request.ExpectedRunID == "" || request.ClientRequestID == "") {
+		return StopThreadResponse{}, errors.New("stop requires expected_turn_id, expected_run_id and client_request_id together")
+	}
+	requestID := "stop:" + request.ClientRequestID
+	if !exact {
+		requestID, err = newProductRequestID("stop_")
+		if err != nil {
+			return StopThreadResponse{}, err
+		}
 	}
 	requestKey := flruntime.RequestKey(requestID)
-	_, err = typed.Cancel(ctx, flruntime.CancelInput{ThreadID: identity.ThreadID(threadID), RequestKey: requestKey, Mode: flruntime.CancelModeGraceful, IncludeDescendants: true})
+	_, err = typed.Cancel(ctx, flruntime.CancelInput{ThreadID: identity.ThreadID(threadID), ExpectedTurnID: identity.TurnID(request.ExpectedTurnID), ExpectedRunID: identity.RunID(request.ExpectedRunID), RequestKey: requestKey, Mode: flruntime.CancelModeGraceful, IncludeDescendants: true})
 	if err != nil && !errors.Is(err, flruntime.ErrThreadNotFound) && !errors.Is(err, flruntime.ErrThreadDeleted) {
 		return StopThreadResponse{}, err
 	}

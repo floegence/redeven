@@ -320,6 +320,14 @@ type ReorderQueueRequest struct {
 	OrderedQueueIDs []string `json:"ordered_queue_ids"`
 }
 
+// StopThreadRequest binds a user stop action to the displayed execution.
+// Empty fields preserve the existing unbound API for internal callers.
+type StopThreadRequest struct {
+	ExpectedTurnID  string `json:"expected_turn_id,omitempty"`
+	ExpectedRunID   string `json:"expected_run_id,omitempty"`
+	ClientRequestID string `json:"client_request_id,omitempty"`
+}
+
 type StopThreadResponse struct {
 	OK bool `json:"ok"`
 }

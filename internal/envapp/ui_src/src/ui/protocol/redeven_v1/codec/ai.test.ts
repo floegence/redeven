@@ -1,3 +1,4 @@
+import { toWireAIStopThreadRequest } from './ai';
 import { describe, expect, it } from 'vitest';
 import {
   fromWireAIEventNotify,
@@ -187,3 +188,8 @@ describe('Redeven v1 AI codec', () => {
   });
 
 });
+
+ it('preserves exact stop target and stable action identity on the RPC wire', () => {
+  expect(toWireAIStopThreadRequest({ threadId: ' thread ', expectedTurnId: 'turn', expectedRunId: 'run', clientRequestId: 'stop-action' }))
+    .toEqual({ thread_id: 'thread', expected_turn_id: 'turn', expected_run_id: 'run', client_request_id: 'stop-action' });
+ });

@@ -61,6 +61,7 @@ type aiSubmitRequestUserInputResponseResp struct {
 }
 
 type aiStopThreadReq struct {
+	StopThreadRequest
 	ThreadID string `json:"thread_id"`
 }
 
@@ -208,7 +209,7 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 			return nil, acquireErr
 		}
 		defer release()
-		out, err := service.StopThread(leaseCtx, meta, threadID)
+		out, err := service.StopThread(leaseCtx, meta, threadID, req.StopThreadRequest)
 		if err != nil {
 			return nil, toAIRPCError(err)
 		}

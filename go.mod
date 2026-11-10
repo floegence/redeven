@@ -10,12 +10,13 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floe-native-apps v0.27.1
 	github.com/floegence/floeterm/terminal-go v0.20.0
-	github.com/floegence/floret/v7 v7.109.0
+	github.com/floegence/floret/v7 v7.111.0
 	github.com/floegence/flowersec/flowersec-go/v5 v5.12.0
 	github.com/floegence/redeven-service-templates v0.8.2
 	github.com/floegence/redevplugin/v3 v3.25.0
 	github.com/go-openapi/runtime v0.33.3
 	github.com/godbus/dbus/v5 v5.2.2
+	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/mholt/archives v0.1.5
@@ -95,7 +96,6 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect
-	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/in-toto/attestation v1.2.0 // indirect

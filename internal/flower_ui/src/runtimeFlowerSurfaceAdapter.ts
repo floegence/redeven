@@ -24,6 +24,7 @@ import type {
   FlowerSubmitApprovalRequest,
   FlowerSubmitInputRequest,
   FlowerSurfaceAdapter,
+  FlowerStopThreadInput,
   FlowerQueuedTurnEditInput,
   FlowerQueuedDraft,
   FlowerQueuedDraftInput,
@@ -200,7 +201,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   compactThreadContext?: FlowerSurfaceAdapter['compactThreadContext'];
   manageGoal?: FlowerSurfaceAdapter['manageGoal'];
   retryThread: (threadID: string) => Promise<unknown>;
-  stopThread: (threadID: string) => Promise<unknown>;
+  stopThread: (threadID: string, input: FlowerStopThreadInput) => Promise<unknown>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
   directoryFavorites?: FlowerSurfaceAdapter['directoryFavorites'];
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
@@ -741,10 +742,10 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       await options.retryThread(tid);
       return;
     },
-    stopThread: async (threadID) => {
+    stopThread: async (threadID, input) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(missingThreadIDMessage(options));
-      await options.stopThread(tid);
+      await options.stopThread(tid, input);
     },
     submitInput: options.submitInput,
     submitApproval: async (input: FlowerSubmitApprovalRequest) => {

@@ -1,4 +1,5 @@
 import '../index.css';
+import type { FlowerStopThreadInput } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { page, userEvent } from 'vitest/browser';
 
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -1107,7 +1108,7 @@ describe('Flower bottom decision surface', () => {
       approval_actions: [action],
     });
     const stopResponse = deferred<void>();
-    const stopThread = vi.fn(() => stopResponse.promise);
+    const stopThread = vi.fn((_threadID: string, _target: FlowerStopThreadInput) => stopResponse.promise);
     const loadThread = vi.fn(async () => liveBootstrap(approvalThread, 21));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -1137,6 +1138,31 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => stopThread.mock.calls.length === 2);
     expect(loadThread.mock.calls.length).toBeGreaterThan(canonicalReads);
     expect(loadThread.mock.invocationCallOrder.at(-1)).toBeLessThan(stopThread.mock.invocationCallOrder[1]);
+    expect(stopThread.mock.calls[1]).toEqual(stopThread.mock.calls[0]);
+    expect(stopThread.mock.calls[0][1]).toEqual({ expected_turn_id: expect.any(String), expected_run_id: approvalThread.active_run_id, client_request_id: expect.any(String) });
+  });
+
+  it('does not retarget an unconfirmed stop after the execution changes', async () => {
+    clearFlowerSurfaceNotifications();
+    const action = approval('approval-old-stop');
+    const old = thread({ thread_id: 'thread-stop-rollover', status: 'waiting_approval', active_run_id: 'run-old', approval_actions: [action] });
+    let current = old;
+    const stopThread = vi.fn(async (_threadID: string, _target: FlowerStopThreadInput) => { throw new Error('lost stop acknowledgement'); });
+    const loadThread = vi.fn(async () => liveBootstrap(current, current === old ? 21 : 22));
+    const runtime = renderSurfaceWithAdapter({ ...adapter(true), listThreads: vi.fn(async () => [old]), loadThread, stopThread });
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${old.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${old.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-stop-thread')));
+    (runtime.querySelector('.flower-composer-stop-thread') as HTMLButtonElement).click();
+    await waitFor(() => stopThread.mock.calls.length === 1);
+    await waitFor(() => !(runtime.querySelector('.flower-composer-stop-thread') as HTMLButtonElement).disabled);
+    current = thread({ ...old, active_run_id: 'run-new', approval_actions: [{ ...action, run_id: 'run-new' }] });
+    const before = loadThread.mock.calls.length;
+    (runtime.querySelector('.flower-composer-stop-thread') as HTMLButtonElement).click();
+    await waitFor(() => loadThread.mock.calls.length > before);
+    await flush();
+    expect(stopThread).toHaveBeenCalledTimes(1);
+    expect(stopThread.mock.calls[0][1]).toEqual(expect.objectContaining({ expected_run_id: 'run-old' }));
   });
 
   it('does not steal focus when the user leaves the approval surface during submission', async () => {

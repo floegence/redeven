@@ -1827,7 +1827,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   manageGoal?: (input: FlowerGoalInput) => Promise<FlowerGoalResult>;
   compactThreadContext?: (threadID: string, input: FlowerCompactContextInput) => Promise<FlowerRuntimeCurrentView>;
   retryThread: (threadID: string) => Promise<void>;
-  stopThread: (threadID: string) => Promise<void>;
+  stopThread: (threadID: string, input: FlowerStopThreadInput) => Promise<void>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<FlowerApprovalCommandResult>;
   loadTaskMaterials?: (threadID: string, cursor?: string, signal?: AbortSignal) => Promise<FlowerTaskMaterials>;
@@ -1867,3 +1867,10 @@ export type FlowerTaskFiles = Readonly<{ files: readonly FlowerDeliveredFile[]; 
 
 export type FlowerTaskMaterial = Readonly<{ id: string; locator: string; name: string; mime: string; size: number; kind: 'input' | 'media'; url: string; item_id: string; turn_id: string; created_at: string }>;
 export type FlowerTaskMaterials = Readonly<{ items: readonly FlowerTaskMaterial[]; next_cursor?: string }>;
+
+/** One stop action, frozen at click time and reused after an unconfirmed response. */
+export type FlowerStopThreadInput = Readonly<{
+  expected_turn_id: string;
+  expected_run_id: string;
+  client_request_id: string;
+}>;

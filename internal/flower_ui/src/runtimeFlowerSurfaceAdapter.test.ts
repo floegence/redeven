@@ -318,9 +318,10 @@ describe('runtime Flower surface adapter read state', () => {
 		const stopThread = vi.fn(async () => ({ ok: true }));
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }, { stopThread }));
 
-		await expect(adapter.stopThread(' thread_stop ')).resolves.toBeUndefined();
+		const target = { expected_turn_id: 'turn-old', expected_run_id: 'run-old', client_request_id: 'stop-action' };
+		await expect(adapter.stopThread(' thread_stop ', target)).resolves.toBeUndefined();
 
-		expect(stopThread).toHaveBeenCalledWith('thread_stop');
+		expect(stopThread).toHaveBeenCalledWith('thread_stop', target);
 		expect(loadThread).not.toHaveBeenCalled();
 	});
 

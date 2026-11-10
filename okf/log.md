@@ -1,5 +1,7 @@
 # Redeven OKF Update Log
 
+- 2026-11-09: Bind Flower Stop actions to displayed execution identities and stable request keys; keep existing UI and upstream-owned interruption history.
+
 Current contracts and qualification outcomes live in their indexed concepts. Git preserves chronological changes; this log does not duplicate them.
 
 - 2026-11-09: Unify Flower native reading-offset accounting across scroll/layout delivery, preserve momentum through offscreen range contraction, and require per-frame downward-wheel continuity for both transcript surfaces.

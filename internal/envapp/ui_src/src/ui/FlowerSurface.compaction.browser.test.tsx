@@ -472,5 +472,5 @@ it('keeps admitted goal continuation working and exposes Stop without another se
   expect(base.retryThread).not.toHaveBeenCalled();
   surface.querySelector<HTMLButtonElement>('.flower-composer-submit')!.click();
   await waitFor(() => stopThread.mock.calls.length === 1);
-  expect(stopThread).toHaveBeenCalledWith('thread-1');
+  expect(stopThread).toHaveBeenCalledWith('thread-1', expect.objectContaining({ expected_turn_id: expect.any(String), expected_run_id: expect.any(String), client_request_id: expect.any(String) }));
 });

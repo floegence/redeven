@@ -107,6 +107,9 @@ export type AISubmitRequestUserInputResponseResponse = {
 };
 
 export type AIStopThreadRequest = {
+  expectedTurnId?: string;
+  expectedRunId?: string;
+  clientRequestId?: string;
   threadId: string;
 };
 

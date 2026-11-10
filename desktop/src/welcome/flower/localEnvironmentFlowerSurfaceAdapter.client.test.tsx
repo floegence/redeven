@@ -1322,12 +1322,13 @@ describe('Local Environment Flower surface adapter', () => {
     });
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
 
-    await expect(adapter.stopThread('thread-1')).resolves.toBeUndefined();
+    const target = { expected_turn_id: 'turn-stop', expected_run_id: 'run-stop', client_request_id: 'stop-action' };
+    await expect(adapter.stopThread('thread-1', target)).resolves.toBeUndefined();
 
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
       'POST /_redeven_proxy/api/ai/threads/thread-1/cancel',
     ]);
-    expect(calls[0].body).toEqual({});
+    expect(calls[0].body).toEqual(target);
   });
 
   it('retries the canonical provider continuation and loads canonical detail', async () => {

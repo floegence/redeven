@@ -996,11 +996,12 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         body: JSON.stringify({}),
       });
     },
-    stopThread: async (threadID) => {
+    stopThread: async (threadID, input) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(adapterCopy(options).missingThreadID);
       await fetchFlowerJSON<{ ok: boolean }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/cancel`, {
         method: 'POST',
+        body: JSON.stringify(input),
       });
     },
     submitInput: async (input) => {

@@ -1147,10 +1147,10 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       if (!tid) throw new Error('Missing thread id.');
 		await runtimeJSON<unknown>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/retry`, {});
 	},
-    stopThread: async (threadID) => {
+    stopThread: async (threadID, input) => {
       const tid = trim(threadID);
       if (!tid) throw new Error('Missing thread id.');
-		await runtimeJSON<{ ok: boolean }>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/cancel`, {});
+		await runtimeJSON<{ ok: boolean }>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/cancel`, input);
 	},
     submitInput: async (input) => {
       const tid = trim(input.thread_id);

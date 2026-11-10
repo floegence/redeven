@@ -1257,11 +1257,12 @@ describe('Env local Flower surface adapter', () => {
       } as any,
     });
 
-    await expect(adapter.stopThread('thread_1')).resolves.toBeUndefined();
+    const target = { expected_turn_id: 'turn-stop', expected_run_id: 'run-stop', client_request_id: 'stop-action' };
+    await expect(adapter.stopThread('thread_1', target)).resolves.toBeUndefined();
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/_redeven_proxy/api/ai/threads/thread_1/cancel',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(target) }),
     );
   });
 

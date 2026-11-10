@@ -6174,7 +6174,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			resp, err := aiSvc.StopThread(r.Context(), meta, threadID)
+			var body ai.StopThreadRequest
+			if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid stop request"})
+				return
+			}
+			resp, err := aiSvc.StopThread(r.Context(), meta, threadID, body)
 			if err != nil {
 				g.appendAudit(meta, "ai_thread_cancel", "failure", map[string]any{"thread_id": threadID}, err)
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})

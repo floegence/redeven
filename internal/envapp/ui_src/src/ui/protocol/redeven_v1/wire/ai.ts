@@ -125,6 +125,9 @@ export type wire_ai_event_notify = {
 };
 
 export type wire_ai_stop_thread_req = {
+  expected_turn_id?: string;
+  expected_run_id?: string;
+  client_request_id?: string;
   thread_id: string;
 };
 

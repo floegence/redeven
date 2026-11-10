@@ -82,7 +82,7 @@ func TestFlowerGracefulStopConfirmsRealTerminalExit(t *testing.T) {
 	}
 	stopCtx, cancel := context.WithCancel(t.Context())
 	acceptedAt := time.Now()
-	response, err := svc.StopThread(stopCtx, meta, thread.ThreadID)
+	response, err := svc.StopThread(stopCtx, meta, thread.ThreadID, StopThreadRequest{ExpectedTurnID: sent.TurnID, ExpectedRunID: sent.RunID, ClientRequestID: "stop-real-terminal"})
 	cancel()
 	if err != nil || !response.OK || time.Since(acceptedAt) > time.Second {
 		t.Fatalf("stop acceptance: %#v, %v", response, err)

@@ -125,7 +125,7 @@ it('opens a waiting child in the shared interaction surface and returns without 
   expect(base.submitInput).not.toHaveBeenCalled();
   surface.querySelector<HTMLButtonElement>('.flower-composer-stop')!.click();
   await waitFor(() => (base.stopThread as ReturnType<typeof vi.fn>).mock.calls.length === 1);
-  expect(base.stopThread).toHaveBeenCalledWith(parent.thread_id);
+  expect(base.stopThread).toHaveBeenCalledWith(parent.thread_id, expect.objectContaining({ expected_turn_id: expect.any(String), expected_run_id: expect.any(String), client_request_id: expect.any(String) }));
 });
 
 it.each(['input', 'approval'] as const)('handles child %s in the shared composer and resumes only the explicitly selected parent', async kind => {

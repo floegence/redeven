@@ -486,7 +486,9 @@ export function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThr
 }
 
 export function liveBootstrap(threadValue: FlowerThreadSnapshot, version = 0): FlowerThreadView {
-  return { thread: threadValue, current: runtimeCurrentView(threadValue, Math.max(0, version)) };
+  const current = runtimeCurrentView(threadValue, Math.max(0, version));
+  return { thread: { ...threadValue, current_execution: threadValue.current_execution ?? (current.turn_id && current.run_id
+    ? { turn_id: current.turn_id, run_id: current.run_id, status: threadValue.status } : undefined) }, current };
 }
 
 export const TEST_CLIENT_REQUEST_ID = 'client_test_request';

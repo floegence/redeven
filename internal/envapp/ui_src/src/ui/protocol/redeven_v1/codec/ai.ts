@@ -221,6 +221,9 @@ export function fromWireAISubmitRequestUserInputResponseResponse(resp: wire_ai_s
 export function toWireAIStopThreadRequest(req: AIStopThreadRequest): wire_ai_stop_thread_req {
   return {
     thread_id: String(req.threadId ?? '').trim(),
+    expected_turn_id: req.expectedTurnId,
+    expected_run_id: req.expectedRunId,
+    client_request_id: req.clientRequestId,
   };
 }
 

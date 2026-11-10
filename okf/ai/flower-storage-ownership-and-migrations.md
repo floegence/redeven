@@ -20,6 +20,23 @@ Published Floret v7.87.0 removes hidden Activity field preparation from ordinary
 
 Cancellation, shutdown and execution-context settlement resolve canonical control records through Floret. The host keeps the original Stop request and does not read or reconstruct upstream conversation bodies to settle it.
 
+Flower freezes the displayed `turn_id` and `run_id` with one `client_request_id`
+at Stop click time. Desktop, Env App, HTTP and RPC pass these fields unchanged
+to published Floret cancellation preconditions. An unconfirmed retry first
+resynchronizes and retains the same target and key; if execution changed, it
+resolves that old action without stopping the replacement. A fresh subsequent
+click may target the new execution. Server-side stale targets return conflict.
+Legacy internal callers may omit the complete optional target; partial targets
+are rejected. Stop response remains acknowledgement-only; canonical views own
+settlement. Existing stop presentation and copy are unchanged.
+
+Floret projects canonical interrupted/cancelled terminal facts into subsequent
+model context alongside retained partial output. The host adds no transcript
+message or process-state claim. Restart, Fork, Retry, compaction and rendered
+cache revision remain upstream-owned. Ordinary Stop preserves queued inputs;
+Send now retains the explicit upstream stop-and-promote transition.
+
+
 A read-state failure cannot become a core Runtime constructor failure or a synthetic read record.
 
 Redeven also owns the [Agent Plugins registry](flower-agent-plugins.md), snapshots and installation data. Its schema-1 SQLite store is separate from canonical conversation history; credential references resolve through SecretsStore schema 4. Neither owner decodes Floret records.
@@ -55,3 +72,6 @@ Floret is the sole authority for canonical history, execution and queue semantic
 # Evidence
 
 - `redeven:internal/ai/threadstore/schema.go` - Source.
+- `redeven:internal/ai/flower_precise_stop_integration_test.go` - Real HTTP/SSE, restart, next provider input, delayed stop and replay.
+- `redeven:internal/ai/flower_graceful_stop_integration_test.go` - Confirmed process exit and retained terminal output.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.decisionSurface.browser.test.tsx` - Frozen target, stable retries, rollover and unchanged presentation.

@@ -150,6 +150,7 @@ import type {
   FlowerSubmitApprovalRequest,
   FlowerSubmitInputReceipt,
   FlowerSurfaceAdapter,
+  FlowerStopThreadInput,
   FlowerTerminalProcessSnapshot,
   FlowerToolPreviewRequest,
   FlowerToolPreview,
@@ -870,6 +871,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [transportOutbox, setTransportOutbox] = createSignal(createTransportOutbox({ onExpired: outboxExpirationChanged }));
   const [stoppingThreadIDs, setStoppingThreadIDs] = createSignal<ReadonlySet<string>>(new Set());
   const stopThreadRequests = new Map<string, Promise<void>>();
+  const stopThreadTargets = new Map<string, FlowerStopThreadInput>();
   const updateThreadIDMembership = (
     setter: typeof setStoppingThreadIDs,
     threadID: string,
@@ -3958,6 +3960,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const detailConverged = !threadSummaryNeedsDetail(acceptedSummary, retained, result.cache.views.get(threadID)?.contentRevision);
     if (runtimeState === 'accepted' && (retained.cancellation || !flowerThreadHasActiveTurnEvidence(retained))) {
       updateThreadIDMembership(setUnconfirmedStops, threadID, false);
+      stopThreadTargets.delete(threadID);
     }
     if (detailConverged && createdForkThreadID() === threadID) setCreatedForkThreadID('');
     if (detailConverged && threadID === selectedThreadID()) setThreadLoadError('');
@@ -5718,7 +5721,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (received.accepted && received.observation) {
           const retained = received.cache.views.get(update.thread_id)?.thread;
           if (retained) reconcileInputDraft(update.thread_id, retained.input_request);
-          if (retained?.cancellation || retained && !flowerThreadHasActiveTurnEvidence(retained)) updateThreadIDMembership(setUnconfirmedStops, update.thread_id, false);
+          if (retained?.cancellation || retained && !flowerThreadHasActiveTurnEvidence(retained)) {
+            updateThreadIDMembership(setUnconfirmedStops, update.thread_id, false);
+            stopThreadTargets.delete(update.thread_id);
+          }
           if (update.thread_id === selectedThreadID()) {
             setThreadLoadError(''); setTranscriptLayoutRevision(revision => revision + 1);
           }
@@ -6813,20 +6819,46 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (existing) return existing;
     if (stoppingThreadIDs().has(stoppingThreadID)) return Promise.resolve();
     if (flowerThreadIsStopping(threadCache().views.get(stoppingThreadID)?.thread ?? threadCache().summaries.get(stoppingThreadID))) return Promise.resolve();
+    const clicked = threadCache().views.get(stoppingThreadID)?.thread ?? threadCache().summaries.get(stoppingThreadID);
+    const clickedRunID = clicked?.active_run_id ?? clicked?.current_execution?.run_id;
+    let target = stopThreadTargets.get(stoppingThreadID);
+    if (!target && clicked?.current_execution?.turn_id && clicked.current_execution.run_id) {
+      target = { expected_turn_id: clicked.current_execution.turn_id, expected_run_id: clicked.current_execution.run_id,
+        client_request_id: createFlowerClientRequestID() };
+      stopThreadTargets.set(stoppingThreadID, target);
+    }
     updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, true);
     const request = (async () => {
       const requestEpoch = liveTransport.connectionEpoch();
       try {
-        if (unconfirmedStops().has(stoppingThreadID)) {
+        if (unconfirmedStops().has(stoppingThreadID) || !target) {
           const current = await requestThreadDetail(stoppingThreadID, 'user_action', true, true);
-          if (!current || surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()
-            || current.cancellation || !flowerThreadHasActiveTurnEvidence(current)) return;
+          if (!current || surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()) return;
+          const execution = current.current_execution;
+          if (current.cancellation || !flowerThreadHasActiveTurnEvidence(current)
+            || !execution?.turn_id || !execution.run_id
+            || (target ? execution.turn_id !== target.expected_turn_id || execution.run_id !== target.expected_run_id
+              : !clickedRunID || execution.run_id !== clickedRunID)) {
+            stopThreadTargets.delete(stoppingThreadID);
+            updateThreadIDMembership(setUnconfirmedStops, stoppingThreadID, false);
+            return;
+          }
+          if (!target) {
+            target = { expected_turn_id: execution.turn_id, expected_run_id: execution.run_id, client_request_id: createFlowerClientRequestID() };
+            stopThreadTargets.set(stoppingThreadID, target);
+          }
         }
-        await withFlowerRequestDeadline(() => props.adapter.stopThread(stoppingThreadID), copy().chat.stopUnconfirmed);
+        const frozenTarget = target;
+        await withFlowerRequestDeadline(() => props.adapter.stopThread(stoppingThreadID, frozenTarget), copy().chat.stopUnconfirmed);
         if (surfaceDisposed || requestEpoch !== liveTransport.connectionEpoch()) return;
         const confirmed = await requestThreadDetail(stoppingThreadID, 'user_action', true, true);
-        if (!confirmed || (!confirmed.cancellation && flowerThreadHasActiveTurnEvidence(confirmed))) {
+        if (!confirmed || (!confirmed.cancellation && flowerThreadHasActiveTurnEvidence(confirmed)
+          && confirmed.current_execution?.turn_id === frozenTarget.expected_turn_id
+          && confirmed.current_execution?.run_id === frozenTarget.expected_run_id)) {
           updateThreadIDMembership(setUnconfirmedStops, stoppingThreadID, true);
+        } else {
+          stopThreadTargets.delete(stoppingThreadID);
+          updateThreadIDMembership(setUnconfirmedStops, stoppingThreadID, false);
         }
         if (selectedThreadDetailMatches(stoppingThreadID)) {
           returnToChat();
