@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower turn status and process disclosure
 tags: [ui, flower, turns, disclosure, accessibility]
 lifecycle: contract
-reviewed_at: "2026-11-03"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -15,6 +15,16 @@ Floret owns exact TurnID/RunID, optional control kind, lifecycle/timing, interme
 [Published turn kinds](../ai/flower-upgrade-compatibility.md#turn-kind-consumer-contract) distinguish host-work completion from user turns. Retain its answer/identity/timing through paging/observation. Diagnostics expose safe field/reason only. Unknown prose stays visible.
 
 Headers show total elapsed including waits; terminal descriptions retain work/wait durations, <=two nonzero units and subsecond copy. Thinking-only work has its own disclosure, not whole-turn toggle. Interleaved answers default open. Settled questions/answers fold with process rows, preserving choices and viewport-contained decoration without rails/gaps. Counts require complete membership/events/boundaries; otherwise omit. [Sequences](flower-tool-sequences.md) fold independently on each side.
+
+Historical failed/interrupted turns retain an inline details control after the
+outcome label. It defaults closed and opens a keyboard-accessible dialog with
+the localized summary, literal technical details and copy action. Opening or
+closing it does not change timeline geometry. Diagnostics remain available
+after continuation, navigation and restart. Current failure actions remain on
+the current error card only; historical errors do not retry another turn. Turn metadata contains only failure availability; diagnostics load on explicit
+opening with freshly authorized exact execution identity. Hosts
+project Floret-owned failures through the same authorized presentation as the
+current error and never persist a second error history.
 
 ## Ownership
 Canonical admission shows a noninteractive header for preparing/running/retrying/finalizing/waiting before provider output. Politely announce status, never ticks. Exact terminal outcome/end permits toggle and one automatic process/intermediate fold, including latest failed/canceled/interrupted turns; final/trailing partial output stays.

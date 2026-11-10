@@ -596,6 +596,7 @@ export function validateFlowerRuntimeTurns(current: FlowerRuntimeCurrentView) {
     if (!Number.isFinite(start) || end !== undefined && (!Number.isFinite(end) || end < start)) failure();
     if (turn.kind !== undefined && !isFlowerTurnKind(turn.kind)) failure('kind', 'unsupported_value');
     if (turn.outcome !== undefined && !['completed', 'failed', 'cancelled', 'interrupted'].includes(turn.outcome)) failure();
+    if (turn.has_failure !== undefined && (typeof turn.has_failure !== 'boolean' || turn.has_failure && !['failed', 'interrupted'].includes(turn.outcome ?? ''))) failure();
     if ((turn.outcome === undefined) !== (end === undefined)) failure();
     if (![turn.elapsed_ms, turn.waiting_ms, turn.work_duration_ms].every((value) => Number.isSafeInteger(value) && value >= 0)
       || turn.waiting_ms + turn.work_duration_ms !== turn.elapsed_ms) failure();

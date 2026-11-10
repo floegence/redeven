@@ -827,6 +827,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       loadActivityValue: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-value', input, undefined, options.runtimeEnvironmentID, signal),
       loadActivityStructure: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-structure', input, undefined, options.runtimeEnvironmentID, signal),
       loadActivityField: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/activity-field', input, undefined, options.runtimeEnvironmentID, signal),
+      loadTurnError: (threadID, turnID, runID, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/turn-error', { turn_id: turnID, run_id: runID }, undefined, options.runtimeEnvironmentID, signal),
       loadHistoryItem: (threadID, itemID, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-item', { item_id: itemID }, undefined, options.runtimeEnvironmentID, signal),
       loadHistoryBody: (threadID, input, signal) => runtimeJSON(bridge, 'POST', '/_redeven_proxy/api/ai/threads/' + encodeURIComponent(threadID) + '/history-body', input, undefined, options.runtimeEnvironmentID, signal),
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput) {

@@ -45,6 +45,7 @@ type TimelineProps = Readonly<{
   onSequenceDemand?: (group: FlowerToolSequence, expanded: boolean) => void;
   renderInside?: (entry: Accessor<FlowerTimelineEntry>) => JSX.Element;
   renderEntry: (entry: Accessor<FlowerTimelineEntry>, visible: Accessor<boolean>) => JSX.Element;
+  renderError?: (turnID: string, runID: string) => JSX.Element;
 }>;
 
 // Each section owns only measured geometry and offscreen layout. Disclosure, grouping and
@@ -532,6 +533,12 @@ export function FlowerTurnTimeline(props: TimelineProps) {
       status={props.thread?.current_execution?.turn_id === state()?.turnID ? props.thread?.status : undefined}
       sample={props.thread?.turn_clock} toggleable={summary()} expanded={turnExpanded()}
       controls={state()!.summary!.processKeys.map(contentID).join(' ')} onToggle={toggle} /></Show>;
+    const EndedLabel = () => <>
+      <span class="flower-turn-ended-icon" aria-hidden="true">
+        <Dynamic component={state()?.outcome === 'cancelled' ? CircleStop : state()?.outcome === 'interrupted' ? AlertCircle : AlertTriangle} size={16} />
+      </span>
+      <span class="flower-turn-ended-label">{ended()}</span>
+    </>;
     return (
       <div class="flower-turn-row" data-flower-turn-id={state()?.turnID} data-flower-turn-process={process() ? 'true' : undefined}
         data-flower-input-checkpoint={interactionCheckpoint() ? 'true' : undefined}
@@ -552,14 +559,12 @@ export function FlowerTurnTimeline(props: TimelineProps) {
           </div>
         </div>
         <Show when={requestRow()}><Header /></Show>
-        <Show when={ended()}>{(label) => (
+        <Show when={ended()}>
           <div class="flower-turn-ended" role="status">
-            <span class="flower-turn-ended-icon" aria-hidden="true">
-              <Dynamic component={state()?.outcome === 'cancelled' ? CircleStop : state()?.outcome === 'interrupted' ? AlertCircle : AlertTriangle} size={16} />
-            </span>
-            <span class="flower-turn-ended-label">{label()}</span>
+            <EndedLabel />
+            <Show when={state()?.failureRunID}>{runID => props.renderError?.(state()!.turnID, runID())}</Show>
           </div>
-        )}</Show>
+        </Show>
       </div>
     );
   };

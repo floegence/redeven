@@ -555,3 +555,35 @@ func (s *Service) MarshalFlowerHistoryCurrent(ctx context.Context, meta *session
 		Window *FlowerHistoryWindow `json:"window"`
 	}{public, detail.Window})
 }
+
+// GetFlowerTurnError reads only the explicitly selected execution's canonical diagnostics.
+func (s *Service) GetFlowerTurnError(ctx context.Context, meta *session.Meta, threadID string, input flruntime.ThreadTurnFailureInput) (*flowerPublicTurnError, error) {
+	scope, err := s.flowerHistoryScope(ctx, meta, threadID)
+	if err != nil {
+		return nil, err
+	}
+	reader, ok := s.threadRuntime.(flruntime.ThreadTurnFailureReader)
+	if !ok {
+		return nil, errors.New("published Floret turn failure contract is unavailable")
+	}
+	input.ThreadID = identity.ThreadID(threadID)
+	failure, err := reader.ReadTurnFailure(ctx, scope, input)
+	if err != nil {
+		return nil, err
+	}
+	return projectFlowerTurnError(failure, input), nil
+}
+
+type flowerPublicTurnError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Detail  string `json:"detail,omitempty"`
+}
+
+func projectFlowerTurnError(failure *flruntime.ThreadTurnFailure, input flruntime.ThreadTurnFailureInput) *flowerPublicTurnError {
+	if failure == nil {
+		return nil
+	}
+	code, message := projectFloretTurnFailure(failure, "floret_turn_failed")
+	return &flowerPublicTurnError{Code: code, Message: message, Detail: scopedFailureDetail(failure, input.ThreadID.String(), input.TurnID.String(), input.RunID.String())}
+}

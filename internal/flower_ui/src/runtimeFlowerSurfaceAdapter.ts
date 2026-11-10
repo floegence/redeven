@@ -128,6 +128,7 @@ export type FlowerRuntimeTransport = Readonly<{
   loadActivityValue?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerActivityValueRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerActivityValue>;
   loadActivityStructure?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerActivityStructureRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerActivityStructurePage>;
   loadActivityField?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerActivityFieldRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerActivityFieldChunk>;
+  loadTurnError?(threadID: string, turnID: string, runID: string, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerThreadError | null>;
   loadHistoryItem?(threadID: string, itemID: string, signal: AbortSignal): Promise<FlowerRuntimeCurrentItem>;
   loadHistoryBody?(threadID: string, input: import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyRequest, signal: AbortSignal): Promise<import('./contracts/flowerSurfaceContracts').FlowerHistoryBodyChunk>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveTransportFrame>;
@@ -543,6 +544,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       historyTransportRead(() => options.transport.loadActivityStructure!(threadID, input, signal), signal) : undefined,
     loadActivityField: options.transport.loadActivityField ? async (threadID, input, signal) =>
       historyTransportRead(() => options.transport.loadActivityField!(threadID, input, signal), signal) : undefined,
+    loadTurnError: options.transport.loadTurnError ? async (threadID, turnID, runID, signal) =>
+      historyTransportRead(() => options.transport.loadTurnError!(threadID, turnID, runID, signal), signal) : undefined,
     loadHistoryItem: options.transport.loadHistoryItem ? async (threadID, itemID, signal) =>
       historyTransportRead(() => options.transport.loadHistoryItem!(threadID, itemID, signal), signal) : undefined,
     loadHistoryBody: options.transport.loadHistoryBody ? async (threadID, input, signal) =>

@@ -142,7 +142,7 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/task-file-content$/u, methods: ['GET'], allowsQuery: parsed => parsed.searchParams.size === 3 && ['path','kind','offset'].every(key=>parsed.searchParams.getAll(key).length===1) && Boolean(parsed.searchParams.get('path')) && parsed.search.length < 16384 && ['working','delivered'].includes(parsed.searchParams.get('kind')!) && /^\d{1,16}$/u.test(parsed.searchParams.get('offset')!) },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['GET', 'PATCH'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['DELETE'], allowsQuery: runtimeFlowerDeleteQuery },
-  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/(history|history-item|history-body|history-release)$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/(history|history-item|history-body|history-release|turn-error)$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/message-edit$/u, methods: ['GET', 'POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/message-edit$/u, methods: ['GET'], allowsQuery: runtimeFlowerIdentifierQuery('revision_request_key') },
   { path: '/_redeven_proxy/api/ai/flower/stream', methods: ['GET'] },

@@ -1115,6 +1115,7 @@ export type FlowerRuntimeTurn = Readonly<{
   started_at: string;
   ended_at?: string;
   outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
+  has_failure?: boolean;
   elapsed_ms: number;
   waiting_ms: number;
   work_duration_ms: number;
@@ -1785,6 +1786,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadActivityValue?: (threadID: string, input: FlowerActivityValueRequest, signal: AbortSignal) => Promise<FlowerActivityValue>;
   loadActivityStructure?: (threadID: string, input: FlowerActivityStructureRequest, signal: AbortSignal) => Promise<FlowerActivityStructurePage>;
   loadActivityField?: (threadID: string, input: FlowerActivityFieldRequest, signal: AbortSignal) => Promise<FlowerActivityFieldChunk>;
+  loadTurnError?: (threadID: string, turnID: string, runID: string, signal: AbortSignal) => Promise<FlowerThreadError | null>;
   loadHistoryItem?: (threadID: string, itemID: string, signal: AbortSignal) => Promise<FlowerRuntimeCurrentItem>;
   loadHistoryBody?: (threadID: string, input: FlowerHistoryBodyRequest, signal: AbortSignal) => Promise<FlowerHistoryBodyChunk>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveStreamEnvelope>;

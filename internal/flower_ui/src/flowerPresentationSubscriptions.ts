@@ -86,6 +86,7 @@ type ProcessRow = Readonly<{
   interleavedInputs: boolean;
   historical: boolean;
   outcome?: NonNullable<FlowerTurnProcess['turn']>['outcome'];
+  failureRunID?: string;
   summary?: FlowerTurnProcess;
 }>;
 export function createFlowerProcessSubscriptions(projection: Accessor<FlowerTurnProcessProjection>) {
@@ -95,12 +96,13 @@ export function createFlowerProcessSubscriptions(projection: Accessor<FlowerTurn
     for (const [key, group] of projection().rows) {
       const process = group.processMembers.has(key), historical = Boolean(group.turn?.ended_at);
       const outcome = group.terminalKey === key ? group.turn?.outcome : undefined;
+      const failureRunID = group.terminalKey === key && group.turn?.has_failure ? group.turn.run_id : undefined;
       const summary = group.summaryKey === key && group.turn?.kind !== 'context_compaction' ? group : undefined;
       const prior = previous.get(key);
       next.set(key, prior && prior.turnID === group.turnID && prior.process === process && prior.disclosure === group.disclosure
-        && prior.interleavedInputs === group.interleavedInputs && prior.historical === historical && prior.outcome === outcome && prior.summary === summary
+        && prior.interleavedInputs === group.interleavedInputs && prior.historical === historical && prior.outcome === outcome && prior.failureRunID === failureRunID && prior.summary === summary
         ? prior : { turnID: group.turnID, process, disclosure: group.disclosure,
-          interleavedInputs: group.interleavedInputs, historical, outcome, summary });
+          interleavedInputs: group.interleavedInputs, historical, outcome, failureRunID, summary });
     }
     previous = next;
     return next;

@@ -31,6 +31,55 @@ type flowerHistoryNoFullView struct {
 	allowFullView *atomic.Bool
 }
 
+type flowerTurnErrorRuntime struct {
+	flruntime.ThreadService
+	flruntime.ThreadFactsSource
+	flruntime.ThreadSummaryReader
+	reads []flruntime.ThreadTurnFailureInput
+}
+
+func (r *flowerTurnErrorRuntime) ReadTurnFailure(ctx context.Context, scope threadquery.Scope, input flruntime.ThreadTurnFailureInput) (*flruntime.ThreadTurnFailure, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if scope.Authority == "" || len(scope.ThreadIDs) != 1 || scope.ThreadIDs[0] != input.ThreadID || input.TurnID != "failed-turn" || input.RunID != "failed-run" {
+		return nil, threadquery.ErrRecordUnavailable
+	}
+	r.reads = append(r.reads, input)
+	return &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureProvider, Message: "original failure"}, nil
+}
+
+func TestFlowerHistoricalErrorReadRequiresAuthorizedExactExecution(t *testing.T) {
+	svc := newSendTurnTestServiceWithActivation(t, true)
+	runtime := &flowerTurnErrorRuntime{ThreadService: svc.threadRuntime, ThreadFactsSource: svc.threadRuntime.(flruntime.ThreadFactsSource), ThreadSummaryReader: svc.threadRuntime.(flruntime.ThreadSummaryReader)}
+	svc.threadRuntime = runtime
+	if err := svc.Activate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "Historical error", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := flruntime.ThreadTurnFailureInput{TurnID: "failed-turn", RunID: "failed-run"}
+	value, err := svc.GetFlowerTurnError(t.Context(), meta, thread.ThreadID, input)
+	if err != nil || value == nil || len(runtime.reads) != 1 || runtime.reads[0].ThreadID.String() != thread.ThreadID {
+		t.Fatalf("authorized read failed: %+v %v", value, err)
+	}
+	other := *meta
+	other.NamespacePublicID = "unauthorized"
+	if _, err := svc.GetFlowerTurnError(t.Context(), &other, thread.ThreadID, input); err == nil {
+		t.Fatal("unauthorized read succeeded")
+	}
+	input.RunID = "stale"
+	if _, err := svc.GetFlowerTurnError(t.Context(), meta, thread.ThreadID, input); err == nil {
+		t.Fatal("stale execution read succeeded")
+	}
+	if len(runtime.reads) != 1 {
+		t.Fatal("invalid request read diagnostics")
+	}
+}
+
 type flowerHistoryChunkRuntime struct {
 	flruntime.ThreadService
 	flruntime.ThreadFactsSource

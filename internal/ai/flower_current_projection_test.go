@@ -633,7 +633,7 @@ func TestFlowerCurrentPreservesCanonicalHistoricalTurnPresentation(t *testing.T)
 	start := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
 	end := start.Add(138 * time.Second)
 	current := flruntime.ThreadView{ThreadID: "thread", Turns: []flruntime.ThreadTurn{
-		{TurnID: "old", RunID: "old-run", StartedAt: start, EndedAt: &end, Outcome: &interrupted, ElapsedMS: 138000, WorkDurationMS: 138000, IntermediateItemIDs: []string{"old-progress"}, FinalItemIDs: []string{}},
+		{TurnID: "old", RunID: "old-run", StartedAt: start, EndedAt: &end, Outcome: &interrupted, HasFailure: true, ElapsedMS: 138000, WorkDurationMS: 138000, IntermediateItemIDs: []string{"old-progress"}, FinalItemIDs: []string{}},
 		{TurnID: "new", RunID: "new-run", StartedAt: start, EndedAt: &end, Outcome: &completed, ElapsedMS: 138000, WaitingMS: 20000, WorkDurationMS: 118000, FinalItemIDs: []string{"final-a", "final-b"}, FinalBoundaryComplete: true},
 	}}
 	encoded, err := flowerCurrentJSON(current)
@@ -646,6 +646,24 @@ func TestFlowerCurrentPreservesCanonicalHistoricalTurnPresentation(t *testing.T)
 	}
 	if !reflect.DeepEqual(decoded.Turns, current.Turns) {
 		t.Fatalf("turn facts lost: %+v", decoded.Turns)
+	}
+}
+
+func TestFlowerHistoricalTurnErrorsUseAuthorizedPresentation(t *testing.T) {
+	failure := &flruntime.ThreadTurnFailure{Code: flruntime.ThreadTurnFailureProvider, Message: (&providerFailure{diagnostic: providerFailureDiagnostic{Provider: "openai", Status: 503, Message: "The model is overloaded.", Shape: "standard_error"}}).Error()}
+	input := flruntime.ThreadTurnFailureInput{ThreadID: "thread", TurnID: "old", RunID: "old-run"}
+	got := projectFlowerTurnError(failure, input)
+	code, message := projectFloretTurnFailure(failure, "floret_turn_failed")
+	want := &flowerPublicTurnError{Code: code, Message: message, Detail: scopedFailureDetail(failure, "thread", "old", "old-run")}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("historical error differs from authorized presentation: %+v", got)
+	}
+	if projectFlowerTurnError(nil, input) != nil {
+		t.Fatal("missing failure invented diagnostics")
+	}
+	raw, err := json.Marshal(got)
+	if err != nil || strings.Contains(string(raw), providerFailurePrefix) {
+		t.Fatalf("raw internal envelope exposed: %v", err)
 	}
 }
 

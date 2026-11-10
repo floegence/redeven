@@ -966,6 +966,14 @@ describe('canonical turn facts', () => {
     expect(result.current_execution?.turn_kind).toBe(kind);
     expect(result.turns?.every(turn => turn.kind === kind)).toBe(true);
   });
+  it('retains historical failure availability without copying current diagnostics', () => {
+    const source = current();
+    const mapped = applyFlowerRuntimeCurrentView(summary(), { ...source, turns: source.turns!.map((turn, index) => ({ ...turn, has_failure: index === 0 })) });
+    expect(mapped.turns?.[0].has_failure).toBe(true);
+    expect(mapped.turns?.[1].has_failure).toBe(false);
+    expect(mapped.error).toBeFalsy();
+    expect(() => applyFlowerRuntimeCurrentView(summary(), { ...source, turns: source.turns!.map(turn => ({ ...turn, has_failure: true })) })).toThrow(/canonical turn presentation/);
+  });
   it.each(['private-future-kind', '', null, 42])('rejects unsupported current and historical kinds safely: %s', kind => {
     const source = current();
     for (const invalid of [{ ...source, turn_kind: kind }, { ...source, turns: source.turns!.map(turn => ({ ...turn, kind })) }]) {

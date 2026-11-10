@@ -118,6 +118,7 @@ import { SubagentAvatarStack } from './SubagentAvatarStack';
 import { FlowerToolSequenceContext, FlowerToolSequenceNode } from './FlowerToolSequenceNode';
 import { FlowerThinkingDisclosure } from './FlowerThinkingDisclosure';
 import { FlowerTurnTimeline } from './FlowerTurnTimeline';
+import { FlowerTurnError } from './FlowerTurnError';
 import { observeHistoryBodyLayout } from './historyBodyLayout';
 import { useFlowerActivityTitleReveal } from './flowerActivityTitleReveal';
 import { createFlowerTurnDisclosureStore } from './flowerTurnDisclosure';
@@ -8816,6 +8817,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
+  const historicalRunError = (threadID: string, turnID: string, runID: string) => <Show when={props.adapter.loadTurnError}><FlowerTurnError
+    load={signal => props.adapter.loadTurnError!(threadID, turnID, runID, signal)} summary={presentRunError}
+    loadingLabel={copy().chat.history.loading} failedLabel={copy().chat.history.failed} retryLabel={copy().chat.syncResync}
+    detailsLabel={copy().chat.runErrorDetails} copyLabel={copy().chat.runErrorCopyDetails} copiedLabel={copy().chat.messageCopied}
+    closeLabel={copy().computer.close} onCopyError={cause => notifyThreadActionError(getErrorMessage(cause))} /></Show>;
   const runErrorNotice = (error: FlowerThreadSnapshot['error'], targetThread: Accessor<FlowerThreadSnapshot | null | undefined>) => {
     const code = trimString(error?.code);
     const correctionFailure = code === 'floret_tool_argument_correction_exhausted';
@@ -13533,6 +13539,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       contextIndicator={<Show when={subagentDetailThread()?.model_context}><FlowerComposerContextIndicator placement="below-start" usage={subagentDetailThread()?.context_usage ?? {}} modelContext={subagentDetailThread()?.model_context} copy={copy()} /></Show>}
       renderTimeline={() => <><FlowerTurnTimeline thread={subagentTimelineThread()} entries={subagentDetailTimelineEntries()} readingBreaks={historyReadingBreaks(true)} sequenceGaps={childHistoryGaps.sequences()} missingEvents={subagentParentEventReading.missingIntervals()} onSequenceDemand={(group, expanded) => sequenceDemand(group, expanded, true)} onDisclosure={() => interruptDisclosureRead(true)} renderInside={entry => historyGapBefore(entry, true, true)} renderBefore={entry => <>{historyGapBefore(entry, true)}{receiptGapBefore(entry, subagentParentEventReading)}</>}
         failureNoticeVisible={runErrorNoticeVisible(subagentDetailThread())}
+        renderError={(turnID, runID) => historicalRunError(subagentDetailThread()!.thread_id, turnID, runID)}
         runtimeID={props.adapter.runtime.runtime_id} scope="subagent" choices={turnDisclosureChoices}
         scroll={subagentDetailScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
         receipt={subagentTimelineReceipt()} copy={copy().chat.turnProcess}
@@ -15409,6 +15416,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             >
               <FlowerTurnTimeline thread={selectedTimelineThread()} entries={visibleTimelineEntries()} readingBreaks={historyReadingBreaks()} sequenceGaps={mainHistoryGaps.sequences()} missingEvents={parentEventReading.missingIntervals()} onSequenceDemand={(group, expanded) => sequenceDemand(group, expanded)} onDisclosure={() => interruptDisclosureRead()} renderInside={entry => historyGapBefore(entry, false, true)} renderBefore={entry => <>{historyGapBefore(entry)}{receiptGapBefore(entry, parentEventReading)}</>}
                 failureNoticeVisible={runErrorNoticeVisible(selectedThread())}
+                renderError={(turnID, runID) => historicalRunError(selectedThreadID(), turnID, runID)}
                 runtimeID={props.adapter.runtime.runtime_id} scope="main" choices={turnDisclosureChoices}
                 scroll={transcriptScroll} reducedMotion={reducedMotionPreferred} liveConfirmed={livePresentationConfirmed}
                 receipt={selectedTimelineReceipt()} copy={copy().chat.turnProcess}

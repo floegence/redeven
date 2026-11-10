@@ -2,7 +2,7 @@ import '../index.css';
 import './flower-feature.css';
 import { builtInShellThemePresets } from '@floegence/floe-webapp-core/themes';
 import { commands, page, userEvent } from 'vitest/browser';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { FlowerLiveStreamEnvelope, FlowerParentEvent, FlowerRuntimeCurrentView, FlowerRuntimeTurn, FlowerSurfaceAdapter } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { canonicalProcessFixture } from '../../../../flower_ui/src/flowerCanonicalProcess.testFixture';
 import { parentProcessEvents, parentProcessPage } from '../../../../flower_ui/src/flowerParentEventProcess.testFixture';
@@ -720,6 +720,93 @@ describe('completed turn process disclosure', () => {
     expect(root.querySelector('[data-flower-turn-id="turn"] .flower-turn-ended')).toBeNull();
     expectEndedPresentation(root.querySelector<HTMLElement>('[data-flower-turn-id="old-turn"] .flower-turn-ended')!, 'Flower could not complete this turn.');
     expect(root.querySelector('.flower-error-message')?.textContent).toBe('The model is overloaded.');
+  });
+  it.each(['failed', 'interrupted'] as const)('retains closed %s diagnostics without changing timeline layout', async outcome => {
+    const detail = JSON.stringify({ provider: 'openai', http_status: 503, message: 'Provider unavailable', original_body_text: '<script>untrusted</script>\n' + 'long diagnostic '.repeat(500) });
+    const error = { code: 'provider_server_error', message: 'Provider unavailable', detail };
+    const stopped = current(true, { last_outcome: outcome, run_error_code: error.code, error: error.message, run_error_detail: detail,
+      turns: [{ ...turn({ outcome, final_item_ids: [], final_boundary_complete: false }), has_failure: true }],
+    });
+    const clipboard = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+    onTestFinished(() => clipboard.mockRestore());
+    const loadTurnError = vi.fn(async () => error);
+    const { root, live } = await mount(stopped, undefined, { loadTurnError });
+    expect(loadTurnError).not.toHaveBeenCalled();
+    expect(root.querySelectorAll('.flower-run-error')).toHaveLength(1);
+    const next = { ...continued(stopped), error: undefined, run_error_code: undefined, run_error_detail: undefined };
+    live.push(next);
+    await waitFor(() => Boolean(message(root, 'next-user')));
+    const check = async () => {
+      const trigger = root.querySelector<HTMLButtonElement>('[data-flower-turn-id="turn"] .flower-turn-error-trigger')!;
+      expect(trigger).not.toBeNull();
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(document.querySelector('.flower-turn-error-detail')).toBeNull();
+      await page.viewport(390, 900);
+      const notice = trigger.closest<HTMLElement>('.flower-turn-ended')!;
+      const label = notice.querySelector<HTMLElement>('.flower-turn-ended-label')!;
+      expect(Math.abs(trigger.getBoundingClientRect().top - label.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
+      const transcript = root.querySelector<HTMLElement>('.flower-chat-transcript')!;
+      const height = transcript.scrollHeight;
+      const calls = loadTurnError.mock.calls.length;
+      trigger.focus();
+      await userEvent.keyboard('{Enter}');
+      await waitFor(() => Boolean(document.querySelector('.flower-turn-error-detail')));
+      expect(loadTurnError).toHaveBeenCalledTimes(calls + 1);
+      expect(loadTurnError).toHaveBeenLastCalledWith('process', 'turn', 'run', expect.any(AbortSignal));
+      const dialog = document.querySelector<HTMLElement>('.flower-turn-error-dialog')!;
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(dialog.textContent).toContain(error.message);
+      expect(dialog.querySelector('pre')!.textContent).toBe(detail);
+      expect(dialog.querySelector('script')).toBeNull();
+      expect(transcript.scrollHeight).toBe(height);
+      const copyButton = Array.from(dialog.querySelectorAll<HTMLButtonElement>('button')).find(button => button.innerText === 'Copy details')!;
+      expect(copyButton.innerText).toBe('Copy details');
+      copyButton.click();
+      await waitFor(() => clipboard.mock.calls.length > 0);
+      expect(clipboard).toHaveBeenLastCalledWith(detail);
+      expect(root.querySelectorAll('.flower-run-error')).toHaveLength(0);
+      expect(root.querySelector('[data-flower-turn-id="next"] .flower-turn-error-trigger')).toBeNull();
+      expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth + 1);
+      if (import.meta.env.VITE_FLOWER_DESIGN_SCREENSHOTS === '1') await page.screenshot({ element: dialog, path: `__screenshots__/flower-historical-${outcome}.png` });
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => trigger.getAttribute('aria-expanded') === 'false');
+      await waitFor(() => document.activeElement === trigger);
+      expect(transcript.scrollHeight).toBe(height);
+      expect(document.querySelector('.flower-turn-error-detail')).toBeNull();
+    };
+    await check();
+    await page.viewport(1280, 900);
+    await waitFor(() => Boolean(root.querySelector('[data-thread-id="peer"] button')));
+    root.querySelector<HTMLButtonElement>('[data-thread-id="peer"] button')!.click();
+    await waitFor(() => !message(root, 'next-user'));
+    root.querySelector<HTMLButtonElement>('[data-thread-id="process"] button')!.click();
+    await waitFor(() => Boolean(message(root, 'next-user')));
+    await check();
+  });
+  it('reads diagnostics only while open and retries a failed read explicitly', async () => {
+    const stopped = current(true, { turns: [turn({ outcome: 'failed', has_failure: true, final_item_ids: [], final_boundary_complete: false })] });
+    const copy = createLocalizedFlowerSurfaceCopy(createTestI18nHelpers('zh-CN') as unknown as FlowerSurfaceTranslator);
+    const loadTurnError = vi.fn<NonNullable<FlowerSurfaceAdapter['loadTurnError']>>()
+      .mockImplementationOnce(async (_thread, _turn, _run, signal) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue({ code: 'provider_server_error', message: 'Original failure', detail: 'retained diagnostic' });
+    const { root } = await mount(continued(stopped), copy, { loadTurnError });
+    const trigger = root.querySelector<HTMLButtonElement>('.flower-turn-error-trigger')!;
+    expect(trigger.textContent).toBe(copy.chat.runErrorDetails);
+    expect(loadTurnError).not.toHaveBeenCalled();
+    trigger.click();
+    await waitFor(() => loadTurnError.mock.calls.length === 1);
+    const signal = loadTurnError.mock.calls[0][3];
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => signal.aborted);
+    trigger.click();
+    await waitFor(() => Boolean(document.querySelector('.flower-turn-error-dialog [role="alert"]')));
+    expect(loadTurnError).toHaveBeenCalledTimes(2);
+    const retry = Array.from(document.querySelectorAll<HTMLButtonElement>('.flower-turn-error-dialog button')).find(button => button.textContent === copy.chat.syncResync)!;
+    retry.click();
+    await waitFor(() => document.querySelector('.flower-turn-error-detail')?.textContent === 'retained diagnostic');
+    expect(loadTurnError).toHaveBeenCalledTimes(3);
+    await userEvent.keyboard('{Escape}');
   });
   it('retains the interruption label when the generic failure notice is hidden', async () => {
     const { root } = await mount(current(true, {
