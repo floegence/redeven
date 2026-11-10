@@ -283,6 +283,10 @@ func TestFlowerWorkspaceStreamBaselinesAndBroadcastsCanonicalComputerStatus(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+	// This fixture supplies and publishes synthetic canonical updates below.
+	// Join creation's unrelated asynchronous summary before replacing runtime
+	// authority, so it cannot interleave with the exact frame assertions.
+	svc.flowerThreadSummaryPublisher.Close()
 	const turnID, runID, callID, interactionID = "turn-computer-status", "run-computer-status", "call-computer-status", "tool-input:computer-status"
 	current := flruntime.ThreadView{
 		ThreadID: identity.ThreadID(thread.ThreadID), TurnID: turnID, RunID: runID,

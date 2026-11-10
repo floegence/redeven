@@ -18,11 +18,18 @@ import (
 
 type countingListThreadRuntime struct {
 	flruntime.ThreadService
-	lists         atomic.Int64
-	rootLists     atomic.Int64
-	summaries     atomic.Int64
-	views         atomic.Int64
-	summaryErrors map[identity.ThreadID]error
+	lists          atomic.Int64
+	rootLists      atomic.Int64
+	summaries      atomic.Int64
+	views          atomic.Int64
+	summaryErrors  map[identity.ThreadID]error
+	foregroundOnly bool
+}
+
+type pointReadCounterContextKey struct{}
+
+func (runtime *countingListThreadRuntime) counts(ctx context.Context) bool {
+	return !runtime.foregroundOnly || ctx.Value(pointReadCounterContextKey{}) == true
 }
 
 func TestThreadReadsDoNotRequireDesktopModelSourceAvailability(t *testing.T) {
@@ -98,15 +105,19 @@ func TestThreadReadsDoNotRequireDesktopModelSourceAvailability(t *testing.T) {
 }
 
 func (runtime *countingListThreadRuntime) List(ctx context.Context, scope flruntime.ThreadScope) ([]flruntime.ThreadSummary, error) {
-	runtime.lists.Add(1)
-	if scope.ParentID == nil {
-		runtime.rootLists.Add(1)
+	if runtime.counts(ctx) {
+		runtime.lists.Add(1)
+		if scope.ParentID == nil {
+			runtime.rootLists.Add(1)
+		}
 	}
 	return runtime.ThreadService.List(ctx, scope)
 }
 
 func (runtime *countingListThreadRuntime) View(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadView, error) {
-	runtime.views.Add(1)
+	if runtime.counts(ctx) {
+		runtime.views.Add(1)
+	}
 	return runtime.ThreadService.View(ctx, threadID)
 }
 
@@ -151,7 +162,9 @@ func TestListThreadsUsesSummaryWithoutLoadingThreadViews(t *testing.T) {
 }
 
 func (runtime *countingListThreadRuntime) Summary(ctx context.Context, threadID identity.ThreadID) (flruntime.ThreadSummary, error) {
-	runtime.summaries.Add(1)
+	if runtime.counts(ctx) {
+		runtime.summaries.Add(1)
+	}
 	if err := runtime.summaryErrors[threadID]; err != nil {
 		return flruntime.ThreadSummary{}, err
 	}
@@ -240,16 +253,19 @@ func TestPointThreadReadsUsePublishedSummaryReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	counter := &countingListThreadRuntime{ThreadService: svc.threadRuntime}
+	// Creation can publish a summary asynchronously. Count only the three
+	// explicit reads under test, preserving exact per-operation assertions.
+	ctx := context.WithValue(t.Context(), pointReadCounterContextKey{}, true)
+	counter := &countingListThreadRuntime{ThreadService: svc.threadRuntime, foregroundOnly: true}
 	svc.threadRuntime = counter
-	if _, err := svc.GetThread(t.Context(), meta, created.ThreadID); err != nil {
+	if _, err := svc.GetThread(ctx, meta, created.ThreadID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.GetFlowerThreadDetail(t.Context(), meta, created.ThreadID); err != nil {
+	if _, err := svc.GetFlowerThreadDetail(ctx, meta, created.ThreadID); err != nil {
 		t.Fatal(err)
 	}
 	viewsBeforePublication := counter.views.Load()
-	if err := svc.publishCanonicalThreadSummary(t.Context(), meta.EndpointID, created.ThreadID); err != nil {
+	if err := svc.publishCanonicalThreadSummary(ctx, meta.EndpointID, created.ThreadID); err != nil {
 		t.Fatal(err)
 	}
 	if got := counter.rootLists.Load(); got != 0 {
