@@ -3,7 +3,7 @@ import { formatStorageBytes, orderStorageEntries, storageDestination, type Stora
 const entry = (id: string, bytes = 0): StorageEntry => ({ id, path: '/environment/task-files', bytes, present: true, complete: true, kind: 'persistent', backup: 'environment' });
 it('routes only declared owners and preserves plugin independence and opaque stores', () => {
   expect(storageDestination(entry('plugins'))).toEqual({ kind: 'plugins' });
-  expect(storageDestination(entry('snapshots'))).toEqual({ kind: 'settings', section: 'flower_recovery' });
+  expect(storageDestination(entry('snapshots'))).toBeUndefined();
   expect(storageDestination(entry('task_files'))).toEqual({ kind: 'files', path: '/environment/task-files' });
   for (const id of ['cache', 'runtime', 'audit', 'diagnostics', 'unknown']) expect(storageDestination(entry(id))).toBeUndefined();
 });

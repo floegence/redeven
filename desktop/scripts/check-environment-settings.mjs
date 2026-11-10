@@ -49,9 +49,11 @@ try {
     await settleMotion();
     assert.equal(await dialog.locator('[data-floe-dialog-header] p').count(), 0);
     assert.equal(await dialog.locator('.environment-settings-resource-title').innerText(), label, 'only the environment name belongs in the resource row');
-    const positions = await page.locator('#ssh-settings-label, #ssh-settings-ssh_destination, #ssh-settings-ssh_port, .ssh-settings-field-control [role=radiogroup]').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().left));
+    const positions = await page.locator('#ssh-settings-label, #ssh-settings-ssh_destination, #ssh-settings-ssh_port, #ssh-settings-auth_mode').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().left));
     assert.equal(positions.length, 4);
     assert.ok(positions.every(left => Math.abs(left - positions[0]) <= 1), 'all editable controls share a leading edge in the hosted dialog');
+    const dimensions = await page.locator('#ssh-settings-label, #ssh-settings-ssh_destination, #ssh-settings-ssh_port, #ssh-settings-auth_mode').evaluateAll(nodes => nodes.map(node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })));
+    assert.ok(dimensions.every(size => Math.abs(size.width - dimensions[0].width) <= 1 && Math.abs(size.height - dimensions[0].height) <= 1), 'text, numeric and authentication controls share one field geometry');
   }
   async function switchTab(name, { reducedMotion = false } = {}) {
     const frames = await page.evaluate(async name => {
@@ -98,6 +100,13 @@ try {
     await dialog.getByRole('button', { name: 'Close', exact: true }).first().click();
     await dialog.waitFor({ state: 'detached' });
   }
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Environment settings', exact: true }).click();
+  const environmentList = dialog.locator('[data-environment-settings-list]');
+  await environmentList.waitFor();
+  assert.equal(await environmentList.count(), 1, 'all environments share one published settings list');
+  assert.equal(await environmentList.locator('button').count(), snapshot.environments.length);
+  await close();
   await open('orange');
   assert.equal(await page.evaluate(() => window.settingsFixture.loads), 0);
   await capture('card-first-connection');
@@ -337,6 +346,84 @@ try {
       await close();
       report.cases.push(`${kind}-connection-layout-${width}`);
     }
+  }
+  // IMPORTANT: Exercise the actual Welcome inventory and hosted editor. A
+  // hand-built SettingsList fixture would miss regressions in App composition.
+  const { createDesktopI18n } = await server.ssrLoadModule(fileURLToPath(new URL('../src/shared/i18n/index.ts', import.meta.url)));
+  await page.addInitScript(() => {
+    const mode = new URLSearchParams(location.search).get('mode') || 'light';
+    const theme = { source: mode, resolvedTheme: mode, shellThemes: { light: 'porcelain-light', dark: 'porcelain-dark' } };
+    window.redevenDesktopTheme = { getSnapshot: () => theme, subscribe: () => () => {}, setSource: async () => theme, setShellTheme: async () => theme };
+  });
+  for (const locale of ['en-US', 'zh-CN', 'de-DE']) for (const mode of ['light', 'dark']) for (const width of [1280, 768, 320]) {
+    const i18n = createDesktopI18n(locale);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(new URL(`environment-settings.html?locale=${locale}&mode=${mode}`, report.url).href);
+    await page.evaluate(value => window.settingsFixture.publish(value), { ...snapshot, environments: snapshot.environments.map(environment => environment.label === 'other' ? { ...environment, label: 'Long environment identity / Entwicklungsumgebung für gemeinsame Projekte' } : environment) });
+    await page.getByRole('button', { name: i18n.t('settings.unifiedTitle'), exact: true }).click();
+    await page.setViewportSize({ width, height: 900 }); await settleMotion();
+    const category = dialog.locator('.floe-settings-navigation__item').filter({ hasText: i18n.t('settings.settingsWindowTitle') });
+    if (await category.isVisible()) await category.click();
+    else {
+      await dialog.locator('.redeven-settings-dialog-mobile [role=combobox]').click();
+      await page.getByRole('option', { name: i18n.t('settings.settingsWindowTitle'), exact: true }).click();
+    }
+    const list = dialog.locator('[data-environment-settings-list]');
+    await list.waitFor(); await settleMotion();
+    await capture(`list-${locale}-${mode}-${width}`);
+    const grouped = await list.evaluate(element => {
+      const bounds = element.getBoundingClientRect(), style = getComputedStyle(element);
+      const rows = [...element.children].map(row => { const rect = row.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, radius: getComputedStyle(row).borderRadius }; });
+      return { radius: parseFloat(style.borderRadius), border: parseFloat(style.borderTopWidth), overflow: element.scrollWidth > element.clientWidth + 1, rows, left: bounds.left, right: bounds.right };
+    });
+    assert.ok(grouped.radius > 0 && grouped.border > 0, 'one rounded bordered settings group');
+    assert.equal(grouped.overflow, false, `${locale}/${mode}/${width}: ${JSON.stringify(grouped)}`);
+    assert.equal(grouped.rows.length, snapshot.environments.length);
+    for (const [index, row] of grouped.rows.entries()) {
+      assert.equal(parseFloat(row.radius), 0, 'rows do not become separate rounded buttons');
+      assert.ok(Math.abs(row.left - grouped.left) <= 2 && Math.abs(row.right - grouped.right) <= 2);
+      if (index) assert.ok(Math.abs(row.top - grouped.rows[index - 1].bottom) <= 1, 'rows share dividers without gaps');
+    }
+    const loads = await page.evaluate(() => window.settingsFixture.loads);
+    const row = list.getByRole('button', { name: i18n.t('environmentCenter.settingsForLabel', { label: 'orange' }), exact: true });
+    await row.focus(); await page.keyboard.press('Enter');
+    await page.locator('#ssh-settings-label').waitFor(); await settleMotion();
+    assert.equal(await page.locator('#ssh-settings-ssh_destination').inputValue(), 'orange');
+    assert.equal(await page.evaluate(() => window.settingsFixture.loads), loads, 'opening a connection does not load access settings');
+    const dimensions = await page.locator('#ssh-settings-label, #ssh-settings-ssh_destination, #ssh-settings-ssh_port, #ssh-settings-auth_mode').evaluateAll(nodes => nodes.map(node => { const rect = node.getBoundingClientRect(); return { left: rect.left, right: rect.right, width: rect.width, height: rect.height, overflow: node.scrollWidth > node.clientWidth + 1 }; }));
+    assert.equal(dimensions.length, 4);
+    for (const size of dimensions) {
+      assert.equal(size.overflow, false, `${locale}/${mode}/${width}: field contents fit`);
+      for (const key of ['left', 'right', 'width', 'height']) assert.ok(Math.abs(size[key] - dimensions[0][key]) <= 1, `${locale}/${mode}/${width}: matching field ${key}`);
+    }
+    await page.locator('#ssh-settings-auth_mode').click();
+    await page.getByRole('listbox').waitFor();
+    await dialog.getByRole('tab', { name: i18n.t('settings.accessTab'), exact: true }).click();
+    await page.getByRole('listbox').waitFor({ state: 'hidden' });
+    await dialog.getByRole('tab', { name: i18n.t('settings.connectionTab'), exact: true }).click();
+    await page.locator('#ssh-settings-auth_mode').waitFor();
+    assert.equal(await page.getByRole('listbox').count(), 0, 'returning never revives an authentication popup');
+    assert.equal(await page.locator('#ssh-settings-ssh_destination').inputValue(), 'orange');
+    await page.locator('#ssh-settings-label').fill('Retained draft');
+    const input = await page.locator('#ssh-settings-label').elementHandle();
+    await page.setViewportSize({ width: width === 1280 ? 320 : 1280, height: 900 });
+    await settleMotion();
+    assert.equal(await page.locator('#ssh-settings-label').evaluate((element, original) => element === original, input), true);
+    assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'Retained draft');
+    await page.setViewportSize({ width, height: 900 }); await settleMotion();
+    assert.equal(await dialog.evaluate(element => element.scrollWidth > element.clientWidth + 1), false);
+    assert.equal(await page.evaluate(() => window.settingsFixture.requests.length), 0, 'layout and navigation never save or start a runtime');
+    await capture(`details-${locale}-${mode}-${width}`);
+    const parent = dialog.locator('[data-settings-parent]');
+    assert.equal(await parent.isVisible(), true, 'resource has a header parent action');
+    const readsBeforeParent = await page.evaluate(() => window.settingsFixture.loads);
+    await parent.click(); await list.waitFor();
+    assert.equal(await dialog.locator('[data-settings-parent]').count(), 0, 'category root has no redundant Back');
+    assert.equal(await page.evaluate(() => window.settingsFixture.loads), readsBeforeParent, 'parent navigation performs no access request');
+    await row.click(); await page.locator('#ssh-settings-label').waitFor();
+    assert.equal(await page.locator('#ssh-settings-label').inputValue(), 'Retained draft', 'returning to the same resource retains its draft');
+    report.cases.push(`grouped-list-aligned-fields-${locale}-${mode}-${width}`);
+    await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' });
   }
   assert.deepEqual(report.errors, []);
   report.status = 'passed';

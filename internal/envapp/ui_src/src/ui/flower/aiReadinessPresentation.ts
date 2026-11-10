@@ -1,7 +1,7 @@
 import type { I18nHelpers } from '../i18n';
 import type { AIReadinessSnapshot } from './aiReadiness';
 
-export type AIReadinessAction = 'stop' | 'retry' | 'refresh' | 'open_update' | 'open_permissions' | 'review_issues' | 'show_diagnostics' | 'open_backups';
+export type AIReadinessAction = 'stop' | 'retry' | 'refresh' | 'open_update' | 'open_permissions' | 'review_issues' | 'show_diagnostics';
 
 export type AIReadinessDiagnosticRow = Readonly<{
   label: string;
@@ -82,7 +82,6 @@ function diagnosticRows(
 function presentationActions(
   snapshot: AIReadinessSnapshot,
   canRetryGeneration: boolean,
-  canManageStorage: boolean,
 ): Readonly<{ primaryAction?: AIReadinessAction; secondaryAction?: AIReadinessAction }> {
   if (snapshot.state === 'stopped') return canRetryGeneration ? { primaryAction: 'retry', secondaryAction: 'show_diagnostics' } : { primaryAction: 'show_diagnostics' };
   if (snapshot.stoppable && canRetryGeneration) return { primaryAction: 'stop' };
@@ -103,7 +102,7 @@ function presentationActions(
     case 'migration_failed':
     case 'backup_failed':
     case 'restore_failed':
-      return canManageStorage ? { primaryAction: 'open_backups', secondaryAction: 'show_diagnostics' } : { primaryAction: 'show_diagnostics' };
+      return { primaryAction: 'show_diagnostics' };
     case 'insufficient_space':
       return canRetry ? { primaryAction: 'retry', secondaryAction: 'show_diagnostics' } : { primaryAction: 'show_diagnostics' };
     case 'store_io_error':
@@ -192,7 +191,7 @@ function dataStatement(snapshot: AIReadinessSnapshot, i18n: I18nHelpers): string
 export function createAIReadinessPresentation(
   snapshot: AIReadinessSnapshot,
   i18n: I18nHelpers,
-  options: Readonly<{ canRetryGeneration?: boolean; canManageStorage?: boolean; elapsedMs?: number }> = {},
+  options: Readonly<{ canRetryGeneration?: boolean; elapsedMs?: number }> = {},
 ): AIReadinessPresentation {
   const copy = stateCopy(snapshot);
   const rows = diagnosticRows(snapshot, i18n, options.elapsedMs ?? -1);
@@ -202,7 +201,7 @@ export function createAIReadinessPresentation(
     title: text(i18n, copy.title),
     description: text(i18n, copy.description),
     dataStatement: dataStatement(snapshot, i18n),
-    ...(snapshot.state === 'degraded' ? { primaryAction: 'review_issues' as const } : presentationActions(snapshot, options.canRetryGeneration !== false, options.canManageStorage === true)),
+    ...(snapshot.state === 'degraded' ? { primaryAction: 'review_issues' as const } : presentationActions(snapshot, options.canRetryGeneration !== false)),
     diagnosticRows: rows,
     diagnosticText: rows.map((row) => `${row.label}: ${row.value}`).join('\n'),
   };

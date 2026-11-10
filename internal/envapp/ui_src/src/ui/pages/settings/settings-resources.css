@@ -1,6 +1,8 @@
 /* Product composition only: Floe owns control interaction, focus and motion. */
 .settings-resource-list { overflow: hidden; }
-.settings-resource-row { display: flex; width: 100%; height: auto; min-height: 60px; justify-content: space-between; gap: 16px; padding: 12px 16px; border-radius: 0; text-align: start; font-weight: 400; }
+/* IMPORTANT: Published Button defaults to min-content sizing. Resource rows
+ * must shrink so long identities cannot displace the fixed trailing action. */
+.settings-resource-row { display: flex; width: 100%; min-width: 0; height: auto; min-height: 60px; justify-content: space-between; gap: 16px; padding: 12px 16px; border-radius: 0; text-align: start; font-weight: 400; }
 .settings-resource-row + .settings-resource-row { border-top: 1px solid var(--border); }
 .settings-resource-identity { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
 .settings-resource-identity > svg { width: 32px; height: 32px; flex: none; }

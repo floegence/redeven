@@ -1,0 +1,10 @@
+.container-service-brand { position: relative; flex: none; display: grid; width: 30px; height: 30px; place-items: center; color: CanvasText; transition: transform 150ms ease; }
+.container-service-brand__color { display: block; width: 30px; height: 30px; object-fit: contain; }
+.container-service-brand__mono { display: none; width: 30px; height: 30px; background: currentColor; mask-position: center; mask-repeat: no-repeat; mask-size: contain; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat; -webkit-mask-size: contain; }
+.container-service-brand__remote { position: absolute; right: -8px; bottom: -7px; display: grid; width: 17px; height: 17px; place-items: center; border: 2px solid var(--card); border-radius: 999px; color: var(--muted-foreground); background: var(--muted); }
+@media (forced-colors: active) {
+  .container-service-brand__color { display: none; }
+  .container-service-brand__mono { display: block; forced-color-adjust: none; }
+}
+
+@media (prefers-reduced-motion: reduce) { .container-service-brand { transition: none; } }

@@ -20,6 +20,7 @@ One target-bound settings session owns connection/access drafts and immediate op
 - Embed the canonical connection/access editor in the global [Settings host](../ui/runtime-settings.md#host-and-destinations); its standalone fallback retains the 50rem by 44.375rem cap. Global host dimensions are independent of category content. Tabs/loading/disclosures cannot recenter it or move actions. Use one Current connection card with aligned, selectable, wrapping text/diagnostics/paths/addresses.
 - Browser scope, sign-in and certificate tasks share rows, meaningful icons and published outline controls with borders/hover/focus. Preserve specialized QR/recovery-code geometry. Removal drafts cannot look committed; review never shows passwords. Separate footer feedback/actions. Floe owns focus trapping, nested Escape, restoration, variants and forced colors.
 - SSH destination fills the adjacent control column in creation/settings. Loading/cached-host failure uses its trailing inset, preserving width/draft/focus; idle indicators take no external column or input clicks.
+- Environment inventory uses one published rounded SettingsList with divided full-row actions, platform identity and chevrons. Text, numeric and authentication selectors share both edges and height; switches keep intrinsic size. Authentication uses the published lifetime-gated select to fit long translations. Narrow editors stack without remounting drafts.
 - Access steps place equal flexible connectors after non-final labels; narrow layouts stack aligned badges without horizontal connectors. Floe owns modal presence and 200ms tab underline; retained exit never blanks the panel.
 
 ## Connection facts
@@ -36,6 +37,7 @@ Observations preserve host/container namespaces; failures prove no exit. Explici
 
 # Evidence
 
+- `redeven:desktop/scripts/check-environment-settings.mjs` - Actual inventory grouping, localized field geometry, retained drafts and selector lifetime at 320/768/1280px in light/dark themes.
 - `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Tests.
 
 - `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Source.

@@ -9,7 +9,7 @@ import { SETTINGS_NAV_ITEMS } from './settings/settingsStructure';
 import { createRuntimeSettingsFixture } from '../../../scripts/fixtures/runtime-settings/fixture';
 import { expectSingleInputFocus } from '../../styles/inputFocus.test-support';
 import { FLOWER_PROVIDER_TYPES } from '../../../../../flower_ui/src/settings/providerCatalog';
-import { FlowerStorageSettings } from './settings/FlowerStorageSettings';
+import { AIReadinessSettingsSection } from './settings/AIReadinessSettingsSection';
 
 const api = vi.hoisted(() => ({ request: async (_url: string, _init: RequestInit): Promise<unknown> => ({}) }));
 vi.mock('../services/localApi', async (original) => ({ ...await original<typeof import('../services/localApi')>(), fetchLocalApiJSON: (url: string, init: RequestInit) => api.request(url, init) }));
@@ -22,7 +22,7 @@ async function mount(width = 1280, dark = false) {
   host = document.createElement('div'); host.style.height = '780px'; document.body.append(host);
   dispose = render(() => {
     fixture = createRuntimeSettingsFixture(); api.request = fixture.request;
-    return <FloeProvider config={{ theme: { storageKey: 'runtime-settings-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><EnvSettingsPage context={fixture.context} panels={{ flower_recovery: () => <FlowerStorageSettings controller={fixture.context.env.aiReadinessController!} canAdmin={fixture.context.canAdmin()} /> }} /></FloeProvider>;
+    return <FloeProvider config={{ theme: { storageKey: 'runtime-settings-test-theme', defaultTheme: dark ? 'dark' : 'light' } }}><EnvSettingsPage context={fixture.context} panels={{ flower_recovery: () => <AIReadinessSettingsSection controller={fixture.context.env.aiReadinessController!} canAdmin={fixture.context.canAdmin()} /> }} /></FloeProvider>;
   }, host);
   await expect.poll(() => document.documentElement.classList.contains('dark')).toBe(dark);
 }
@@ -428,29 +428,28 @@ it('opens every provider type at a mobile width with a reachable footer', async 
   await page.screenshot({ path: '../../../dist/settings-design/runtime-settings-provider-mobile.png' });
 });
 
-it('keeps Flower defaults and storage recovery reachable and respects read-only state', async () => {
+it('keeps Flower defaults and runtime diagnostics reachable and respects read-only state', async () => {
   await mount(1280, true);
   await openSection('ai');
   await expect.element(page.getByText('Approval required', { exact: true })).toBeVisible();
   const health = await openSection('flower_recovery');
-  await expect.element(page.getByText('Flower backups', { exact: true })).toBeVisible();
-  const backupButton = [...health.querySelectorAll('button')].find(button => button.innerText === 'View backups')!;
-  expect(backupButton.closest('.floe-setting-row__control')).not.toBeNull();
+  await expect.element(page.getByText('Status', { exact: true })).toBeVisible();
+  expect(health.textContent).not.toContain('View backups');
   await page.screenshot({ path: '../../../dist/settings-design/runtime-settings-health-dark.png' });
   fixture.setCanAdmin(false);
   await openSection('runtime');
   await expect.element(page.getByPlaceholder('/home/user')).toBeDisabled();
 });
 
-it('navigates through the mobile section picker to models and storage recovery', async () => {
+it('navigates through the mobile section picker to models and runtime diagnostics', async () => {
   await mount(390);
   await page.getByRole('combobox', { name: 'Settings', exact: true }).click();
   await page.getByRole('option', { name: 'Flower', exact: true }).click();
   await expect.element(page.getByTestId('settings-section-ai')).toBeVisible();
   fixture.setReadinessSnapshot({ state: 'blocked', reason_code: 'store_integrity_error', retryable: false, safe_to_retry: false });
   await page.getByRole('combobox', { name: 'Settings', exact: true }).click();
-  await page.getByRole('option', { name: 'Flower recovery', exact: true }).click();
-  await expect.element(page.getByText('Flower backups', { exact: true })).toBeVisible();
+  await page.getByRole('option', { name: 'Flower diagnostics', exact: true }).click();
+  await expect.element(page.getByText('Status', { exact: true })).toBeVisible();
 });
 
 it('submits logging and port values using the flat settings API contract', async () => {

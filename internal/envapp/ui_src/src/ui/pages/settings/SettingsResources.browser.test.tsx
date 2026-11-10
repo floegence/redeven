@@ -1,0 +1,22 @@
+import '../../../index.css';
+import { render } from 'solid-js/web';
+import { afterEach, expect, it } from 'vitest';
+import { page } from 'vitest/browser';
+import { SettingsResourceList, SettingsResourceRow } from './SettingsResources';
+import { ServiceTemplateIdentity, type ServiceTemplatePresentation } from '../ServiceTemplateCatalog';
+let dispose: (() => void) | undefined;
+afterEach(() => { dispose?.(); document.body.replaceChildren(); });
+it.each([320, 768, 1280])('keeps the service identity and chevron inside the group at %ipx', async width => {
+  await page.viewport(width, 800);
+  const host = document.createElement('div'); host.style.padding = '24px'; document.body.append(host);
+  const path = '/workspace/managed-services/' + 'very-long-release-identity-'.repeat(20);
+  dispose = render(() => <SettingsResourceList label="Services"><SettingsResourceRow label="DeepSeek Harness" onClick={() => {}}><ServiceTemplateIdentity template={{ name: 'DeepSeek Harness', kind: 'app', deploymentLabel: 'Host' } as unknown as ServiceTemplatePresentation} compact metadata={<span class="block truncate" title={path}>{path}</span>} /></SettingsResourceRow></SettingsResourceList>, host);
+  const row = host.querySelector<HTMLElement>('.settings-resource-row')!;
+  const arrow = row.lastElementChild!.getBoundingClientRect();
+  const bounds = host.querySelector('.settings-resource-list')!.getBoundingClientRect();
+  expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(bounds.right);
+  expect(arrow.right).toBeLessThanOrEqual(bounds.right - 12);
+  expect(arrow.width).toBeGreaterThanOrEqual(16);
+  expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+  expect(host.querySelector('[title]')?.getAttribute('title')).toBe(path);
+});

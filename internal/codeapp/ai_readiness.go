@@ -260,27 +260,6 @@ func (c *aiReadinessController) applyAIReadinessIssueCount(generationID uint64, 
 }
 
 func (c *aiReadinessController) startAttempt() error {
-	return c.startAttemptWithRestore("")
-}
-
-func (c *aiReadinessController) ListFlowerSnapshots(ctx context.Context) ([]ai.FlowerSnapshotSummary, error) {
-	c.mu.Lock()
-	state := c.opts.StateDir
-	c.mu.Unlock()
-	return ai.ListFlowerSnapshots(ctx, state)
-}
-
-func (c *aiReadinessController) RestoreFlowerSnapshot(id string) error {
-	c.mu.Lock()
-	state := c.opts.StateDir
-	c.mu.Unlock()
-	if err := ai.CheckFlowerSnapshot(c.ctx, state, id); err != nil {
-		return err
-	}
-	return c.startAttemptWithRestore(id)
-}
-
-func (c *aiReadinessController) startAttemptWithRestore(restoreID string) error {
 	c.mu.Lock()
 	if c.closed || c.terminalErr != nil {
 		c.mu.Unlock()
@@ -304,9 +283,6 @@ func (c *aiReadinessController) startAttemptWithRestore(restoreID string) error 
 		}
 	}
 	c.snapshot = appserver.AIReadinessSnapshot{State: appserver.AIReadinessInspecting, Stoppable: true}
-	if restoreID != "" {
-		c.snapshot.State = appserver.AIReadinessRestoring
-	}
 	c.startupTraceID = newReadinessTraceID()
 	c.startupPhase = ""
 	c.startupStartedAt = time.Now()
@@ -316,11 +292,11 @@ func (c *aiReadinessController) startAttemptWithRestore(restoreID string) error 
 	c.workers.Add(1)
 	c.mu.Unlock()
 
-	go c.runAttempt(attemptCtx, previous, restoreID)
+	go c.runAttempt(attemptCtx, previous)
 	return nil
 }
 
-func (c *aiReadinessController) runAttempt(attemptCtx context.Context, previous *aiServiceGeneration, restoreID string) {
+func (c *aiReadinessController) runAttempt(attemptCtx context.Context, previous *aiServiceGeneration) {
 	defer c.workers.Done()
 	defer c.finishAttempt()
 	if previous != nil {
@@ -335,19 +311,6 @@ func (c *aiReadinessController) runAttempt(attemptCtx context.Context, previous 
 		}
 	}
 
-	if restoreID != "" {
-		c.mu.Lock()
-		opts := c.opts
-		c.mu.Unlock()
-		if err := ai.RestoreFlowerSnapshot(attemptCtx, opts, restoreID); err != nil {
-			if errors.Is(err, ai.ErrFlowerGenerationClose) {
-				c.finishCloseFailure(err)
-				return
-			}
-			c.finishFailure(err)
-			return
-		}
-	}
 	retryAttempt := 0
 	for {
 		c.setTransientState(appserver.AIReadinessInspecting)

@@ -72,7 +72,7 @@ function Fixture() {
       <output id="fixture-saved">{saved()}</output>
       <EnvironmentSettingsDialog open={open()} environment={environment} i18n={i18n} tab={tab()} onTabChange={setTab} onClose={() => setOpen(false)}
         access={<EnvironmentSettingsPanel footer={<button onClick={() => setOpen(false)}>{i18n.t('common.close')}</button>}><label for="fixture-access-draft">{i18n.t('settings.portLabel')}</label><input id="fixture-access-draft" value="23998" /></EnvironmentSettingsPanel>}
-        connection={<SSHEnvironmentSettingsForm
+        connection={<SSHEnvironmentSettingsForm active={tab() === 'connection'}
         open={open()}
         i18n={i18n}
         state={state()}

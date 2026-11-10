@@ -474,6 +474,11 @@ func (s *Service) startBackgroundMaintenance() {
 				}
 				return
 			}
+			if reason == "startup" && !s.skipStorageMaintenance {
+				if err := removeObsoleteFlowerSnapshots(s.lifecycleCtx, s.stateDir); err != nil && !errors.Is(err, context.Canceled) && s.log != nil {
+					s.log.Warn("ai: obsolete automatic snapshot cleanup deferred", "error", err)
+				}
+			}
 			s.runBackgroundMaintenance(reason)
 		}
 		run("startup")

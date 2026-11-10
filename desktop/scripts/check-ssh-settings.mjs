@@ -165,8 +165,8 @@ try {
   assert.equal(typography.label, typography.expected.control, 'field labels use the control step');
   assert.equal(typography.body, typography.expected.body, 'dialog body uses the body step');
   assert.equal(typography.radius, typography.expected.radius, 'settings dialog uses the panel corner');
-  const fields = await page.locator('.ssh-settings-field').evaluateAll(rows => rows.map(row => { const label = row.querySelector('.ssh-settings-field-label').getBoundingClientRect(), control = row.querySelector('.ssh-settings-field-control').getBoundingClientRect(); return { label: label.right, control: control.left, right: control.right }; }));
-  assert.ok(fields.every(row => row.control - row.label >= 27), 'labels and controls occupy separate columns');
+  const fields = await page.locator('.ssh-settings-field').evaluateAll(rows => rows.map(row => { const label = row.querySelector('.ssh-settings-field-label').getBoundingClientRect(), control = row.querySelector('.ssh-settings-field-control').getBoundingClientRect(); return { label: label.right, control: control.left, right: control.right, gap: parseFloat(getComputedStyle(row).columnGap) }; }));
+  assert.ok(fields.every(row => row.gap >= 16 && Math.abs(row.control - row.label - row.gap) <= 1), 'labels and controls keep the full shared grid gap');
   assert.ok(fields.every(row => Math.abs(row.right - fields[0].right) < 1), 'all controls share the same right edge');
   await page.addScriptTag({ path: axePath });
   const accessibility = await page.evaluate(async () => {
@@ -228,7 +228,8 @@ try {
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await page.waitForFunction(() => document.activeElement?.id === 'ssh-settings-connect_timeout_seconds');
   await page.locator('#ssh-settings-connect_timeout_seconds').fill('30');
-  await page.getByRole('radio', { name: 'Password', exact: true }).click();
+  await page.locator('#ssh-settings-auth_mode').click();
+  await page.getByRole('option', { name: 'Password', exact: true }).click();
   await page.getByRole('button', { name: 'Remove stored password', exact: true }).click();
   await page.setViewportSize({ width: 480, height: 640 });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -296,7 +297,8 @@ try {
     await motion('close');
     await motion('open');
     await page.locator('.ssh-settings-disclosure').click();
-    await page.getByRole('radio', { name: 'Password', exact: true }).click();
+    await page.locator('#ssh-settings-auth_mode').click();
+    await page.getByRole('option', { name: 'Password', exact: true }).click();
     await page.locator('#ssh-settings-release_base_url').fill(`https://mirror.example.com/${'release/'.repeat(18)}`);
     await page.setViewportSize({ width: 480, height: 640 });
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));

@@ -181,9 +181,9 @@
       "notAvailable": "No disponible"
     },
     "settings": {
-      "title": "Almacenamiento de Flower",
+      "title": "Diagnóstico de Flower",
       "description": "Disponibilidad, diagnóstico y recuperación de los datos de Flower.",
-      "floretStoreTitle": "Datos de Flower",
+      "floretStoreTitle": "Estado",
       "floretDescription": "Se comprueban juntos el historial de conversaciones, los ajustes del producto, el estado de lectura y los archivos subidos.",
       "noIssue": "No se detectaron problemas de disponibilidad",
       "refreshing": "Actualizando...",
@@ -202,25 +202,6 @@
       "confirmDelete": "Confirmar la eliminación del hilo canónico"
     },
     "storage": {
-      "title": "Copias de seguridad de Flower",
-      "description": "Las copias existentes incluyen el historial de Flower, la configuración, el estado de lectura y las cargas. Se conservan todas. El inicio y las actualizaciones no crean copias automáticas.",
-      "adminOnly": "Se necesitan permisos de administración para ver y restaurar copias.",
-      "view": "Ver copias",
-      "unknownBuild": "Compilación de origen no registrada",
-      "unavailable": "No se puede usar esta copia. Consulta el diagnóstico para más detalles.",
-      "loadFailed": "No se pudieron cargar las copias. Revisa el diagnóstico e inténtalo de nuevo.",
-      "restoreFailed": "No se pudo iniciar la restauración. Revisa el estado de Flower y el diagnóstico.",
-      "accepted": "Restauración iniciada. El estado de Flower se actualizará automáticamente.",
-      "empty": "Todavía no hay copias completas de Flower disponibles.",
-      "beforeRestore": "Antes de restaurar",
-      "automatic": "Automática",
-      "protected": "Protegida",
-      "reviewRestore": "Revisar restauración",
-      "confirmTitle": "¿Restaurar esta copia de Flower?",
-      "scope": "Los datos de Flower volverán al momento elegido. Se reemplazarán los cambios posteriores. Primero se guardarán los datos actuales.",
-      "executionImpact": "Las tareas sin terminar se detendrán y las aprobaciones anteriores caducarán. Las entradas en cola seguirán disponibles para verlas y copiarlas. Para ejecutarlas de nuevo se necesita una tarea nueva.",
-      "externalImpact": "No se incluyen los directorios de trabajo ni los ajustes globales de inicio de sesión. No se deshacen comandos ni acciones externas. La versión del entorno de ejecución no cambia; un fallo de migración pendiente puede seguir impidiendo que Flower arranque.",
-      "confirm": "Confirmar restauración",
       "backingUp": "Guardando tus conversaciones",
       "backingUpDescription": "Se está guardando una copia del historial y de los archivos subidos actuales antes de restaurar.",
       "restoring": "Restaurando Flower",
@@ -228,7 +209,7 @@
       "spaceTitle": "Flower necesita más espacio en disco",
       "spaceDescription": "Libera espacio en el disco del entorno de ejecución y vuelve a comprobar. Flower seguirá en pausa hasta que termine la preparación.",
       "failedTitle": "Mantenimiento de Flower detenido",
-      "failedDescription": "Revisa el diagnóstico o elige una copia verificada. Los terminales, archivos y ajustes siguen disponibles.",
+      "failedDescription": "Consulte el diagnóstico. Los terminales, archivos y ajustes siguen disponibles.",
       "component": "Componente",
       "product": "Ajustes de conversaciones",
       "floret": "Floret",
@@ -8364,7 +8345,7 @@
     "absent": "Sin crear",
     "unavailable": "No disponible",
     "partial": "Medición parcial; el tamaño es un límite inferior.",
-    "flower": "Recuperación de Flower",
+    "flower": "Diagnóstico de Flower",
     "tooling": "Paquetes del editor",
     "cleanup": "Limpia los datos desde la función correspondiente. Las copias de conversaciones no incluyen ajustes de extensiones ni archivos de trabajo.",
     "owners": {
@@ -8411,7 +8392,8 @@
     "usage": "Uso del espacio",
     "measuredScope": "Ubicaciones medidas del entorno · sin proyectos externos",
     "manageOwner": "Gestionar {owner}",
-    "locations": "Ubicaciones y alcance de las copias"
+    "locations": "Ubicaciones de almacenamiento",
+    "adminOnly": "Se requieren permisos de administrador para consultar el almacenamiento."
   },
   "automation": {
     "title": "Automatizaciones"

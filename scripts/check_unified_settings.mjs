@@ -115,6 +115,13 @@ assert.doesNotMatch(welcome, /props\.flowerLabel|settings.languageTitle|onBack=\
 assert.match(welcome, /header=\{/);
 assert.match(welcome, /closeOnBackdropClick/);
 assert.match(read('desktop/src/welcome/App.tsx'), /<SettingsSelect section="appearance"/);
+assert.match(read('desktop/src/welcome/App.tsx'), /connections=\{\(\) => <EnvironmentSettingsList/);
+const environmentList = read('desktop/src/welcome/EnvironmentSettingsList.tsx');
+assert.match(environmentList, /<SettingsList[^>]+data-environment-settings-list/);
+assert.match(environmentList, /props\.onOpen\(environment\.id\)/);
+const environmentStyles = read('desktop/src/welcome/EnvironmentSettingsDialog.css');
+assert.doesNotMatch(environmentStyles, /#ssh-settings-ssh_port\s*\{|\.ssh-settings-timeout input\s*\{[^}]*width:\s*88px/);
+assert.match(read('desktop/src/welcome/SSHEnvironmentSettingsForm.tsx'), /<SettingsSelect\s+id="ssh-settings-auth_mode"/);
 console.log('Unified settings ownership contract passed.');
 
 // IMPORTANT: Storage is a read-only overview; recovery and plugin lifecycle keep
@@ -137,3 +144,13 @@ const managedSettings = read('internal/envapp/ui_src/src/ui/pages/ManagedService
 assert.doesNotMatch(managedSettings, /<select[ >]/);
 assert.match(managedSettings, /const value = clone\(draft\(\)\)/);
 assert.match(read('internal/envapp/ui_src/src/ui/plugins/PluginConnectionsDialog.tsx'), /<SettingsList>/);
+
+// IMPORTANT: Product navigation cannot reintroduce obsolete backup interfaces.
+assert.match(settings, /data-settings-parent/);
+assert.match(read('desktop/src/welcome/DesktopSettingsDialog.tsx'), /data-settings-parent/);
+assert.match(read('internal/envapp/ui_src/src/ui/pages/settings/settings-resources.css'), /settings-resource-row \{[^}]*min-width: 0/s);
+assert.match(read('internal/envapp/ui_src/src/ui/pages/settings/ContainerSettingsPanel.tsx'), /<ContainerServiceBrandMark engine=\{service.engine\}/);
+assert.doesNotMatch(read('internal/codeapp/appserver/server.go'), /api\/ai\/maintenance\/(snapshots|restore)/);
+assert.doesNotMatch(read('internal/ai/storage_snapshot.go'), /func captureFlowerSnapshot|func ListFlowerSnapshots/);
+assert.doesNotMatch(read('internal/ai/storage_restore.go'), /func RestoreFlowerSnapshot/);
+assert.doesNotMatch(read('internal/envapp/ui_src/src/ui/pages/settings/AIReadinessSettingsSection.tsx'), /FlowerStorageSettings/);

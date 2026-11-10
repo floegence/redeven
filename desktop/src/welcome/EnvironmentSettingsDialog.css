@@ -243,9 +243,8 @@
 .ssh-settings-field-label label, .ssh-settings-field-label > span { display: inline-flex; align-items: center; min-height: var(--environment-settings-control-height); font-size: var(--floe-type-control); font-weight: 400; line-height: var(--floe-line-control); }
 .ssh-settings-probe label { font-size: var(--floe-type-control); font-weight: 400; line-height: 1.6; }
 .ssh-settings-field-control { width: 100%; display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 0; }
-/* IMPORTANT: Every field owns the same control column. Short numeric inputs
- * align at its start; they must never move the entire column to the right. */
-.ssh-settings-form #ssh-settings-ssh_port { max-width: 7rem; }
+/* IMPORTANT: Text, numeric and choice fields fill the same control column,
+ * including both edges and height. Switches retain their intrinsic geometry. */
 /* Text-entry geometry only. A radio is a choice dot that keeps its intrinsic
  * size, and the SSH form hosts the connection dialog's shared kind/gateway
  * picker, so sweeping radios into the field rule stretched each one into a
@@ -263,13 +262,12 @@
 .ssh-settings-chevron--open { transform: rotate(90deg); }
 .ssh-settings-advanced-fields { margin-top: 16px; }
 .ssh-settings-timeout { display: flex; align-items: center; justify-content: flex-start; gap: 10px; }
-.ssh-settings-timeout input { width: 88px !important; }
+.ssh-settings-timeout input { flex: 1; min-width: 0; }
+.ssh-settings-timeout > span { flex: none; margin: 0; }
 .ssh-settings-field--invalid { scroll-margin-block: 16px; }
 .ssh-settings-error { color: var(--destructive); font-size: var(--floe-type-supporting); line-height: 1.6; overflow-wrap: anywhere; }
 .ssh-settings-help-popover { max-width: min(340px, calc(100vw - 32px)); padding: 16px; font-size: var(--floe-type-control); line-height: 1.6; }
-.ssh-settings-form [role='radiogroup'] { align-self: flex-start; width: fit-content; max-width: 100%; flex-wrap: wrap; border: 0; border-radius: 8px; padding: 3px; background: var(--background); }
 .environment-connection-form [role='radiogroup'] { max-width: 100%; flex-wrap: wrap; }
-.ssh-settings-form [role='radio'] { min-height: 32px; padding: 4px 10px; font-size: var(--floe-type-supporting); border: 0; box-shadow: none; }
 .environment-connection-form [role='radio'] { min-height: 32px; white-space: nowrap; }
 .ssh-settings-probe > label, .environment-connection-probe > label { min-height: 32px; align-items: center; }
 @media (max-width: 600px) {
@@ -277,7 +275,6 @@
   .environment-settings-scroll { padding: 20px 16px; }
   .ssh-settings-field { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .ssh-settings-field-control { width: 100%; max-width: 100%; }
-  .ssh-settings-form [role='radiogroup'] { align-self: flex-start; }
   .ssh-settings-disclosure-heading { align-items: flex-start; flex-direction: column; gap: 2px; }
   .ssh-settings-summary { text-align: start; }
   .environment-settings-actions { padding-inline: 16px; }
@@ -299,7 +296,7 @@
   .environment-settings-tabs .environment-settings-tab-trigger,
   .ssh-settings-help-link, .ssh-settings-disclosure,
   .environment-access-advanced summary { min-height: 44px; }
-  .ssh-settings-form [role='radio'], .environment-connection-form [role='radio'],
+  .environment-connection-form [role='radio'],
   .ssh-settings-probe > label, .environment-connection-probe > label { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .ssh-settings-chevron { transition: none; } }
@@ -325,11 +322,6 @@
 .environment-connection-fields > .environment-connection-fields { border-bottom: 1px solid var(--environment-settings-border); }
 .environment-connection-fields > .environment-connection-fields:last-child { border-bottom: 0; }
 .environment-connection-field > .environment-connection-help + button { justify-self: end; max-width: 100%; white-space: nowrap; }
-/* A segmented rail is sized by its segments, not by the value column. Stretching
- * it to the 258px field column leaves a dead track after the last segment that
- * reads as an empty control. */
-.environment-connection-field > .floe-segmented-control,
-.environment-connection-field > [role='radiogroup'] { justify-self: start; width: fit-content; max-width: 100%; }
 .environment-connection-probe { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 12px; }
 .environment-connection-group .environment-connection-field { margin-block: 0; }
 .environment-connection-facts { margin: 0; }
@@ -392,6 +384,11 @@
 }
 
 .environment-settings-resource-title { padding: .75rem 1.25rem; font-size: var(--floe-type-body); font-weight: 600; }
+.environment-settings-list { overflow: hidden; }
+.environment-settings-list-row { display: flex; width: 100%; min-width: 0; height: auto; min-height: 52px; justify-content: space-between; gap: 16px; padding: 10px 16px; border-radius: 0; text-align: start; font-weight: 400; }
+.environment-settings-list-row + .environment-settings-list-row { border-top: 1px solid var(--border); }
+.environment-settings-list-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.environment-settings-list-name { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .environment-settings-tabs .environment-settings-tabs-scroll { background: transparent; }
 
 @container environment-settings (width < 560px) {

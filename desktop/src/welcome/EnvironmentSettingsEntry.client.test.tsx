@@ -64,6 +64,19 @@ async function mount(load: (request: { environment_id: string }) => Promise<Desk
 afterEach(() => { for (const dispose of disposers.splice(0)) dispose(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('environment card settings entry', () => {
+  it('keeps new SSH authentication usable outside the settings host', async () => {
+    const h = await mount(async () => success);
+    button('New').click(); await settle();
+    const ssh = [...document.querySelectorAll<HTMLButtonElement>('[role=radio]')].find(control => controlText(control) === 'SSH Host');
+    ssh!.click(); await settle();
+    const authentication = document.querySelector<HTMLButtonElement>('#ssh-settings-auth_mode')!;
+    expect(authentication.disabled).toBe(false);
+    authentication.click(); await settle();
+    [...document.querySelectorAll<HTMLElement>('[role=option]')].find(option => option.textContent?.trim() === 'Password')!.click();
+    await settle();
+    expect(document.querySelector('#ssh-settings-ssh_password')).not.toBeNull();
+    expect(h.performAction).not.toHaveBeenCalled();
+  });
   it('transitions from credential recovery to the live launcher after explicit migration', async () => {
     const normal = buildDesktopWelcomeSnapshot({ preferences: testDesktopPreferences({}) });
     const h = await mount(async () => success, undefined, {

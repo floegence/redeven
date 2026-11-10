@@ -78,10 +78,6 @@
 .container-service-card:focus-within { border-color: color-mix(in srgb, var(--ring) 52%, var(--border)); }
 .container-service-card[data-active="true"] { border-color: color-mix(in srgb, var(--border) 90%, transparent); }
 .container-service-card__mark { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 14px; background: color-mix(in srgb, var(--background) 58%, transparent); }
-.container-service-brand { position: relative; display: grid; width: 30px; height: 30px; place-items: center; color: CanvasText; transition: transform 150ms ease; }
-.container-service-brand__color { display: block; width: 30px; height: 30px; object-fit: contain; }
-.container-service-brand__mono { display: none; width: 30px; height: 30px; background: currentColor; mask-position: center; mask-repeat: no-repeat; mask-size: contain; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat; -webkit-mask-size: contain; }
-.container-service-brand__remote { position: absolute; right: -8px; bottom: -7px; display: grid; width: 17px; height: 17px; place-items: center; border: 2px solid var(--card); border-radius: 999px; color: var(--muted-foreground); background: var(--muted); }
 .container-service-card__identity { min-width: 0; }
 .container-service-card__identity > span { color: var(--muted-foreground); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
 .container-service-card__identity h3 { margin: 1px 0 3px; overflow: hidden; font-size: 16px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
@@ -215,8 +211,6 @@
 
 @media (forced-colors: active) {
   .container-service-card { border: 1px solid CanvasText; box-shadow: none; }
-  .container-service-brand__color { display: none; }
-  .container-service-brand__mono { display: block; forced-color-adjust: none; }
 }
 
 .redeven-containers button,

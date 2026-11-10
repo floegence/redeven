@@ -85,11 +85,6 @@ type AIOrphanRootMaintenanceProvider interface {
 	DeleteOrphanCanonicalRoot(context.Context, ai.DeleteOrphanCanonicalRootRequest) (int, error)
 }
 
-type AIStorageMaintenanceProvider interface {
-	ListFlowerSnapshots(context.Context) ([]ai.FlowerSnapshotSummary, error)
-	RestoreFlowerSnapshot(string) error
-}
-
 type aiServiceContextKey struct{}
 type aiServiceAcquireHookKey struct{}
 
@@ -129,8 +124,6 @@ func routeUsesAIService(r *http.Request) bool {
 	}
 	switch path {
 	case "/_redeven_proxy/api/ai/readiness",
-		"/_redeven_proxy/api/ai/maintenance/snapshots",
-		"/_redeven_proxy/api/ai/maintenance/restore",
 		"/_redeven_proxy/api/ai/readiness/retry",
 		"/_redeven_proxy/api/ai/readiness/stop",
 		"/_redeven_proxy/api/ai/maintenance/orphan_roots",

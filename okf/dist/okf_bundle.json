@@ -2493,15 +2493,14 @@
             "concept_id": "ai.flower-backup-and-recovery",
             "path": "ai/flower-backup-and-recovery.md",
             "type": "Recovery Contract",
-            "title": "Flower backup and recovery",
+            "title": "Flower storage recovery and retired backups",
             "tags": [
               "ai",
-              "backups",
               "recovery",
               "storage"
             ],
-            "summary": "Readiness drains generations while storage owners snapshot/migrate and Floret ends execution. Freeze Flower writes, verify collections and retain backups; restore history/settings/read-state/uploads without stopping other surfaces. Failures preserve recovery, never replay effects or roll back binaries.",
-            "section_count": 3
+            "summary": "Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls.",
+            "section_count": 2
           },
           {
             "concept_id": "ai.flower-upgrade-compatibility",
@@ -3712,7 +3711,7 @@
         "label": "backup and recovery",
         "path": "ai/flower-backup-and-recovery.md",
         "concept_id": "ai.flower-backup-and-recovery",
-        "title": "Flower backup and recovery"
+        "title": "Flower storage recovery and retired backups"
       },
       {
         "label": "thread Goals",
@@ -7351,12 +7350,6 @@
       ],
       "backlinks": [
         {
-          "label": "Flower backup and recovery",
-          "path": "ai/flower-backup-and-recovery.md",
-          "concept_id": "ai.flower-backup-and-recovery",
-          "title": "Flower backup and recovery"
-        },
-        {
           "label": "Flower plugin catalog integration",
           "path": "ai/flower-plugin-catalogs.md",
           "concept_id": "ai.flower-plugin-catalogs",
@@ -7474,66 +7467,54 @@
       "path": "ai/flower-backup-and-recovery.md",
       "concept_id": "ai.flower-backup-and-recovery",
       "type": "Recovery Contract",
-      "title": "Flower backup and recovery",
+      "title": "Flower storage recovery and retired backups",
       "tags": [
         "ai",
-        "backups",
         "recovery",
         "storage"
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-01",
+        "reviewed_at": "2026-11-09",
         "tags": [
           "ai",
-          "backups",
           "recovery",
           "storage"
         ],
-        "title": "Flower backup and recovery",
+        "title": "Flower storage recovery and retired backups",
         "type": "Recovery Contract"
       },
-      "body_length": 1513,
-      "summary": "Readiness drains generations while storage owners snapshot/migrate and Floret ends execution. Freeze Flower writes, verify collections and retain backups; restore history/settings/read-state/uploads without stopping other surfaces. Failures preserve recovery, never replay effects or roll back binaries.",
+      "body_length": 1696,
+      "summary": "Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Preserved snapshots\nOrdinary startup, binary changes and transactional migrations do not create full snapshots. A damaged old snapshot cannot block healthy live data.\n\nAbandoned task staging is removed only after any durable replacement completes and before a new generation opens; an unclosed generation prevents that path.\n\n## Administrator recovery\nSettings and the Flower maintenance action expose backup time, source build, size and protection.\n\nOld unfinished Turns become terminal, old interactions become resolved and non-executable, and queued input remains canonical readonly `RestoredInputs`.\n\nDiagnostics use the existing sanitized export and do not include conversations, credentials, database contents or uploaded files by default.",
-          "char_count": 748
-        },
-        {
-          "id": "boundaries",
-          "title": "Boundaries",
-          "level": 1,
-          "body": "Only conversation-owned databases and uploaded resources participate in a restore. Environment extension configuration, including the [Agent Plugins registry and data](flower-agent-plugins.md), remains outside conversation snapshots and is preserved unchanged. Restore staging never initializes its plugin manager. Core Runtime services remain available.",
-          "char_count": 354
+          "body": "## Retired automatic snapshots\nThe public snapshot-list and restore APIs are removed. Successful activation and startup preparation admit one background cleanup of checksum-verified, unprotected automatic snapshots only. Cleanup checks cancellation, refuses a pending replacement journal, pins the snapshot directory, and never traverses links. Unknown, damaged, protected and before-restore records remain unchanged. Cleanup failure cannot block healthy conversations.\n\nNo cleanup targets live conversations, uploads, read state, extension configuration, or opaque upstream stores. Filesystem statistics do not certify backups.\n\n## Durable recovery and diagnostics\nPreviously admitted durable replacements must finish and verify before opening another generation. A failed generation close fences recovery. Abandoned staging retires only after replacement completes.\n\nThe diagnostic settings category retains actual runtime status, safe retry/stop, sanitized diagnostics and explicit orphan ownership review. Diagnostics omit conversations, credentials, database contents and uploads. There is no generic deletion API or backup-success claim.",
+          "char_count": 1143
         },
         {
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:internal/ai/storage_snapshot.go` - Source.",
-          "char_count": 53
+          "body": "- `redeven:internal/ai/storage_retirement.go` and `storage_retirement_test.go` - Restricted cleanup and preservation checks.\n- `redeven:internal/codeapp/appserver/ai_storage_maintenance_test.go` - Retired endpoints reject access.\n- `redeven:internal/envapp/ui_src/src/ui/pages/settings/AIReadinessSettingsSection.tsx` - Runtime diagnostic surface.",
+          "char_count": 347
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/ai/storage_snapshot.go:0:source.",
-          "source": "redeven:internal/ai/storage_snapshot.go",
-          "description": "Source."
-        }
-      ],
-      "snippet": "Readiness drains generations while storage owners snapshot/migrate and Floret ends execution. Freeze Flower writes, verify collections and retain backups; restore history/settings/read-state/uploads without stopping other surfaces. Failures",
-      "links": [
+          "id": "redeven:internal/codeapp/appserver/ai_storage_maintenance_test.go:0:retired endpoints reject access.",
+          "source": "redeven:internal/codeapp/appserver/ai_storage_maintenance_test.go",
+          "description": "Retired endpoints reject access."
+        },
         {
-          "label": "Agent Plugins registry and data",
-          "path": "ai/flower-agent-plugins.md",
-          "concept_id": "ai.flower-agent-plugins",
-          "title": "Flower Agent Plugins"
+          "id": "redeven:internal/envapp/ui_src/src/ui/pages/settings/AIReadinessSettingsSection.tsx:0:runtime diagnostic surface.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/pages/settings/AIReadinessSettingsSection.tsx",
+          "description": "Runtime diagnostic surface."
         }
       ],
+      "snippet": "Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls.",
       "backlinks": [
         {
           "label": "Flower storage ownership and migrations",
@@ -7965,7 +7946,7 @@
       ],
       "frontmatter": {
         "lifecycle": "contract",
-        "reviewed_at": "2026-11-02",
+        "reviewed_at": "2026-11-09",
         "tags": [
           "ai",
           "floret",
@@ -7976,15 +7957,15 @@
         "title": "Flower storage ownership and migrations",
         "type": "Storage Contract"
       },
-      "body_length": 4094,
+      "body_length": 4087,
       "summary": "Floret owns canonical Agent formats; Redeven owns product facts and uploads. Unknown, future, drifted or invalid state blocks Flower without resetting data or disabling the core Runtime. Floret owns bounded startup recognition and background per-thread migration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Storage owners\nRedeven consumes the exact published Floret version in go.mod with `GOWORK=off`.\n\nEach validated dependency closure publishes atomically; retained sources retire only after complete verification. The oldest v2-v5 snapshots reserve historical identities through a resumable scan before new-thread admission. Segmented stores admit new threads immediately. Redeven uses public status, thread preparation and per-thread media contracts and never decodes upstream records.\n\nPublished Floret v7.87.0 removes hidden Activity field preparation from ordinary startup, retains summary metadata on large activity admission, batches explicit locator writes and skips same-value SQLite upserts. Its recent manifest cache is bounded, memory-only and owned upstream. No new host indexes, full-text indexes or duplicate conversation storage are introduced. First disclosure may still prepare the selected complete activity once; this is not a claim of field-granular cold preparation.\n\nCancellation, shutdown and execution-context settlement resolve canonical control records through Floret. The host keeps the original Stop request and does not read or reconstruct upstream conversation bodies to settle it.\n\nA read-state failure cannot become a core Runtime constructor failure or a synthetic read record.\n\nRedeven also owns the [Agent Plugins registry](flower-agent-plugins.md), snapshots and installation data. Its schema-1 SQLite store is separate from canonical conversation history; credential references resolve through SecretsStore schema 4. Neither owner decodes Floret records.\n\n## Execution configuration\nProduct schema 11 to 12 adds bounded execution configuration to the existing\nadmission authority. It retains original provider/model and RunOptions for\ncontinuations; it is not a second lifecycle table. Historical rows remain valid\nwith no inferred configuration. Floret owns host-work facts, final output,\nnotice admission, unknown recovery and continuation identity.\n\n## Readonly checks and owner transactions\n`sqliteutil` owns WAL-aware readonly preflight, integrity checks and complete SQLite snapshots for product and read-state owners. Inspection never creates missing data or runs a migration.\n\nRequired upgrade snapshots precede Floret space maintenance and all migrations, as specified by the [backup and recovery contract](flower-backup-and-recovery.md).\n\n## Frozen historical queue conversion\nThe migration-only `pendinginputlegacy` package owns the complete interpretation of historical queue bytes: session identity, options, context shapes, default values, resource metadata and normalization limits.\n\nThe v4-to-v5 product transaction imports canonical pending inputs through Floret's public idempotent import API, records necessary product authority and removes retired source tables before commit. The upgrade operation contains only target build, original snapshot identity and completion; owner versions and canonical records remain the progress authority.\n\n## Resource and authorization retention\nProduct upload references retain resources for every canonical thread that contains them, including ordinary forks, nested forks and restored inputs.\n\nAfter activation, product recovery pages settings, retains each thread's complete descriptors and promotes eligible admitted input. Failures retain the cleanup gate while independent threads recover. Tool-media collection keeps its complete global inventory, write gate and idle constraint.\n\nBounded keyset maintenance and compaction stop and drain with their owning generation.",
-          "char_count": 3565
+          "body": "## Storage owners\nRedeven consumes the exact published Floret version in go.mod with `GOWORK=off`.\n\nEach validated dependency closure publishes atomically; retained sources retire only after complete verification. The oldest v2-v5 snapshots reserve historical identities through a resumable scan before new-thread admission. Segmented stores admit new threads immediately. Redeven uses public status, thread preparation and per-thread media contracts and never decodes upstream records.\n\nPublished Floret v7.87.0 removes hidden Activity field preparation from ordinary startup, retains summary metadata on large activity admission, batches explicit locator writes and skips same-value SQLite upserts. Its recent manifest cache is bounded, memory-only and owned upstream. No new host indexes, full-text indexes or duplicate conversation storage are introduced. First disclosure may still prepare the selected complete activity once; this is not a claim of field-granular cold preparation.\n\nCancellation, shutdown and execution-context settlement resolve canonical control records through Floret. The host keeps the original Stop request and does not read or reconstruct upstream conversation bodies to settle it.\n\nA read-state failure cannot become a core Runtime constructor failure or a synthetic read record.\n\nRedeven also owns the [Agent Plugins registry](flower-agent-plugins.md), snapshots and installation data. Its schema-1 SQLite store is separate from canonical conversation history; credential references resolve through SecretsStore schema 4. Neither owner decodes Floret records.\n\n## Execution configuration\nProduct schema 11 to 12 adds bounded execution configuration to the existing\nadmission authority. It retains original provider/model and RunOptions for\ncontinuations; it is not a second lifecycle table. Historical rows remain valid\nwith no inferred configuration. Floret owns host-work facts, final output,\nnotice admission, unknown recovery and continuation identity.\n\n## Readonly checks and owner transactions\n`sqliteutil` owns WAL-aware readonly preflight, integrity checks and complete SQLite snapshots for product and read-state owners. Inspection never creates missing data or runs a migration.\n\nOwner transactions migrate without full startup snapshots. The [recovery contract](flower-backup-and-recovery.md) governs completion of admitted replacements and retirement of obsolete automatic backups.\n\n## Frozen historical queue conversion\nThe migration-only `pendinginputlegacy` package owns the complete interpretation of historical queue bytes: session identity, options, context shapes, default values, resource metadata and normalization limits.\n\nThe v4-to-v5 product transaction imports canonical pending inputs through Floret's public idempotent import API, records necessary product authority and removes retired source tables before commit. Owner versions and canonical records remain the progress authority; no build-driven snapshot journal is created.\n\n## Resource and authorization retention\nProduct upload references retain resources for every canonical thread that contains them, including ordinary forks, nested forks and restored inputs.\n\nAfter activation, product recovery pages settings, retains each thread's complete descriptors and promotes eligible admitted input. Failures retain the cleanup gate while independent threads recover. Tool-media collection keeps its complete global inventory, write gate and idle constraint.\n\nBounded keyset maintenance and compaction stop and drain with their owning generation.",
+          "char_count": 3558
         },
         {
           "id": "boundaries",
@@ -8017,10 +7998,10 @@
           "title": "Flower Agent Plugins"
         },
         {
-          "label": "backup and recovery contract",
+          "label": "recovery contract",
           "path": "ai/flower-backup-and-recovery.md",
           "concept_id": "ai.flower-backup-and-recovery",
-          "title": "Flower backup and recovery"
+          "title": "Flower storage recovery and retired backups"
         }
       ],
       "backlinks": [
@@ -10891,7 +10872,7 @@
           "label": "complete-set recovery",
           "path": "ai/flower-backup-and-recovery.md",
           "concept_id": "ai.flower-backup-and-recovery",
-          "title": "Flower backup and recovery"
+          "title": "Flower storage recovery and retired backups"
         },
         {
           "label": "Generation ownership",
@@ -14654,15 +14635,15 @@
         "title": "Product storage placement and lifecycle",
         "type": "Storage Contract"
       },
-      "body_length": 8093,
+      "body_length": 8142,
       "summary": "Redeven allocates feature roots; published upstream owners retain opaque formats. Storage inspection reports bounded observations, never deletion authority or backup success. Environment data, Desktop profiles and external projects have separate ownership; relocation requires an explicit offline operation with verified recovery state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`StateRoot` resolves from explicit input, `REDEVEN_STATE_ROOT`, then `~/.redeven`; `StateDir` is its `local-environment` child. Desktop credentials/preferences remain in Electron userData, environment registrations in StateRoot/catalog, independent Gateway and Center in their explicitly selected roots. An Environment backup is not a Desktop profile or external-project backup.\n\nReDevPlugin receives only `StateDir/apps/plugins/platform`, including its control/data/assets, host adapters and author workspaces. Host migrations, SQL and recovery remain upstream. Retired root-level plugin files block plugin admission unchanged. Product draft records remain in apps/plugin-creation; market snapshots in apps/plugins. Flower Agent Plugins remain separately owned under ai/agent-plugins.\n\nManaged skills use `apps/skills/{packages,state.json,sources.json}` in the selected Environment. Explicit `.agents/skills` remains shared user content. Managed ancestors and metadata reject symlinks/non-directory placement. Disabled/source decisions follow managed files; retired metadata blocks Flower admission. No silent HOME-based fallback imports another Environment's managed skills.\n\nDesktop business caches all use `REDEVEN_DESKTOP_CACHE_ROOT`, or `StateRoot/cache/desktop`. userData is never a disposable cache. Existing cache acquisition, verification and eviction belong to their original owners. Old userData caches are retained; new roots reacquire verified packages without treating userData as disposable.\n\nConfig remains one atomic identity/recovery envelope: settings, binding/outbox and one-shot control artifacts cannot be split across independent writes. Provider credentials remain in secrets.json. Neither filename implies export safety. Sanitize settings exports; never export this envelope as portable preferences.\n\nAutomation allocates apps/automation. Redeven owns workflows.sqlite definitions, grants, context and artifacts; the published ReDevPlugin scheduler owns opaque schedules.sqlite. Both open before workflow admission. [Workflow ownership](automation-workflows.md) defines recovery and migrations.\n\nTemplate catalog entries have no instance ID and publish no invented data path. Existing service inspection exposes actual binding-derived resource identity. New Host allocations retain instances/\u003cservice-id\u003e/{install,data,logs}; old resource locations remain their owner's concern.\n\nThe administrator-only no-store storage endpoint inspects named Environment locations with one 20,000-entry/two-second budget, without database reads or symlink traversal outside a pinned root. Missing, unavailable and partial observations remain distinct. No global total or completeness claim is made. Settings loads the overview on authorized presentation, sorts measured locations by bytes, and shows relative usage bars, not disk-capacity percentages. Missing locations and path/backup metadata are collapsed. Partial and unavailable observations remain explicit; no global total is inferred. It preserves last successful rows on refresh failure and aborts/fences replies when hidden or on scope/access loss. Owner links open the corresponding feature; opaque caches and coordination stores without a management surface have no invented cleanup action. Plugin Center stays independent. Flower recovery has its own category, also reached directly from Flower failure recovery and snapshot rows, rather than being mixed into the storage overview. No generic recursive deletion API exists.",
-          "char_count": 3497
+          "body": "`StateRoot` resolves from explicit input, `REDEVEN_STATE_ROOT`, then `~/.redeven`; `StateDir` is its `local-environment` child. Desktop credentials/preferences remain in Electron userData, environment registrations in StateRoot/catalog, independent Gateway and Center in their explicitly selected roots. An Environment backup is not a Desktop profile or external-project backup.\n\nReDevPlugin receives only `StateDir/apps/plugins/platform`, including its control/data/assets, host adapters and author workspaces. Host migrations, SQL and recovery remain upstream. Retired root-level plugin files block plugin admission unchanged. Product draft records remain in apps/plugin-creation; market snapshots in apps/plugins. Flower Agent Plugins remain separately owned under ai/agent-plugins.\n\nManaged skills use `apps/skills/{packages,state.json,sources.json}` in the selected Environment. Explicit `.agents/skills` remains shared user content. Managed ancestors and metadata reject symlinks/non-directory placement. Disabled/source decisions follow managed files; retired metadata blocks Flower admission. No silent HOME-based fallback imports another Environment's managed skills.\n\nDesktop business caches all use `REDEVEN_DESKTOP_CACHE_ROOT`, or `StateRoot/cache/desktop`. userData is never a disposable cache. Existing cache acquisition, verification and eviction belong to their original owners. Old userData caches are retained; new roots reacquire verified packages without treating userData as disposable.\n\nConfig remains one atomic identity/recovery envelope: settings, binding/outbox and one-shot control artifacts cannot be split across independent writes. Provider credentials remain in secrets.json. Neither filename implies export safety. Sanitize settings exports; never export this envelope as portable preferences.\n\nAutomation allocates apps/automation. Redeven owns workflows.sqlite definitions, grants, context and artifacts; the published ReDevPlugin scheduler owns opaque schedules.sqlite. Both open before workflow admission. [Workflow ownership](automation-workflows.md) defines recovery and migrations.\n\nTemplate catalog entries have no instance ID and publish no invented data path. Existing service inspection exposes actual binding-derived resource identity. New Host allocations retain instances/\u003cservice-id\u003e/{install,data,logs}; old resource locations remain their owner's concern.\n\nThe administrator-only no-store storage endpoint inspects named Environment locations with one 20,000-entry/two-second budget, without database reads or symlink traversal outside a pinned root. Missing, unavailable and partial observations remain distinct. No global total or completeness claim is made. Settings loads the overview on authorized presentation, sorts measured locations by bytes, and shows relative usage bars, not disk-capacity percentages. One rounded group aligns owner icons, labels, observed sizes and fixed navigation actions; missing locations and path details are collapsed. Partial and unavailable observations remain explicit; no global total is inferred. It preserves last successful rows on refresh failure and aborts/fences replies when hidden or on scope/access loss. Owner links open the corresponding feature; opaque caches and coordination stores without a management surface have no invented cleanup action. Plugin Center stays independent. Flower diagnostics is a separate diagnostic category. Retired snapshot locations do not link to an obsolete restore surface. No generic recursive deletion API exists.",
+          "char_count": 3546
         },
         {
           "id": "pre-release-relocation",
@@ -15639,15 +15620,15 @@
         "title": "Environment settings sessions, connections and presentation",
         "type": "Desktop Contract"
       },
-      "body_length": 4197,
+      "body_length": 4748,
       "summary": "One target-bound settings session owns connection/access drafts and immediate opening. Local opens Access \u0026 security without a connection editor. Access management uses existing WSL authority only after exact-distribution discovery confirms it is running; opening/loading never starts stopped distros. Distinguish current password constraints from saved next-start configuration.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Settings session\n- Each opening owns committed connection baseline/draft and lazy access baseline/draft. Health refresh preserves running summary, connection nodes, expanded listeners, address filters, selection, scroll and QR panels; never reload access/certificate/security configuration.\n- Save invalidates older reads. Late failure from a closed opening becomes a notification, never an error in the next editor. Access opens current-connection/browser/sign-in/HTTPS tasks; recovery-pending protection must be restored before changing it.\n\n## Presentation\n- Welcome shares the Env settings category-header structure, continuous surface, compact appearance picker and language row. Category selection has no left rail or empty group heading; Flower feedback stays beside Models. Backdrop/Escape/X close through the existing session. Native target binding and connection drafts remain unchanged.\n- Embed the canonical connection/access editor in the global [Settings host](../ui/runtime-settings.md#host-and-destinations); its standalone fallback retains the 50rem by 44.375rem cap. Global host dimensions are independent of category content. Tabs/loading/disclosures cannot recenter it or move actions. Use one Current connection card with aligned, selectable, wrapping text/diagnostics/paths/addresses.\n- Browser scope, sign-in and certificate tasks share rows, meaningful icons and published outline controls with borders/hover/focus. Preserve specialized QR/recovery-code geometry. Removal drafts cannot look committed; review never shows passwords. Separate footer feedback/actions. Floe owns focus trapping, nested Escape, restoration, variants and forced colors.\n- SSH destination fills the adjacent control column in creation/settings. Loading/cached-host failure uses its trailing inset, preserving width/draft/focus; idle indicators take no external column or input clicks.\n- Access steps place equal flexible connectors after non-final labels; narrow layouts stack aligned badges without horizontal connectors. Floe owns modal presence and 200ms tab underline; retained exit never blanks the panel.\n\n## Connection facts\nObservations preserve host/container namespaces; failures prove no exit. Explicit Stop clears addresses. Presentation never chooses transport.\n\n- Name the selected Environment before addresses. Never substitute SSH aliases for URL hosts or rely on WSL localhost forwarding. Address count cannot resize settings/move the footer.\n- Internal browser access aligns label with one expandable scope/count summary, stacking narrowly. Avoid duplicate scope paragraphs/disclosure labels. Preserve expansion on refresh and show total/filtered counts; environment-only addresses have no browser/copy/share actions.\n- Gateway cards retain explicit URL/local/SSH/container transport without Runtime lifecycle authority. Display, clipboard and QR exclude tokens/private loopback credentials.\n- Public addresses are independent of private management. Saved bind/protocol/port/password/certificate changes apply next start; drafts cannot synthesize current URLs. Failed writes preserve password verifier and report failure.",
-          "char_count": 3143
+          "body": "## Settings session\n- Each opening owns committed connection baseline/draft and lazy access baseline/draft. Health refresh preserves running summary, connection nodes, expanded listeners, address filters, selection, scroll and QR panels; never reload access/certificate/security configuration.\n- Save invalidates older reads. Late failure from a closed opening becomes a notification, never an error in the next editor. Access opens current-connection/browser/sign-in/HTTPS tasks; recovery-pending protection must be restored before changing it.\n\n## Presentation\n- Welcome shares the Env settings category-header structure, continuous surface, compact appearance picker and language row. Category selection has no left rail or empty group heading; Flower feedback stays beside Models. Backdrop/Escape/X close through the existing session. Native target binding and connection drafts remain unchanged.\n- Embed the canonical connection/access editor in the global [Settings host](../ui/runtime-settings.md#host-and-destinations); its standalone fallback retains the 50rem by 44.375rem cap. Global host dimensions are independent of category content. Tabs/loading/disclosures cannot recenter it or move actions. Use one Current connection card with aligned, selectable, wrapping text/diagnostics/paths/addresses.\n- Browser scope, sign-in and certificate tasks share rows, meaningful icons and published outline controls with borders/hover/focus. Preserve specialized QR/recovery-code geometry. Removal drafts cannot look committed; review never shows passwords. Separate footer feedback/actions. Floe owns focus trapping, nested Escape, restoration, variants and forced colors.\n- SSH destination fills the adjacent control column in creation/settings. Loading/cached-host failure uses its trailing inset, preserving width/draft/focus; idle indicators take no external column or input clicks.\n- Environment inventory uses one published rounded SettingsList with divided full-row actions, platform identity and chevrons. Text, numeric and authentication selectors share both edges and height; switches keep intrinsic size. Authentication uses the published lifetime-gated select to fit long translations. Narrow editors stack without remounting drafts.\n- Access steps place equal flexible connectors after non-final labels; narrow layouts stack aligned badges without horizontal connectors. Floe owns modal presence and 200ms tab underline; retained exit never blanks the panel.\n\n## Connection facts\nObservations preserve host/container namespaces; failures prove no exit. Explicit Stop clears addresses. Presentation never chooses transport.\n\n- Name the selected Environment before addresses. Never substitute SSH aliases for URL hosts or rely on WSL localhost forwarding. Address count cannot resize settings/move the footer.\n- Internal browser access aligns label with one expandable scope/count summary, stacking narrowly. Avoid duplicate scope paragraphs/disclosure labels. Preserve expansion on refresh and show total/filtered counts; environment-only addresses have no browser/copy/share actions.\n- Gateway cards retain explicit URL/local/SSH/container transport without Runtime lifecycle authority. Display, clipboard and QR exclude tokens/private loopback credentials.\n- Public addresses are independent of private management. Saved bind/protocol/port/password/certificate changes apply next start; drafts cannot synthesize current URLs. Failed writes preserve password verifier and report failure.",
+          "char_count": 3502
         },
         {
           "id": "boundaries",
@@ -15660,11 +15641,16 @@
           "id": "evidence",
           "title": "Evidence",
           "level": 1,
-          "body": "- `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Tests.\n\n- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Source.",
-          "char_count": 140
+          "body": "- `redeven:desktop/scripts/check-environment-settings.mjs` - Actual inventory grouping, localized field geometry, retained drafts and selector lifetime at 320/768/1280px in light/dark themes.\n- `redeven:desktop/scripts/check-settings-hit-targets.mjs` - Tests.\n\n- `redeven:desktop/src/welcome/EnvironmentSettingsDialog.css` - Source.",
+          "char_count": 332
         }
       ],
       "evidence": [
+        {
+          "id": "redeven:desktop/scripts/check-environment-settings.mjs:0:actual inventory grouping, localized field geometry, retained drafts and selector lifetime at 320/768/1280px in light/dark themes.",
+          "source": "redeven:desktop/scripts/check-environment-settings.mjs",
+          "description": "Actual inventory grouping, localized field geometry, retained drafts and selector lifetime at 320/768/1280px in light/dark themes."
+        },
         {
           "id": "redeven:desktop/scripts/check-settings-hit-targets.mjs:0:tests.",
           "source": "redeven:desktop/scripts/check-settings-hit-targets.mjs",
@@ -24068,15 +24054,15 @@
         "title": "Runtime settings",
         "type": "UI Contract"
       },
-      "body_length": 8081,
+      "body_length": 8421,
       "summary": "Env owns destinations/drafts/adapters; Floe owns layout/navigation/modal presence/focus. Retain work surfaces and usable narrow controls.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Host and destinations\nOne global dialog sits beside definite-size retained work root/Flower portals, inert and accessibility-hidden through exit. Owners originate inside placement provider; moving DOM transfers no Solid context. Opening neither navigates nor starts Runtime. Desktop\u003c=1060×760, narrow viewport-sized.\n\nOne header owns breadcrumb/mobile selector/close/generic refresh; domain refresh stays at resource. Search filters categories; roots omit Back, nested destinations may return. Errors offer read-only Retry. Published slots/focus/Escape/dismissal apply to Welcome too. Retire mobile popup when wide breakpoint removes trigger; never measure detached header/add environment strip. Authority stays adapter-bound.\n\nEnv covers appearance/language, connection/status, terminal/browser, apps/desktop, containers/services, shell/workspace/Codespaces/tooling, permissions, Flower/extensions, plugin configuration, storage/Flower recovery, config/logging/debug. Center independently owns plugin catalog/install/update/remove; Settings only exact installed/author-preview configuration. Desktop groups model/defaults/extensions/browser/desktop under Flower, including search/mobile. Storage/recovery are separate. Contextual gears share owners; Welcome setup is separate, access-gate language works before authorization.\n\nsettings/settings_resource URLs restore selection; unsupported identity shows unavailable, never substitution. Exact editors retain category drafts/unregister on domain close. Inventory needs no work surface. Closed sessions cannot revive via stale link; nested modal lifetime follows presentation/resource separately from draft/work.\n\n## Authority and durable owners\nAuthority change cancels reads/fences replies; current admin/connection rights gate writes. Provider saves need no parent load and acknowledge once. Settings covers Flower read visibility through exit. Admitted installation retains Environment/incarnation across navigation; stopped/replaced Runtime rejects it.\n\nExisting stores own appearance/language/themes/Markdown, terminal fonts/history, browser profiles/access/rate, host grants/picture, container CLI/proxy/helper/formats and Flower model/permission/directory/reasoning defaults. Shortcuts share owners; creation/session/navigation remains on work surfaces. Opening/category changes read only; Terminal settings never attaches/takes control. Font edits freshly read/CAS exact widget without moving session. Reconnect keeps drafts, invalidates confirmation. Container refresh cannot rebase edited revision; save requires explicit preflight. Exact operation lookup never permits replay; only authoritative pre-admission rejection unlocks, storage admission clears rejection marker.\n\nAuthor previews bind exact workspace/preview with no installed grant/resume/replacement. Identity gates writes/portals. Viewers use authenticated preference/native opener; forwarded window cannot switch environment.\n\n## Controls and stable interaction\nHeader/navigation/body share background. Published backdrop/X/Escape close without save/discard/underlying activation; nested closes top only and Flower stays expanded. Use32px controls/identity squares,12px text/quiet fill/field corners; Floe owns validation/keyboard/focus/menus. Scalar labels align without decorative icons; meaningful navigation/action/resource marks stay.\n\nCategory owns spacing/scroll. SettingsSection/List/Row forms have no extra inset/fixed viewport; hosted headings omit duplication but retain semantics/status/actions. Toolbars identify target; service/extensions use Tabs/reduced motion. Resolve JSX slots once. Compact SettingsRow language shares canonical owner. Published ThemePicker owns intrinsic/responsive choices/keyboard/theme; adapter owns persistence/admission. Leaving retires unadmitted appearance writes and reconciles admitted ones; no old popovers. Activity navigation and mobile tools open Settings; Env top bars have no settings/theme entry. Filled selection has no rails, including contrast. Model save feedback sits beside Models/host padding; stable feedback slots and truly empty headers disappear.\n\nNarrow permission rows place identity/removal above complete checkbox labels. Edits/ceilings/deletion/resize retain surviving rows/focus; acknowledge captured revision only, newer edits dirty. Normalize without reordering, append sorted additions, retire removals, preserve focus when trimming. One identity/group, no generic introductions; retain permission/restart/zero/default/error consequences at decision, optional detail disclosed/full names accessible. Invalid container JSON stays editable with stable fields but disables preflight.\n\nHost rows show identity/status/current action, removal in menu. Off needs feature-named confirmation and remains authoritative until success. Hide/authority loss retires intent; fresh action required on return. Current mutation owners gate grant/Wayland unattended/forget. Published SettingsDisclosure owns rounded groups/height-chevron motion/reduced motion/lazy mount/inert retained collapse/focus. Open state gates portals/permission/recovery; collapsing parent/recovery retires restart intent. Expansion grants/writes nothing. Granted state pairs success/check/text beside trailing action, readable in forced colors. Violet-window/blue-monitor SVGs distinguish app/desktop with themed instance-safe gradients.\n\nContainers, Services and Plugin configuration use grouped lists with owner icons. Exact selectors and refresh occupy the retained category header, never repeat in lists, and retire with that category. Duplicate service names expose workspace/instance identity; narrow headers wrap without squeezing names. Unsupported engines omit empty tabs and Save. Commit/discard require the selected source's dirty draft. Refresh preserves tabs and draft revisions and reconciles exact operations without replay. Service panels have one title; technical locks use disclosure. Idle footers are absent; dirty metadata/runtime retain save/review/apply. Plugin fields use published rows, selectors and checkboxes; Plugin Center stays independent.\n\nPicture choice serializes complete authenticated-user record, preserving unrelated fields, no Save. Equal-width fields/stable feedback avoid movement. Failure halts queue with Retry; scope loss retires queued/late work, reopening/reads never replay. Narrow safe-area/keyboard/header bounds remain. SettingsSelect adapts lifetime/admission only; Floe renders/focuses/animates. Resource selector stays available; exact active identity gates writes. Leaving retires preflight even on immediate return; accepted work reconciles original authority.\n\n## Browser Editor and configuration\nOne heading/status/refresh; embedded installer omits duplication. Selected route/primary action leads to real stages/progress/cancel/diagnostics; failure Retry/details. Ready version/source/update and selectable path/version/remove/copy disclosure retain install permission/confirmation. Show actual ports including disabled default; explain normalization ranges. Existing autosave/restart governs port/shell/filesystem/logging/permissions; PUT flat fields, not response wrappers. Health/diagnostic/backup/restore retain permission/confirmation and narrow geometry. [Extensions](flower-extensions.md) owns Skills/MCP.",
-          "char_count": 7328
+          "body": "## Host and destinations\nOne global dialog sits beside definite-size retained work root/Flower portals, inert and accessibility-hidden through exit. Owners originate inside placement provider; moving DOM transfers no Solid context. Opening neither navigates nor starts Runtime. Desktop\u003c=1060×760, narrow viewport-sized.\n\nOne header owns breadcrumb/mobile selector/close/generic refresh; domain refresh stays at resource. Search filters categories; roots omit Back; every resource target exposes a header Back action that clears only the resource, retains drafts and never starts or saves a runtime. Errors offer read-only Retry. Published slots/focus/Escape/dismissal apply to Welcome too. Retire mobile popup when wide breakpoint removes trigger; never measure detached header/add environment strip. Authority stays adapter-bound.\n\nEnv covers appearance/language, connection/status, terminal/browser, apps/desktop, containers/services, shell/workspace/Codespaces/tooling, permissions, Flower/extensions, plugin configuration, storage/Flower diagnostics, config/logging/debug. Center independently owns plugin catalog/install/update/remove; Settings only exact installed/author-preview configuration. Desktop groups model/defaults/extensions/browser/desktop under Flower, including search/mobile. Storage and runtime diagnostics are separate. Contextual gears share owners; Welcome setup is separate, access-gate language works before authorization.\n\nsettings/settings_resource URLs restore selection; unsupported identity shows unavailable, never substitution. Exact editors retain category drafts/unregister on domain close. Inventory needs no work surface. Closed sessions cannot revive via stale link; nested modal lifetime follows presentation/resource separately from draft/work.\n\n## Authority and durable owners\nAuthority change cancels reads/fences replies; current admin/connection rights gate writes. Provider saves need no parent load and acknowledge once. Settings covers Flower read visibility through exit. Admitted installation retains Environment/incarnation across navigation; stopped/replaced Runtime rejects it.\n\nExisting stores own appearance/language/themes/Markdown, terminal fonts/history, browser profiles/access/rate, host grants/picture, container CLI/proxy/helper/formats and Flower model/permission/directory/reasoning defaults. Shortcuts share owners; creation/session/navigation remains on work surfaces. Opening/category changes read only; Terminal settings never attaches/takes control. Font edits freshly read/CAS exact widget without moving session. Reconnect keeps drafts, invalidates confirmation. Container refresh cannot rebase edited revision; save requires explicit preflight. Exact operation lookup never permits replay; only authoritative pre-admission rejection unlocks, storage admission clears rejection marker.\n\nAuthor previews bind exact workspace/preview with no installed grant/resume/replacement. Identity gates writes/portals. Viewers use authenticated preference/native opener; forwarded window cannot switch environment.\n\n## Controls and stable interaction\nHeader/navigation/body share background. Published backdrop/X/Escape close without save/discard/underlying activation; nested closes top only and Flower stays expanded. Use32px controls/identity squares,12px text/quiet fill/field corners; Floe owns validation/keyboard/focus/menus. Scalar labels align without decorative icons; meaningful navigation/action/resource marks stay.\n\nCategory owns spacing/scroll. SettingsSection/List/Row forms have no extra inset/fixed viewport; hosted headings omit duplication but retain semantics/status/actions. Toolbars identify target; service/extensions use Tabs/reduced motion. Resolve JSX slots once. Compact SettingsRow language shares canonical owner. Published ThemePicker owns intrinsic/responsive choices/keyboard/theme; adapter owns persistence/admission. Leaving retires unadmitted appearance writes and reconciles admitted ones; no old popovers. Activity navigation and mobile tools open Settings; Env top bars have no settings/theme entry. Filled selection has no rails, including contrast. Model save feedback sits beside Models/host padding; stable feedback slots and truly empty headers disappear.\n\nNarrow permission rows place identity/removal above complete checkbox labels. Edits/ceilings/deletion/resize retain surviving rows/focus; acknowledge captured revision only, newer edits dirty. Normalize without reordering, append sorted additions, retire removals, preserve focus when trimming. One identity/group, no generic introductions; retain permission/restart/zero/default/error consequences at decision, optional detail disclosed/full names accessible. Invalid container JSON stays editable with stable fields but disables preflight.\n\nHost rows show identity/status/current action, removal in menu. Off needs feature-named confirmation and remains authoritative until success. Hide/authority loss retires intent; fresh action required on return. Current mutation owners gate grant/Wayland unattended/forget. Published SettingsDisclosure owns rounded groups/height-chevron motion/reduced motion/lazy mount/inert retained collapse/focus. Open state gates portals/permission/recovery; collapsing parent/recovery retires restart intent. Expansion grants/writes nothing. Granted state pairs success/check/text beside trailing action, readable in forced colors. Violet-window/blue-monitor SVGs distinguish app/desktop with themed instance-safe gradients.\n\nContainers, Services and Plugin configuration use grouped lists with owner icons. Exact selectors and refresh occupy the retained category header, never repeat in lists, and retire with that category. Docker/Podman share audited theSVG brand assets with the work surface. Resource buttons have a zero minimum width so long workspace identities truncate without pushing out the fixed chevron. Duplicate service names expose workspace/instance identity; narrow headers wrap without squeezing names. Unsupported engines omit empty tabs and Save. Commit/discard require the selected source's dirty draft. Refresh preserves tabs and draft revisions and reconciles exact operations without replay. Service panels have one title; technical locks use disclosure. Idle footers are absent; dirty metadata/runtime retain save/review/apply. Plugin fields use published rows, selectors and checkboxes; Plugin Center stays independent.\n\nPicture choice serializes complete authenticated-user record, preserving unrelated fields, no Save. Equal-width fields/stable feedback avoid movement. Failure halts queue with Retry; scope loss retires queued/late work, reopening/reads never replay. Narrow safe-area/keyboard/header bounds remain. SettingsSelect adapts lifetime/admission only; Floe renders/focuses/animates. Resource selector stays available; exact active identity gates writes. Leaving retires preflight even on immediate return; accepted work reconciles original authority.\n\n## Browser Editor and configuration\nOne heading/status/refresh; embedded installer omits duplication. Selected route/primary action leads to real stages/progress/cancel/diagnostics; failure Retry/details. Ready version/source/update and selectable path/version/remove/copy disclosure retain install permission/confirmation. Show actual ports including disabled default; explain normalization ranges. Existing autosave/restart governs port/shell/filesystem/logging/permissions; PUT flat fields, not response wrappers. Runtime diagnostics retain permission and narrow geometry; obsolete full-backup browsing and restore are retired. [Extensions](flower-extensions.md) owns Skills/MCP.",
+          "char_count": 7668
         },
         {
           "id": "boundaries",
@@ -24758,5 +24744,5 @@
       ]
     }
   ],
-  "source_sha256": "a1e23d629edd48da25f07e7d5fd1d4610ad8e83622ab995f9a948b83a58a97d8"
+  "source_sha256": "828c7a52918aed6b140af5d6dec1c64bce1f04b4c2906e1013e77b8052a53d5d"
 }

@@ -111,6 +111,7 @@ import {
 import { TopBarIconButton } from '@floegence/floe-webapp-core/layout';
 
 import { SSHEnvironmentSettingsForm } from './SSHEnvironmentSettingsForm';
+import { EnvironmentSettingsList } from './EnvironmentSettingsList';
 import { EnvironmentSettingsDialog, EnvironmentSettingsPanel, EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
 import { createEnvironmentSettingsController } from './environmentSettingsSession';
 import { validateSSHEnvironmentSettings, type SSHConnectionDialogState } from './sshEnvironmentSettingsState';
@@ -3665,7 +3666,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setNewConnectionState(null);
     setGatewaySetupDialogState(null);
     setControlPlaneDialogState(null);
-    settingsController.open(environment, createEnvironmentConnectionDraft(environment));
+    // IMPORTANT: Returning from the category list to the same exact opening
+    // resumes its draft. Header parent navigation is not a discard boundary.
+    if (settingsSession()?.environment.id !== environment.id) settingsController.open(environment, createEnvironmentConnectionDraft(environment));
     settingsHost.open({ section: 'connection', resource: environment.id });
   }
 
@@ -6780,7 +6783,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           <DesktopLanguageSettings snapshot={languageSnapshot()} i18n={i18n()} onPreferenceChange={updateDesktopLanguagePreference} />
           <SettingsSection title={i18n().t('shell.themePicker.title')}><DesktopThemePicker active={unifiedSettings.present() && unifiedSettings.target()?.section === 'appearance'} snapshot={themeSnapshot()} i18n={i18n()} onSourceChange={updateDesktopThemeSource} onShellThemeChange={updateDesktopShellTheme} /></SettingsSection>
         </div>}
-        connections={() => <div class="space-y-3"><For each={snapshot().environments}>{environment => <Button variant="outline" class="w-full justify-start" onClick={() => openSettingsSurface(environment.id)}>{environment.label}</Button>}</For></div>} />
+        connections={() => <EnvironmentSettingsList environments={snapshot().environments} i18n={i18n()} onOpen={openSettingsSurface} />} />
       </Show>
       <EnvironmentSettingsDialog open={Boolean(settingsSession())} environment={settingsSession()?.environment ?? null} unavailable={!settingsOwnerAvailable()}
         tab={settingsPresentation()?.tab ?? 'connection'} i18n={i18n()} onClose={cancelSettings}
@@ -6838,9 +6841,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 <Show when={connectionSaveBlocked()}><p role="status" class="px-5 pt-3 text-xs text-warning">{i18n().t('settings.resolveAccessDraft')}</p></Show>
                 <Show when={settingsPresentation()?.connection?.connection_kind === 'ssh_environment'} fallback={
                   <ConnectionDialogForm {...connectionFormProps} beforeFields={accessSettings()} state={settingsPresentation()?.connection ?? null}
+                    active={settingsPresentation()?.tab === 'connection'}
                     saveBlocked={connectionSaveBlocked() || !connectionSettingsDirty() || Boolean(settingsSession()?.saving)} />
                 }>
-                  <SSHEnvironmentSettingsForm beforeFields={accessSettings()} open={Boolean(settingsSession())} i18n={i18n()}
+                  <SSHEnvironmentSettingsForm beforeFields={accessSettings()} open={Boolean(settingsSession())} active={settingsPresentation()?.tab === 'connection'} i18n={i18n()}
                     state={settingsPresentation()!.connection as SSHConnectionDialogState}
                     baseline={settingsPresentation()!.connection_baseline as SSHConnectionDialogState}
                     sshConfigHosts={sshConfigHosts()} sshConfigHostsLoading={sshConfigHostsLoading()}
@@ -12870,6 +12874,7 @@ function ContainerPicker(props: Readonly<{
 }
 
 type ConnectionDialogProps = Readonly<{
+  active?: boolean;
   joinGateway?: boolean; setJoinGateway?: (value: boolean) => void;
   i18n: DesktopI18n;
   nativeContainerRuntime: boolean;
@@ -12973,6 +12978,9 @@ function ConnectionDialog(props: ConnectionDialogProps) {
     title={props.i18n.t('connectionDialog.newEnvironmentTitle')}
     class={CONNECTION_DIALOG_CLASS}
     contentClass="environment-settings-content" closeLabel={props.i18n.t('common.close')} escapeKeyPhase="bubble">
+      {/* IMPORTANT: Creation owns a separate modal lifetime, not a Settings
+          resource. Its controls must not inherit the closed settings host. */}
+      <SettingsPanelContext.Provider value={undefined}>
     <Show when={props.state?.connection_kind === 'ssh_environment'} fallback={<ConnectionDialogForm {...props} beforeFields={kindPicker()} />}>
       <SSHEnvironmentSettingsForm open={isOpen()} i18n={props.i18n}
         state={props.state as SSHConnectionDialogState} baseline={props.state as SSHConnectionDialogState}
@@ -12983,6 +12991,7 @@ function ConnectionDialog(props: ConnectionDialogProps) {
         switchBootstrapStrategy={props.switchBootstrapStrategy} removeSSHPassword={props.removeSSHPassword}
         onClose={() => props.onOpenChange(false)} onSave={props.onSave} />
     </Show>
+      </SettingsPanelContext.Provider>
   </Dialog>;
 }
 
@@ -13130,25 +13139,16 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                 </div>
               </div>
               <div class="environment-connection-field">
-                <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.authentication')}</label>
-                <Show
-                  when={true}
-                  fallback={(
-                    <div class="flex h-8 items-center rounded-md border border-border/70 bg-background px-2.5 text-xs text-foreground">
-                      {props.i18n.t('connectionDialog.keyAgent')}
-                    </div>
-                  )}
-                >
-                  <SegmentedControl
+                <label for="environment-connection-authentication" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.authentication')}</label>
+                  <SettingsSelect id="environment-connection-authentication" section="connection" resource={props.state?.environment_id}
+                    active={!!props.state && props.active !== false} ariaLabel={props.i18n.t('connectionDialog.authentication')}
                     value={isSSHBackedKind() ? (props.state as SSHBackedConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE : DEFAULT_DESKTOP_SSH_AUTH_MODE}
                     onChange={(value) => props.updateField('auth_mode', value)}
                     options={[
                       { value: 'key_agent', label: props.i18n.t('connectionDialog.keyAgent') },
                       { value: 'password', label: props.i18n.t('connectionDialog.passwordPrompt') },
                     ]}
-                    size="sm"
                   />
-                </Show>
                 <div class="environment-connection-help">
                   {props.i18n.t('connectionDialog.authenticationHelp')}
                 </div>
@@ -13193,8 +13193,9 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
               <div class="environment-connection-fields">
                 <div class="environment-connection-fields">
                   <div class="environment-connection-field">
-                    <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.engine')}</label>
-                    <SegmentedControl
+                    <label for="environment-connection-engine" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.engine')}</label>
+                    <SettingsSelect id="environment-connection-engine" section="connection" resource={props.state?.environment_id}
+                      active={!!props.state && props.active !== false} ariaLabel={props.i18n.t('connectionDialog.engine')}
                       value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_engine : 'docker'}
                       onChange={(value) => {
                         props.updateField('container_engine', value);
@@ -13207,7 +13208,6 @@ function ConnectionDialogForm(props: ConnectionDialogProps & { beforeFields?: JS
                         { value: 'docker', label: 'Docker' },
                         { value: 'podman', label: 'Podman' },
                       ]}
-                      size="sm"
                     />
                 </div>
                 <ContainerPicker

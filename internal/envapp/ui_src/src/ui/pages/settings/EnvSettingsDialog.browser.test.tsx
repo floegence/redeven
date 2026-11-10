@@ -370,11 +370,35 @@ it('keeps storage overview separate and opens exact owner destinations', async (
   expect(document.querySelector('.ai-readiness-settings')).toBeNull();
   await panel.getByRole('button', { name: 'Manage Application plugins' }).click();
   expect(storageNavigation.plugins).toHaveBeenCalledOnce();
-  await panel.getByRole('button', { name: 'Manage Recovery snapshots' }).click();
-  expect(session.target()?.section).toBe('flower_recovery');
-  await expect.element(page.getByTestId('settings-section-flower_recovery')).toBeVisible();
-  session.open({ section: 'storage' });
+  expect(document.querySelector('button[aria-label="Manage Recovery snapshots"]')).toBeNull();
   await panel.getByRole('button', { name: 'Manage Task working files' }).click();
   expect(session.target()).toBeNull();
   expect(storageNavigation.files).toHaveBeenCalledWith('/environment/task_files');
+});
+
+it.each([1440, 320])('returns from an exact resource using the header without saving or closing at %ipx', async width => {
+  mount('terminal'); await page.viewport(width, 900);
+  session.open({ section: 'terminal', resource: terminalSettingsResource({ kind: 'widget', id: 'widget-a', sessionId: 'session-a' }) });
+  await expect.poll(() => document.querySelector<HTMLButtonElement>('[data-settings-parent]')?.checkVisibility()).toBe(true);
+  const header = document.querySelector<HTMLElement>('[data-floe-dialog-header]')!;
+  const back = header.querySelector<HTMLButtonElement>('[data-settings-parent]')!;
+  expect(back.getBoundingClientRect().right).toBeLessThan(header.getBoundingClientRect().right);
+  await userEvent.click(back);
+  await expect.poll(() => session.target()).toEqual({ section: 'terminal' });
+  expect(session.present()).toBe(true);
+  expect(document.querySelector('[data-settings-parent]')).toBeNull();
+  expect(terminals.configure).not.toHaveBeenCalled();
+  expect(terminals.attach).not.toHaveBeenCalled();
+});
+
+it.each([1440, 320])('renders storage in the actual retained dialog with one category title at %ipx', async width => {
+  mount('storage'); await page.viewport(width, 900);
+  await expect.poll(() => document.querySelectorAll('.storage-usage-main').length).toBe(5);
+  expect(document.querySelector('[data-settings-card] h1')).toBeNull();
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  const list = dialog.querySelector<HTMLElement>('.storage-usage-group')!;
+  expect(dialog.scrollWidth).toBeLessThanOrEqual(dialog.clientWidth);
+  expect(list.getBoundingClientRect().right).toBeLessThanOrEqual(dialog.getBoundingClientRect().right);
+  await expect.poll(() => getComputedStyle(dialog).opacity).toBe('1');
+  await page.screenshot({ path: `../../../../dist/settings-refinement/storage-dialog-${width}.png` });
 });

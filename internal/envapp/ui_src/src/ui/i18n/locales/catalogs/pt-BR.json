@@ -181,9 +181,9 @@
       "notAvailable": "Indisponível"
     },
     "settings": {
-      "title": "Armazenamento do Flower",
+      "title": "Diagnóstico do Flower",
       "description": "Disponibilidade, diagnóstico e recuperação dos dados do Flower.",
-      "floretStoreTitle": "Dados do Flower",
+      "floretStoreTitle": "Status",
       "floretDescription": "O histórico de conversas, as configurações do produto, o status de leitura e os arquivos enviados são verificados em conjunto.",
       "noIssue": "Nenhum problema de disponibilidade detectado",
       "refreshing": "Atualizando...",
@@ -202,25 +202,6 @@
       "confirmDelete": "Confirmar exclusão da thread canônica"
     },
     "storage": {
-      "title": "Backups do Flower",
-      "description": "Os backups existentes incluem o histórico do Flower, configurações, status de leitura e uploads. Todos são preservados. A inicialização e as atualizações não criam backups automáticos.",
-      "adminOnly": "É preciso ter acesso de administrador para visualizar e restaurar backups.",
-      "view": "Ver backups",
-      "unknownBuild": "Compilação de origem não registrada",
-      "unavailable": "Este backup não pode ser usado. Consulte o diagnóstico para mais detalhes.",
-      "loadFailed": "Não foi possível carregar os backups. Verifique o diagnóstico e tente novamente.",
-      "restoreFailed": "Não foi possível iniciar a restauração. Verifique o status do Flower e o diagnóstico.",
-      "accepted": "Restauração iniciada. O status do Flower será atualizado automaticamente.",
-      "empty": "Ainda não há backups completos do Flower disponíveis.",
-      "beforeRestore": "Antes da restauração",
-      "automatic": "Automático",
-      "protected": "Protegido",
-      "reviewRestore": "Revisar restauração",
-      "confirmTitle": "Restaurar este backup do Flower?",
-      "scope": "Os dados do Flower voltarão ao momento selecionado. As alterações posteriores serão substituídas. Os dados atuais serão salvos primeiro.",
-      "executionImpact": "As tarefas incompletas serão interrompidas e as aprovações antigas perderão a validade. As entradas na fila continuarão disponíveis para consulta e cópia. Para executá-las novamente, será preciso criar uma nova tarefa.",
-      "externalImpact": "Os diretórios de trabalho e as configurações globais de login estão excluídos. Comandos e ações externas não serão desfeitos. A versão do ambiente de execução permanece igual; uma falha de migração não resolvida ainda pode impedir que o Flower inicie.",
-      "confirm": "Confirmar restauração",
       "backingUp": "Fazendo backup das suas conversas",
       "backingUpDescription": "Uma cópia do histórico e dos arquivos enviados atuais está sendo salva antes da restauração.",
       "restoring": "Restaurando o Flower",
@@ -228,7 +209,7 @@
       "spaceTitle": "O Flower precisa de mais espaço em disco",
       "spaceDescription": "Libere espaço no disco do ambiente de execução e verifique novamente. O Flower fica pausado até a preparação terminar.",
       "failedTitle": "Manutenção do Flower interrompida",
-      "failedDescription": "Verifique o diagnóstico ou escolha um backup verificado. Terminais, arquivos e configurações continuam disponíveis.",
+      "failedDescription": "Consulte o diagnóstico. Terminais, arquivos e configurações continuam disponíveis.",
       "component": "Componente",
       "product": "Configurações de conversas",
       "floret": "Floret",
@@ -8364,7 +8345,7 @@
     "absent": "Não criado",
     "unavailable": "Indisponível",
     "partial": "Medição parcial; o tamanho é um limite inferior.",
-    "flower": "Recuperação do Flower",
+    "flower": "Diagnóstico do Flower",
     "tooling": "Pacotes do editor",
     "cleanup": "Limpe os dados na função responsável. Backups de conversas não incluem configurações de extensões nem arquivos de trabalho.",
     "owners": {
@@ -8411,7 +8392,8 @@
     "usage": "Uso do espaço",
     "measuredScope": "Locais medidos do ambiente · sem projetos externos",
     "manageOwner": "Gerenciar {owner}",
-    "locations": "Locais e escopo do backup"
+    "locations": "Locais de armazenamento",
+    "adminOnly": "É necessário acesso de administrador para consultar o armazenamento."
   },
   "automation": {
     "title": "Automações"

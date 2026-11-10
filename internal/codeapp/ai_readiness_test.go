@@ -577,36 +577,6 @@ func TestAIReadinessControllerDoesNotRetryAnUnclosedConstructor(t *testing.T) {
 	}
 }
 
-func TestAIReadinessRestoreRejectsMissingSnapshotWithoutDraining(t *testing.T) {
-	service := new(ai.Service)
-	var closes atomic.Int32
-	controller := newAIReadinessController(t.Context(), ai.Options{StateDir: t.TempDir()},
-		func(context.Context, ai.Options) (*ai.Service, error) { return service, nil },
-		func(*ai.Service) error { closes.Add(1); return nil })
-	t.Cleanup(func() { _ = controller.Close() })
-	controller.Start()
-	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)
-	_, leaseCtx, generation, release, err := controller.AcquireAIService(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer release()
-	if err := controller.RestoreFlowerSnapshot("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err == nil {
-		t.Fatal("missing snapshot was accepted")
-	}
-	if leaseCtx.Err() != nil || closes.Load() != 0 || controller.AIReadiness().State != appserver.AIReadinessReady {
-		t.Fatal("invalid recovery interrupted a usable generation")
-	}
-	current, _, nextGeneration, nextRelease, err := controller.AcquireAIService(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer nextRelease()
-	if current != service || nextGeneration != generation {
-		t.Fatal("invalid recovery replaced the generation")
-	}
-}
-
 func TestAIReadinessStopWaitsForRollbackAndAllowsExplicitRetry(t *testing.T) {
 	entered, cancelled, rollback := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32

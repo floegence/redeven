@@ -6,7 +6,7 @@ import { For, Show, createEffect, createMemo, createResource, createSignal, onCl
 import { Button, Input, Tabs, Tag, SettingsSection, SettingsList, SettingRow } from '@floegence/floe-webapp-core/ui';
 import { AlertTriangle, Eye, EyeOff, Info, Lock, Plus, Refresh, Trash } from '@floegence/floe-webapp-core/icons';
 import { SettingsResourceHeader, SettingsResourceList, SettingsResourceRow } from './SettingsResources';
-import { ContainersWorkbenchIcon } from '../../icons/ContainersIcon';
+import { ContainerServiceBrandMark } from '../../icons/ContainerServiceBrandMark';
 import { useEnvContext } from '../EnvContext';
 import { useI18n } from '../../i18n';
 import { useEnvSettingsPage } from './EnvSettingsPageContext';
@@ -92,7 +92,7 @@ export function ContainerSettingsPanel(props: { resource?: string }) {
       <Button data-settings-config-refresh size="icon" variant="ghost" icon={Refresh} disabled={services.loading || !ctx.canInteract()} onClick={() => { if (!presented() || !ctx.canInteract()) return; void refetch(); setRefreshRevision(value => value + 1); }} aria-label={i18n.t('common.actions.refresh')} title={i18n.t('common.actions.refresh')} />
     </div></SettingsResourceHeader>
     <Show when={!target() && ids().length}><SettingsResourceList label={i18n.t('containers.services.title')}>
-      <For each={serviceData()}>{service => <SettingsResourceRow label={service.name} onClick={() => choose(service.service_id)}><ContainersWorkbenchIcon /><span class="settings-resource-name">{service.name}</span></SettingsResourceRow>}</For>
+      <For each={serviceData()}>{service => <SettingsResourceRow label={service.name} onClick={() => choose(service.service_id)}><ContainerServiceBrandMark engine={service.engine} remote={service.remote} /><span class="settings-resource-name">{service.name}</span></SettingsResourceRow>}</For>
     </SettingsResourceList></Show>
     <Show when={!target() && !services.loading && !services.error && !ids().length}><p role="status" class="text-xs text-muted-foreground">{i18n.t('containers.empty.title')}</p></Show>
     <Show when={services.error}><p role="alert">{String(services.error)}</p></Show>

@@ -1,6 +1,6 @@
 import { SettingsResourceHeaderContext } from './SettingsResources';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import { X } from '@floegence/floe-webapp-core/icons';
+import { ChevronLeft, X } from '@floegence/floe-webapp-core/icons';
 import { ENV_APP_FLOATING_LAYER } from '../../utils/envAppLayers';
 import { For, Show, Suspense, createMemo, createResource, createSignal, onCleanup, lazy, type JSX } from 'solid-js';
 import type { FloeShellThemeMode, ThemeType } from '@floegence/floe-webapp-core';
@@ -104,6 +104,9 @@ export function EnvSettingsDialog(props: {
   // path as X/Escape. Closing must neither save drafts nor activate background UI.
   return <SettingsDialog closeOnBackdropClick globalZIndex={ENV_APP_FLOATING_LAYER.productModal} open={target() !== null} present={props.session.present()} title={i18n.t('settings.runtimeTitle')} closeLabel={i18n.t('common.actions.close')}
     header={<div data-floe-dialog-header class="redeven-env-settings-dialog-header">
+      {/* IMPORTANT: Parent navigation changes only the settings target. Retained
+          owners preserve drafts; hidden controls lose presentation authority. */}
+      <Show when={target()?.resource}><Button variant="ghost" size="icon" class="shrink-0" data-settings-parent aria-label={i18n.t('common.actions.back')} onClick={() => { const current = target(); if (props.session.present() && current?.resource) props.session.open({ section: current.section }); }}><ChevronLeft class="size-4" /></Button></Show>
       <div class="redeven-env-settings-dialog-header-main">{header()}</div>
       <Button variant="ghost" size="icon" class="redeven-env-settings-dialog-close shrink-0" aria-label={i18n.t('common.actions.close')} onClick={() => props.session.close()}><X class="h-4 w-4" /></Button>
     </div>}

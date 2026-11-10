@@ -3495,12 +3495,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: g.aiReadinessSnapshot()})
 		return
 
-	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/maintenance/snapshots":
-		g.handleFlowerSnapshots(w, r)
-		return
-	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/maintenance/restore":
-		g.handleFlowerRestore(w, r)
-		return
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/maintenance/orphan_roots":
 		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
 		if !ok {

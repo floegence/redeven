@@ -1,9 +1,8 @@
 import { StableText, Button } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import { AlertTriangle, Check, Copy, Database, RefreshIcon, Stop, Trash } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Check, Copy, RefreshIcon, Stop, Trash } from '@floegence/floe-webapp-core/icons';
 
-import { FlowerStorageSettings } from './FlowerStorageSettings';
 import { useI18n } from '../../i18n';
 import type { AIReadinessController } from '../../flower/aiReadiness';
 import { createAIReadinessPresentation } from '../../flower/aiReadinessPresentation';
@@ -31,7 +30,7 @@ type AIReadinessSettingsSectionProps = Readonly<{
 
 export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProps) {
   const i18n = useI18n();
-  const presentation = createMemo(() => createAIReadinessPresentation(props.controller.snapshot(), i18n, { canRetryGeneration: props.canAdmin, canManageStorage: props.canAdmin }));
+  const presentation = createMemo(() => createAIReadinessPresentation(props.controller.snapshot(), i18n, { canRetryGeneration: props.canAdmin }));
   const [diagnosticsOpen, setDiagnosticsOpen] = createSignal(false);
   const [copyPending, setCopyPending] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
@@ -174,14 +173,12 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
 
   return (
     <SettingsSection
-      icon={Database}
+      variant="page"
       title={i18n.t('aiReadiness.settings.title')}
-      description={i18n.t('aiReadiness.settings.description')}
     >
       <SettingsList class="ai-readiness-settings">
         <SettingRow
           title={i18n.t('aiReadiness.settings.floretStoreTitle')}
-          description={i18n.t('aiReadiness.settings.floretDescription')}
           tone={statusTone()}
           control={<div class="flex flex-wrap items-center justify-end gap-2">
             <SettingsPill tone={statusTone()}>{statusLabel()}</SettingsPill>
@@ -208,7 +205,6 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
           </Show>
         </SettingRow>
         <SettingRow title={i18n.t('aiReadiness.actions.showDiagnostics')}
-          description={i18n.t('aiReadiness.diagnostics.description')}
           control={<div class="flex flex-wrap items-center justify-end gap-2">
             <Show when={props.canAdmin && props.controller.snapshot().state === 'degraded'}>
               <Button size="sm" variant="outline" icon={AlertTriangle} disabled={reviewLoading()}
@@ -310,7 +306,6 @@ export function AIReadinessSettingsSection(props: AIReadinessSettingsSectionProp
             </div>
           )}</Show>
         </SettingRow>
-        <FlowerStorageSettings controller={props.controller} canAdmin={props.canAdmin} />
       </SettingsList>
     </SettingsSection>
   );

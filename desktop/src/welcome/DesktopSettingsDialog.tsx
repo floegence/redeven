@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, createEffect, onCleanup, type JSX } from 'solid-js';
 import { Button, Input, Select, SettingsLayout, SettingsNavigation } from '@floegence/floe-webapp-core/ui';
-import { ChevronRight, X } from '@floegence/floe-webapp-core/icons';
+import { ChevronLeft, ChevronRight, X } from '@floegence/floe-webapp-core/icons';
 import { useResizeObserver } from '@floegence/floe-webapp-core';
 import { SettingsDialog } from '../../../internal/settings_ui/src/SettingsDialog';
 import { settingsProviderFocus, type createSettingsSession } from '../../../internal/settings_ui/src/settingsSession';
@@ -58,6 +58,9 @@ export function DesktopSettingsDialog(props: {
   return <SettingsDialog open={target() !== null} present={props.session.present()} onClose={props.session.close} onPresenceChange={props.session.setPresent}
     title={props.i18n.t('settings.unifiedTitle')} closeLabel={props.i18n.t('common.close')} closeOnBackdropClick
     header={<div class="redeven-settings-dialog-heading">
+      {/* IMPORTANT: Parent navigation stays in the modal header and never
+          opens another environment or saves a retained connection draft. */}
+      <Show when={target()?.resource}><Button variant="ghost" size="icon" class="shrink-0" data-settings-parent aria-label={props.i18n.t('common.back')} onClick={() => { const current = target(); if (props.session.present() && current?.resource) props.session.open({ section: current.section }); }}><ChevronLeft class="size-4" /></Button></Show>
       <div class="redeven-settings-dialog-breadcrumb"><span>{props.i18n.t('settings.unifiedTitle')}</span><ChevronRight aria-hidden="true" /><span>{label()}</span></div>
       <div ref={setNavigationHost} class="redeven-settings-dialog-mobile"><Select open={navigationPresented()} onOpenChange={open => setNavigationOpen(open && props.session.present() && navigationVisible())} value={target()?.section ?? 'appearance'} onChange={section => { if (navigationVisible()) select(section); }} options={items().map(item => ({ value: item.id, label: ['ai', 'extensions', 'browser'].includes(item.id) && item.id !== 'ai' ? `${props.i18n.t('settings.flowerGroup')} · ${item.label}` : item.label }))} ariaLabel={props.i18n.t('settings.unifiedTitle')} /></div>
       <Button variant="ghost" size="icon" class="redeven-settings-dialog-close" aria-label={props.i18n.t('common.close')} onClick={props.session.close}><X class="h-4 w-4" /></Button>

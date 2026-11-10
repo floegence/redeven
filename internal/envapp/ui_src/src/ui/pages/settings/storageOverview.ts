@@ -24,7 +24,6 @@ export function storageDestination(entry: StorageEntry): StorageDestination | un
     case 'favorites': return { kind: 'surface', surface: 'files' };
     case 'tessiven': return { kind: 'canvas' };
     case 'notes': case 'workbench': return { kind: 'workbench' };
-    case 'snapshots': return { kind: 'settings', section: 'flower_recovery' };
     // Mixed caches, audit and coordination stores have no single cleanup UI.
     default: return undefined;
   }

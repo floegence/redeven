@@ -125,3 +125,11 @@ it('shows engine identities in one grouped list without a duplicate selector', a
   expect(list?.querySelector('svg')).not.toBeNull();
   expect(api.configuration).not.toHaveBeenCalled();
 });
+
+it('uses the audited Docker and Podman brand assets in the settings inventory', async () => {
+  api.list.mockResolvedValue(['docker', 'podman'].map(engine => ({ service_id: engine, name: engine, engine, configuration: { sources: [] } })));
+  const host = document.createElement('div'); document.body.append(host);
+  dispose = render(() => <ContainerSettingsPanel />, host);
+  await expect.poll(() => host.querySelectorAll('.settings-resource-row').length).toBe(2);
+  expect([...host.querySelectorAll<HTMLImageElement>('.settings-resource-row img')].map(image => image.getAttribute('src'))).toEqual(['/_redeven_proxy/env/container-service-icons/docker-default.svg', '/_redeven_proxy/env/container-service-icons/podman-default.svg']);
+});

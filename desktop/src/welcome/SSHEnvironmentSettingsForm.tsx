@@ -1,4 +1,5 @@
-import { FeedbackIndicator, Button, Input, SegmentedControl, SettingsList, Switch, Select } from '@floegence/floe-webapp-core/ui';
+import { FeedbackIndicator, Button, Input, SettingsList, Switch, Select } from '@floegence/floe-webapp-core/ui';
+import { SettingsSelect } from '../../../internal/settings_ui/src/SettingsSelect';
 import { EnvironmentSettingsPanel, EnvironmentSettingsReveal } from './EnvironmentSettingsDialog';
 import { Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
@@ -15,6 +16,7 @@ import {
 
 export type SSHEnvironmentSettingsFormProps = Readonly<{
   open: boolean;
+  active?: boolean;
   i18n: DesktopI18n;
   state: SSHConnectionDialogState;
   baseline: SSHConnectionDialogState;
@@ -256,11 +258,14 @@ export function SSHEnvironmentSettingsForm(props: SSHEnvironmentSettingsFormProp
               <Show when={props.state.auth_mode === 'key_agent'}><p class="ssh-settings-help">{t('sshSettings.keyHelp')}</p></Show>
             </div>
             <div class="ssh-settings-field-control">
-            <SegmentedControl
+            <SettingsSelect
+              id="ssh-settings-auth_mode"
+              section="connection"
+              resource={props.state.environment_id}
+              active={props.open && props.active !== false && !busy()}
               value={props.state.auth_mode}
               onChange={(value) => props.updateField('auth_mode', value)}
-              aria-label={t('connectionDialog.authentication')}
-              role="radiogroup"
+              ariaLabelledBy="ssh-settings-auth-label"
               options={[
                 { value: 'key_agent', label: t('sshSettings.keyAgent') },
                 { value: 'password', label: t('sshSettings.password') },

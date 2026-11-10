@@ -34,7 +34,7 @@ const NAV_SEARCH_KEYWORDS: Record<EnvSettingsSection, string[]> = {
   extensions: ['skills', 'mcp', 'agent plugins'],
   plugins: ['plugin', 'connections'],
   storage: ['storage', 'data', 'space', 'usage'],
-  flower_recovery: ['flower', 'recovery', 'backup', 'snapshots', 'diagnostics'],
+  flower_recovery: ['flower', 'status', 'health', 'diagnostics'],
   config: ['path', 'config file', 'configuration', 'json', 'config_path', 'toml'],
   connection: ['url', 'e2ee', 'psk', 'encryption', 'websocket', 'ws', 'channel', 'environment id', 'instance id', 'control plane'],
   agent: ['version', 'restart', 'upgrade', 'update', 'status', 'maintenance', 'health', 'runtime status', 'compatibility', 'release'],

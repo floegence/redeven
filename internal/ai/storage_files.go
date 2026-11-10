@@ -76,13 +76,6 @@ func cleanupFlowerStaging(state string) error {
 	return nil
 }
 
-// CheckFlowerSnapshot validates immutable backup bytes without opening any
-// live store. The controller checks before draining and restore checks again.
-func CheckFlowerSnapshot(ctx context.Context, state, id string) error {
-	_, err := verifyFlowerSnapshot(ctx, state, id)
-	return flowerStorageError("recovery", "verifying", err)
-}
-
 // Before resuming any rename, verify the complete new collection at its current
 // staged/live locations. A damaged operation remains blocked with both sets
 // preserved; no database may open until the whole replacement is verified.

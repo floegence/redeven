@@ -181,9 +181,9 @@
       "notAvailable": "Indisponible"
     },
     "settings": {
-      "title": "Stockage Flower",
+      "title": "Diagnostic Flower",
       "description": "Disponibilité, diagnostic et restauration des données Flower.",
-      "floretStoreTitle": "Données Flower",
+      "floretStoreTitle": "État",
       "floretDescription": "L’historique des conversations, les paramètres du produit, l’état de lecture et les fichiers téléversés sont vérifiés ensemble.",
       "noIssue": "Aucun problème de disponibilité détecté",
       "refreshing": "Actualisation...",
@@ -202,25 +202,6 @@
       "confirmDelete": "Confirmer la suppression du fil canonique"
     },
     "storage": {
-      "title": "Sauvegardes Flower",
-      "description": "Les sauvegardes existantes couvrent l’historique Flower, les paramètres, les statuts de lecture et les fichiers importés. Elles sont toutes conservées. Le démarrage et les mises à jour ne créent pas de sauvegarde automatique.",
-      "adminOnly": "Les droits d’administration sont requis pour consulter et restaurer les sauvegardes.",
-      "view": "Voir les sauvegardes",
-      "unknownBuild": "Version source non enregistrée",
-      "unavailable": "Cette sauvegarde ne peut pas être utilisée. Consultez le diagnostic.",
-      "loadFailed": "Impossible de charger les sauvegardes. Consultez le diagnostic et réessayez.",
-      "restoreFailed": "Impossible de lancer la restauration. Consultez l’état de Flower et le diagnostic.",
-      "accepted": "Restauration lancée. L’état de Flower sera actualisé automatiquement.",
-      "empty": "Aucune sauvegarde Flower complète n’est encore disponible.",
-      "beforeRestore": "Avant restauration",
-      "automatic": "Automatique",
-      "protected": "Protégée",
-      "reviewRestore": "Examiner la restauration",
-      "confirmTitle": "Restaurer cette sauvegarde Flower ?",
-      "scope": "Les données Flower reviendront au moment choisi. Les modifications ultérieures seront remplacées. Les données actuelles seront d’abord sauvegardées.",
-      "executionImpact": "Les tâches inachevées seront arrêtées et les anciennes approbations expireront. Les entrées en attente resteront consultables et copiables. Leur réexécution nécessite une nouvelle tâche.",
-      "externalImpact": "Les répertoires de travail et les paramètres de connexion globaux sont exclus. Les commandes et actions externes ne sont pas annulées. La version du moteur d’exécution reste identique ; un défaut de migration non résolu peut toujours empêcher le démarrage de Flower.",
-      "confirm": "Confirmer la restauration",
       "backingUp": "Sauvegarde de vos conversations",
       "backingUpDescription": "Une copie de votre historique actuel et de vos fichiers importés est enregistrée avant la restauration.",
       "restoring": "Restauration de Flower",
@@ -228,7 +209,7 @@
       "spaceTitle": "Flower a besoin d’espace disque",
       "spaceDescription": "Libérez de l’espace sur le disque de l’environnement d’exécution, puis réessayez. Flower reste en pause jusqu’à la fin de la préparation.",
       "failedTitle": "Maintenance Flower interrompue",
-      "failedDescription": "Consultez le diagnostic ou choisissez une sauvegarde vérifiée. Les terminaux, fichiers et paramètres restent disponibles.",
+      "failedDescription": "Consultez le diagnostic. Les terminaux, fichiers et paramètres restent disponibles.",
       "component": "Composant",
       "product": "Paramètres des conversations",
       "floret": "Floret",
@@ -8364,7 +8345,7 @@
     "absent": "Non créé",
     "unavailable": "Indisponible",
     "partial": "Mesure partielle ; la taille est une limite inférieure.",
-    "flower": "Restauration Flower",
+    "flower": "Diagnostic Flower",
     "tooling": "Paquets de l’éditeur",
     "cleanup": "Le nettoyage se fait dans la fonction concernée. Les sauvegardes des conversations excluent les réglages des extensions et les fichiers de travail.",
     "owners": {
@@ -8411,7 +8392,8 @@
     "usage": "Espace utilisé",
     "measuredScope": "Emplacements mesurés de l’environnement · projets externes exclus",
     "manageOwner": "Gérer {owner}",
-    "locations": "Emplacements et périmètre de sauvegarde"
+    "locations": "Emplacements de stockage",
+    "adminOnly": "Les droits administrateur sont requis pour consulter le stockage."
   },
   "automation": {
     "title": "Automatisations"

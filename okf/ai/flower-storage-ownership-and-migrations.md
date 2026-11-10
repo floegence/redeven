@@ -3,7 +3,7 @@ type: Storage Contract
 title: Flower storage ownership and migrations
 tags: [ai, storage, sqlite, migrations, floret]
 lifecycle: contract
-reviewed_at: "2026-11-02"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
@@ -34,12 +34,12 @@ notice admission, unknown recovery and continuation identity.
 ## Readonly checks and owner transactions
 `sqliteutil` owns WAL-aware readonly preflight, integrity checks and complete SQLite snapshots for product and read-state owners. Inspection never creates missing data or runs a migration.
 
-Required upgrade snapshots precede Floret space maintenance and all migrations, as specified by the [backup and recovery contract](flower-backup-and-recovery.md).
+Owner transactions migrate without full startup snapshots. The [recovery contract](flower-backup-and-recovery.md) governs completion of admitted replacements and retirement of obsolete automatic backups.
 
 ## Frozen historical queue conversion
 The migration-only `pendinginputlegacy` package owns the complete interpretation of historical queue bytes: session identity, options, context shapes, default values, resource metadata and normalization limits.
 
-The v4-to-v5 product transaction imports canonical pending inputs through Floret's public idempotent import API, records necessary product authority and removes retired source tables before commit. The upgrade operation contains only target build, original snapshot identity and completion; owner versions and canonical records remain the progress authority.
+The v4-to-v5 product transaction imports canonical pending inputs through Floret's public idempotent import API, records necessary product authority and removes retired source tables before commit. Owner versions and canonical records remain the progress authority; no build-driven snapshot journal is created.
 
 ## Resource and authorization retention
 Product upload references retain resources for every canonical thread that contains them, including ordinary forks, nested forks and restored inputs.

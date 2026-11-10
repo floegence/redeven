@@ -46,6 +46,7 @@ async function mount(overrides: Partial<SSHConnectionDialogState> = {}, saveActi
   document.documentElement.style.setProperty('--redeven-desktop-titlebar-height', '40px');
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('CSS', { escape: (value: string) => value });
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener() {}, removeEventListener() {} })));
   const host = document.createElement('div');
   document.body.append(host);
@@ -224,7 +225,9 @@ describe('SSH environment settings interactions', () => {
 
   it('handles password removal and automatic detection as unsaved edits', async () => {
     const harness = await mount();
-    button('Password').click();
+    document.querySelector<HTMLButtonElement>('#ssh-settings-auth_mode')!.click();
+    await settle();
+    [...document.querySelectorAll<HTMLElement>('[role=option]')].find(option => option.textContent?.trim() === 'Password')!.click();
     expect(document.body.textContent).toContain('A password is saved on this device.');
     button('Remove stored password').click();
     expect(harness.state().ssh_password_mode).toBe('clear');

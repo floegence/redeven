@@ -181,9 +181,9 @@
       "notAvailable": "暫無"
     },
     "settings": {
-      "title": "Flower 儲存空間",
+      "title": "Flower 診斷",
       "description": "Flower 資料的可用性、診斷與還原。",
-      "floretStoreTitle": "Flower 資料",
+      "floretStoreTitle": "執行狀態",
       "floretDescription": "統一檢查對話歷史、產品設定、閱讀狀態與上傳資源。",
       "noIssue": "未偵測到可用性問題",
       "refreshing": "正在重新整理...",
@@ -202,25 +202,6 @@
       "confirmDelete": "確認刪除 Floret 執行緒"
     },
     "storage": {
-      "title": "Flower 備份",
-      "description": "既有備份包含 Flower 歷史紀錄、設定、已讀狀態和上傳檔案，並全部保留。啟動和升級不會自動建立備份。",
-      "adminOnly": "檢視及還原備份需要管理員權限。",
-      "view": "檢視備份",
-      "unknownBuild": "未記錄來源組建",
-      "unavailable": "此備份無法使用，請查看診斷資訊。",
-      "loadFailed": "無法載入備份，請檢視診斷後重試。",
-      "restoreFailed": "無法開始還原，請檢視 Flower 狀態與診斷。",
-      "accepted": "還原已開始，Flower 狀態會自動更新。",
-      "empty": "目前沒有已完成的 Flower 備份。",
-      "beforeRestore": "還原前資料",
-      "automatic": "自動備份",
-      "protected": "受保護",
-      "reviewRestore": "檢視還原影響",
-      "confirmTitle": "還原此 Flower 備份？",
-      "scope": "Flower 資料將回到所選時間，之後的變更會被取代。還原前會先儲存目前的資料。",
-      "executionImpact": "未完成的任務會終止，舊核准會失效。佇列中的輸入仍可檢視及複製，再次執行需要建立新任務。",
-      "externalImpact": "不包含工作目錄與全域登入設定，不會復原指令或外部操作。執行階段版本維持不變，尚未修正的遷移缺陷仍可能阻止 Flower 啟動。",
-      "confirm": "確認還原",
       "backingUp": "正在備份你的對話",
       "backingUpDescription": "還原前儲存目前對話記錄與上傳檔案的副本。",
       "restoring": "正在還原 Flower",
@@ -228,7 +209,7 @@
       "spaceTitle": "Flower 需要更多磁碟空間",
       "spaceDescription": "請釋放執行環境磁碟空間後重試。準備完成前 Flower 會保持暫停。",
       "failedTitle": "Flower 維護已停止",
-      "failedDescription": "請檢視診斷或選擇已驗證的備份。終端機、檔案與設定仍可使用。",
+      "failedDescription": "請檢視診斷資訊。終端機、檔案和設定仍可使用。",
       "component": "元件",
       "product": "對話設定",
       "floret": "Floret",
@@ -8360,7 +8341,7 @@
     "absent": "尚未建立",
     "unavailable": "無法使用",
     "partial": "統計尚未完成，顯示的是容量下限。",
-    "flower": "Flower 復原",
+    "flower": "Flower 診斷",
     "tooling": "編輯器安裝套件",
     "cleanup": "請在所屬功能中清理資料。對話備份不包含擴充功能設定與任務工作檔案。",
     "owners": {
@@ -8407,7 +8388,8 @@
     "usage": "空間用量",
     "measuredScope": "已統計的環境目錄 · 不含外部專案",
     "manageOwner": "管理{owner}",
-    "locations": "儲存位置與備份範圍"
+    "locations": "儲存位置",
+    "adminOnly": "需要管理員權限才能檢視儲存空間。"
   },
   "automation": {
     "title": "自動化"

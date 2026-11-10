@@ -181,9 +181,9 @@
       "notAvailable": "Nicht verfügbar"
     },
     "settings": {
-      "title": "Flower-Speicher",
+      "title": "Flower-Diagnose",
       "description": "Verfügbarkeit, Diagnose und Wiederherstellung von Flower-Daten.",
-      "floretStoreTitle": "Flower-Daten",
+      "floretStoreTitle": "Status",
       "floretDescription": "Gesprächsverlauf, Produkteinstellungen, Lesestatus und Uploads werden gemeinsam geprüft.",
       "noIssue": "Kein Verfügbarkeitsproblem erkannt",
       "refreshing": "Wird aktualisiert...",
@@ -202,25 +202,6 @@
       "confirmDelete": "Löschen des kanonischen Threads bestätigen"
     },
     "storage": {
-      "title": "Flower-Sicherungen",
-      "description": "Vorhandene Sicherungen enthalten Flower-Verlauf, Einstellungen, Lesestatus und Uploads und bleiben vollständig erhalten. Start und Updates erstellen keine automatischen Sicherungen.",
-      "adminOnly": "Zum Anzeigen und Wiederherstellen sind Administratorrechte erforderlich.",
-      "view": "Sicherungen anzeigen",
-      "unknownBuild": "Quell-Build nicht erfasst",
-      "unavailable": "Diese Sicherung kann nicht verwendet werden. Details finden Sie in der Diagnose.",
-      "loadFailed": "Sicherungen konnten nicht geladen werden. Prüfen Sie die Diagnose und versuchen Sie es erneut.",
-      "restoreFailed": "Wiederherstellung konnte nicht gestartet werden. Prüfen Sie Flower-Status und Diagnose.",
-      "accepted": "Wiederherstellung gestartet. Der Flower-Status wird automatisch aktualisiert.",
-      "empty": "Es liegen noch keine vollständigen Flower-Sicherungen vor.",
-      "beforeRestore": "Vor Wiederherstellung",
-      "automatic": "Automatisch",
-      "protected": "Geschützt",
-      "reviewRestore": "Wiederherstellung prüfen",
-      "confirmTitle": "Diese Flower-Sicherung wiederherstellen?",
-      "scope": "Flower-Daten werden auf den gewählten Zeitpunkt zurückgesetzt. Spätere Änderungen werden ersetzt. Die aktuellen Daten werden zuvor gesichert.",
-      "executionImpact": "Unfertige Aufgaben werden beendet und alte Genehmigungen ungültig. Eingaben in der Warteschlange bleiben zum Anzeigen und Kopieren erhalten. Für die erneute Ausführung ist eine neue Aufgabe nötig.",
-      "externalImpact": "Arbeitsverzeichnisse und globale Anmeldeeinstellungen sind ausgenommen. Befehle und externe Aktionen werden nicht rückgängig gemacht. Die Laufzeitversion bleibt gleich; ein ungelöster Migrationsfehler kann Flower weiterhin am Start hindern.",
-      "confirm": "Wiederherstellung bestätigen",
       "backingUp": "Deine Unterhaltungen werden gesichert",
       "backingUpDescription": "Vor der Wiederherstellung wird eine Kopie deines aktuellen Verlaufs und deiner Uploads gespeichert.",
       "restoring": "Flower wird wiederhergestellt",
@@ -228,7 +209,7 @@
       "spaceTitle": "Flower benötigt mehr Speicherplatz",
       "spaceDescription": "Geben Sie Speicherplatz auf dem Datenträger der Laufzeitumgebung frei und prüfen Sie erneut. Flower bleibt bis zum Abschluss der Vorbereitung pausiert.",
       "failedTitle": "Flower-Wartung angehalten",
-      "failedDescription": "Prüfen Sie die Diagnose oder wählen Sie eine geprüfte Sicherung. Terminals, Dateien und Einstellungen bleiben verfügbar.",
+      "failedDescription": "Prüfen Sie die Diagnose. Terminal, Dateien und Einstellungen bleiben verfügbar.",
       "component": "Komponente",
       "product": "Gesprächseinstellungen",
       "floret": "Floret",
@@ -8364,7 +8345,7 @@
     "absent": "Nicht erstellt",
     "unavailable": "Nicht verfügbar",
     "partial": "Unvollständige Messung; die Größe ist eine Untergrenze.",
-    "flower": "Flower-Wiederherstellung",
+    "flower": "Flower-Diagnose",
     "tooling": "Editorpakete",
     "cleanup": "Bereinigung erfolgt in der zuständigen Funktion. Gesprächssicherungen enthalten weder Erweiterungseinstellungen noch Arbeitsdateien.",
     "owners": {
@@ -8411,7 +8392,8 @@
     "usage": "Speicherbelegung",
     "measuredScope": "Erfasste Umgebungsverzeichnisse · ohne externe Projekte",
     "manageOwner": "{owner} verwalten",
-    "locations": "Speicherorte und Sicherungsumfang"
+    "locations": "Speicherorte",
+    "adminOnly": "Zum Prüfen des Speichers sind Administratorrechte erforderlich."
   },
   "automation": {
     "title": "Automatisierungen"

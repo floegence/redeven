@@ -1,32 +1,28 @@
 ---
 type: Recovery Contract
-title: Flower backup and recovery
-tags: [ai, storage, recovery, backups]
+title: Flower storage recovery and retired backups
+tags: [ai, storage, recovery]
 lifecycle: contract
-reviewed_at: "2026-11-01"
+reviewed_at: "2026-11-09"
 ---
 # Summary
 
-Readiness drains generations while storage owners snapshot/migrate and Floret ends execution. Freeze Flower writes, verify collections and retain backups; restore history/settings/read-state/uploads without stopping other surfaces. Failures preserve recovery, never replay effects or roll back binaries.
+Ordinary startup and migrations do not create full Flower backups. Settings exposes runtime status and diagnostics, not obsolete snapshot browsing or restore controls.
 
 # Contract
 
-## Preserved snapshots
-Ordinary startup, binary changes and transactional migrations do not create full snapshots. A damaged old snapshot cannot block healthy live data.
+## Retired automatic snapshots
+The public snapshot-list and restore APIs are removed. Successful activation and startup preparation admit one background cleanup of checksum-verified, unprotected automatic snapshots only. Cleanup checks cancellation, refuses a pending replacement journal, pins the snapshot directory, and never traverses links. Unknown, damaged, protected and before-restore records remain unchanged. Cleanup failure cannot block healthy conversations.
 
-Abandoned task staging is removed only after any durable replacement completes and before a new generation opens; an unclosed generation prevents that path.
+No cleanup targets live conversations, uploads, read state, extension configuration, or opaque upstream stores. Filesystem statistics do not certify backups.
 
-## Administrator recovery
-Settings and the Flower maintenance action expose backup time, source build, size and protection.
+## Durable recovery and diagnostics
+Previously admitted durable replacements must finish and verify before opening another generation. A failed generation close fences recovery. Abandoned staging retires only after replacement completes.
 
-Old unfinished Turns become terminal, old interactions become resolved and non-executable, and queued input remains canonical readonly `RestoredInputs`.
-
-Diagnostics use the existing sanitized export and do not include conversations, credentials, database contents or uploaded files by default.
-
-# Boundaries
-
-Only conversation-owned databases and uploaded resources participate in a restore. Environment extension configuration, including the [Agent Plugins registry and data](flower-agent-plugins.md), remains outside conversation snapshots and is preserved unchanged. Restore staging never initializes its plugin manager. Core Runtime services remain available.
+The diagnostic settings category retains actual runtime status, safe retry/stop, sanitized diagnostics and explicit orphan ownership review. Diagnostics omit conversations, credentials, database contents and uploads. There is no generic deletion API or backup-success claim.
 
 # Evidence
 
-- `redeven:internal/ai/storage_snapshot.go` - Source.
+- `redeven:internal/ai/storage_retirement.go` and `storage_retirement_test.go` - Restricted cleanup and preservation checks.
+- `redeven:internal/codeapp/appserver/ai_storage_maintenance_test.go` - Retired endpoints reject access.
+- `redeven:internal/envapp/ui_src/src/ui/pages/settings/AIReadinessSettingsSection.tsx` - Runtime diagnostic surface.

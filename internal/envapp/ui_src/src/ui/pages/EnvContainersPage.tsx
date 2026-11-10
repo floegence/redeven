@@ -58,7 +58,7 @@ import {
 } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 
-import { REDEVEN_ENV_APP_BASE_PATH } from '../../build/envAppBasePath';
+import { ContainerServiceBrandMark } from '../icons/ContainerServiceBrandMark';
 import { Dialog } from '../primitives/EnvAppModal';
 import { EnvAppDrawer } from '../primitives/EnvAppDrawer';
 import {
@@ -738,21 +738,6 @@ function ViewIcon(props: { view: ContainerResourceView; class?: string }) {
   return <Layers class={className} aria-hidden="true" />;
 }
 
-function ContainerServiceBrandMark(props: { engine: ContainerEngine; remote?: boolean }) {
-  const identity = () => props.engine === 'podman' ? 'podman' : 'docker';
-  const defaultIcon = () => `${REDEVEN_ENV_APP_BASE_PATH}container-service-icons/${identity()}-default.svg`;
-  const monoIcon = () => `url("${REDEVEN_ENV_APP_BASE_PATH}container-service-icons/${identity()}-mono.svg")`;
-  return (
-    <span class="container-service-brand" aria-hidden="true">
-      <img class="container-service-brand__color" src={defaultIcon()} alt="" />
-      <span
-        class="container-service-brand__mono"
-        style={{ 'mask-image': monoIcon(), '-webkit-mask-image': monoIcon() }}
-      />
-      <Show when={props.remote}><span class="container-service-brand__remote"><ExternalLink class="h-2.5 w-2.5" /></span></Show>
-    </span>
-  );
-}
 
 function DetailSection(props: { title: string; icon: JSX.Element; children: JSX.Element }) {
   return (
