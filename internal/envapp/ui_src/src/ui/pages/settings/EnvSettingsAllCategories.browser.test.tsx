@@ -91,6 +91,7 @@ const genericRefreshOwners = new Set<EnvSettingsSection>(['connection', 'agent',
 type Locale = 'en-US' | 'zh-CN' | 'de-DE';
 
 async function mount(width: number, locale: Locale = 'en-US', dark = false) {
+  await (commands as unknown as { installContainerServiceIconRoutes: () => Promise<void> }).installContainerServiceIconRoutes();
   await page.viewport(width, 1000);
   localStorage.clear(); writeStoredLanguagePreference(locale);
   api.mutations.mockImplementation(() => { throw new Error('Acceptance browsing must not mutate its owners'); });
@@ -599,6 +600,10 @@ it.each([320, 1024])('uses one icon list and header-owned resource navigation at
     await expect.poll(() => live().querySelectorAll('[data-settings-resource-list] button').length, { timeout: 5000 }).toBeGreaterThan(0);
     expect(live().querySelector('[role=combobox]')).toBeNull();
     for (const row of live().querySelectorAll('[data-settings-resource-list] button')) expect(row.querySelector('svg, img')).not.toBeNull();
+    for (const image of live().querySelectorAll<HTMLImageElement>('.container-service-brand img')) {
+      await image.decode();
+      expect(image.naturalWidth).toBeGreaterThan(0);
+    }
     await page.screenshot({ path: `../../../../dist/settings-resources/list-${width}-${section}.png` });
     live().querySelector<HTMLButtonElement>('[data-settings-resource-list] button')!.click();
     await expect.poll(() => document.querySelector('.redeven-settings-header-resource [role=combobox]')).not.toBeNull();

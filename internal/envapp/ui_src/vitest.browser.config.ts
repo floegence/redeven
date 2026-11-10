@@ -734,7 +734,7 @@ export default mergeConfig(viteConfig, defineConfig({
         installContainerServiceIconRoutes: async ({ page }) => {
           await page.route('**/_redeven_proxy/env/container-service-icons/*.svg', async (route) => {
             const fileName = new URL(route.request().url()).pathname.split('/').at(-1);
-            if (fileName !== 'docker-default.svg' && fileName !== 'podman-default.svg') {
+            if (!fileName || !/^(docker|podman)-(default|mono)\.svg$/.test(fileName)) {
               await route.abort();
               return;
             }

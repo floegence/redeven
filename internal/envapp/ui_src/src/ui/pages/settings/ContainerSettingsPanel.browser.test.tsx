@@ -1,7 +1,7 @@
 import '../../../index.css';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { page, userEvent } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { ContainerSettingsPanel } from './ContainerSettingsPanel';
 import type { ContainerServiceConfiguration } from '../../services/containerResourcesApi';
 
@@ -127,9 +127,15 @@ it('shows engine identities in one grouped list without a duplicate selector', a
 });
 
 it('uses the audited Docker and Podman brand assets in the settings inventory', async () => {
+  await (commands as unknown as { installContainerServiceIconRoutes: () => Promise<void> }).installContainerServiceIconRoutes();
   api.list.mockResolvedValue(['docker', 'podman'].map(engine => ({ service_id: engine, name: engine, engine, configuration: { sources: [] } })));
   const host = document.createElement('div'); document.body.append(host);
   dispose = render(() => <ContainerSettingsPanel />, host);
   await expect.poll(() => host.querySelectorAll('.settings-resource-row').length).toBe(2);
   expect([...host.querySelectorAll<HTMLImageElement>('.settings-resource-row img')].map(image => image.getAttribute('src'))).toEqual(['/_redeven_proxy/env/container-service-icons/docker-default.svg', '/_redeven_proxy/env/container-service-icons/podman-default.svg']);
+  // IMPORTANT: A correct URL is insufficient; the published icon must decode.
+  for (const image of host.querySelectorAll<HTMLImageElement>('.settings-resource-row img')) {
+    await image.decode();
+    expect(image.naturalWidth).toBeGreaterThan(0);
+  }
 });
