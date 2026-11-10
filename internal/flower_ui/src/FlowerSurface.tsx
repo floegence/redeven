@@ -4750,6 +4750,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const needsWindow = threadID && props.adapter.loadHistory && (selectedThread()?.history_window?.has_after
       || historyReadingInput.anchor_id || historyReadingInput.item_ids || historyBusy());
     if (needsWindow) {
+      const previousInput = historyReadingInput;
       mainGroupCompletion.reset();
       releaseNavigationReads();
       batch(() => {
@@ -4757,11 +4758,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setThreadLoadError('');
       });
       // Until the new window is installed, the user can still read/select the
-      // retained document. Their newer intent owns its exact membership.
+      // retained document. Restore its bounded installed request, not every
+      // archived row retained in the reading document.
       interruptLatestReading = () => {
-        const itemIDs = threadCache().readingItemIDs(threadID);
         releaseNavigationReads();
-        batch(() => resetHistoryReading(threadID, { item_ids: itemIDs }));
+        batch(() => resetHistoryReading(threadID, previousInput));
         void requestThreadDetail(threadID, 'user_action', true);
       };
     }

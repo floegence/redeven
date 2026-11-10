@@ -5,6 +5,7 @@ import { expect, it, vi } from 'vitest';
 import type { FlowerHistoryRequest, FlowerLiveStreamEnvelope, FlowerRuntimeCurrentItem, FlowerRuntimeCurrentView, FlowerTurnLaunchReceipt } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { applyFlowerRuntimeCurrentView } from '../../../../flower_ui/src/runtimeCurrentView';
 import { flowerTurnAdmissionError } from '../../../../flower_ui/src/flowerTurnAdmission';
+import { HISTORY_READING_ITEMS } from '../../../../flower_ui/src/historyReadingWindow';
 import { adapter, deferred, liveBootstrap, renderSurfaceWithAdapterProps, thread, waitFor } from './FlowerSurface.navigation.testHarness';
 
 async function mountSendHistory() {
@@ -41,6 +42,7 @@ async function mountSendHistory() {
   };
   const history = vi.fn(async (id: string, input: FlowerHistoryRequest) => {
     if (id === peer.thread_id) return liveBootstrap(peer);
+    expect(input.item_ids?.length ?? 0).toBeLessThanOrEqual(HISTORY_READING_ITEMS);
     if (nextError) { const error = nextError; nextError = undefined; throw error; }
     if (input.observer_id) interest = input;
     const view = current(input);

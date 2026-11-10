@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { chromium } from '../../internal/envapp/ui_src/node_modules/playwright/index.mjs';
 import { createSSHSettingsPreviewServer } from './ssh-settings-preview.mjs';
 
@@ -9,7 +10,9 @@ await mkdir(output, { recursive: true });
 const server = await createSSHSettingsPreviewServer(0, ['flower-navigation.html']);
 await server.watcher.close();
 const browser = await chromium.launch({ headless: true });
-const report = { cases: [], errors: [] };
+const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+const report = { commit: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'),
+  dirty: Boolean(git('status', '--porcelain')), cases: [], errors: [] };
 try {
   const { mixedEnvironmentFixture } = await server.ssrLoadModule(fileURLToPath(new URL('../src/testSupport/mixedEnvironmentFixture.ts', import.meta.url)));
   const { RUNTIME_SERVICE_COMPATIBILITY_EPOCH: epoch, RUNTIME_SERVICE_PROTOCOL_VERSION: protocol } = await server.ssrLoadModule(fileURLToPath(new URL('../src/shared/runtimeService.ts', import.meta.url)));
